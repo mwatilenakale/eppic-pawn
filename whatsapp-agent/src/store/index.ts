@@ -9,7 +9,7 @@
  */
 
 import { DatabaseSync } from 'node:sqlite';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { MIGRATIONS } from './schema.ts';
@@ -90,7 +90,36 @@ export interface AuditRow {
   details: string;
 }
 
+export interface Contract {
+  id: string;
+  approval_id: string;
+  customer_id: string;
+  item_id: string;
+  loan_id: string | null;
+  number: string;
+  token: string;
+  principal_cents: number;
+  rate_pct: number;
+  rate_rule: string;
+  term_days: number;
+  interest_cents: number;
+  total_due_cents: number;
+  start_date: string;
+  due_date: string;
+  grace_ends_date: string;
+  body_html: string;
+  body_sha256: string;
+  status: 'pending' | 'signed' | 'void';
+  expires_at: string;
+  signed_at: string | null;
+  signed_name: string | null;
+  signed_id_number: string | null;
+  signature_path: string | null;
+  created_at: string;
+}
+
 export class LedgerError extends Error {}
+export class ContractError extends Error {}
 
 export interface StoreOptions {
   /** Directory for encrypted media; omit to disable photo storage. */
@@ -520,6 +549,139 @@ export class Store {
       .prepare('SELECT COALESCE(SUM(amount_cents), 0) AS total FROM ledger_entries WHERE loan_id = ?')
       .get(loanId) as { total: number };
     return Number(row.total);
+  }
+
+  // --- contracts ---------------------------------------------------------
+
+  /** `EPP-2026-0007` — sequential within the year the contract is issued. */
+  nextContractNumber(year: number): string {
+    const row = this.db
+      .prepare("SELECT COUNT(*) AS used FROM contracts WHERE number LIKE ?")
+      .get(`EPP-${year}-%`) as { used: number };
+    return `EPP-${year}-${String(Number(row.used) + 1).padStart(4, '0')}`;
+  }
+
+  createContract(contract: {
+    approvalId: string;
+    customerId: string;
+    itemId: string;
+    number: string;
+    token: string;
+    principalCents: number;
+    ratePct: number;
+    rateRule: string;
+    termDays: number;
+    interestCents: number;
+    totalDueCents: number;
+    startDate: string;
+    dueDate: string;
+    graceEndsDate: string;
+    bodyHtml: string;
+    expiresAt: string;
+    actor: string;
+  }): Contract {
+    const row: Contract = {
+      id: randomUUID(),
+      approval_id: contract.approvalId,
+      customer_id: contract.customerId,
+      item_id: contract.itemId,
+      loan_id: null,
+      number: contract.number,
+      token: contract.token,
+      principal_cents: contract.principalCents,
+      rate_pct: contract.ratePct,
+      rate_rule: contract.rateRule,
+      term_days: contract.termDays,
+      interest_cents: contract.interestCents,
+      total_due_cents: contract.totalDueCents,
+      start_date: contract.startDate,
+      due_date: contract.dueDate,
+      grace_ends_date: contract.graceEndsDate,
+      body_html: contract.bodyHtml,
+      body_sha256: createHash('sha256').update(contract.bodyHtml).digest('hex'),
+      status: 'pending',
+      expires_at: contract.expiresAt,
+      signed_at: null,
+      signed_name: null,
+      signed_id_number: null,
+      signature_path: null,
+      created_at: this.#now(),
+    };
+
+    this.db
+      .prepare(
+        'INSERT INTO contracts (id, approval_id, customer_id, item_id, loan_id, number, token, principal_cents, rate_pct, rate_rule, term_days, interest_cents, total_due_cents, start_date, due_date, grace_ends_date, body_html, body_sha256, status, expires_at, created_at) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        row.id, row.approval_id, row.customer_id, row.item_id, row.number, row.token, row.principal_cents,
+        row.rate_pct, row.rate_rule, row.term_days, row.interest_cents, row.total_due_cents, row.start_date,
+        row.due_date, row.grace_ends_date, row.body_html, row.body_sha256, row.status, row.expires_at, row.created_at,
+      );
+
+    this.audit({
+      actor: contract.actor,
+      action: 'contract.issued',
+      entity: 'contract',
+      entityId: row.id,
+      details: { number: row.number, principalCents: row.principal_cents, bodySha256: row.body_sha256 },
+    });
+    return row;
+  }
+
+  contract(contractId: string): Contract | null {
+    return (this.db.prepare('SELECT * FROM contracts WHERE id = ?').get(contractId) as unknown as Contract) ?? null;
+  }
+
+  contractByToken(token: string): Contract | null {
+    return (this.db.prepare('SELECT * FROM contracts WHERE token = ?').get(token) as unknown as Contract) ?? null;
+  }
+
+  contractsForApproval(approvalId: string): Contract[] {
+    return this.db
+      .prepare('SELECT * FROM contracts WHERE approval_id = ? ORDER BY created_at')
+      .all(approvalId) as unknown as Contract[];
+  }
+
+  /** Records the signature and links the loan the signature started. */
+  signContract(signature: {
+    contractId: string;
+    name: string;
+    idNumber: string;
+    image?: Buffer;
+    loanId: string;
+    actor: string;
+  }): Contract {
+    const current = this.contract(signature.contractId);
+    if (!current) throw new Error(`No such contract: ${signature.contractId}`);
+    if (current.status !== 'pending') throw new ContractError(`Contract ${current.number} is already ${current.status}`);
+
+    const stored = signature.image && this.media ? this.media.put(signature.image, 'png') : null;
+    const at = this.#now();
+
+    this.db
+      .prepare(
+        "UPDATE contracts SET status = 'signed', signed_at = ?, signed_name = ?, signed_id_number = ?, signature_path = ?, loan_id = ? WHERE id = ?",
+      )
+      .run(at, signature.name, signature.idNumber, stored?.path ?? null, signature.loanId, signature.contractId);
+
+    this.audit({
+      actor: signature.actor,
+      action: 'contract.signed',
+      entity: 'contract',
+      entityId: current.id,
+      details: { number: current.number, loanId: signature.loanId, name: signature.name },
+    });
+    return this.contract(signature.contractId)!;
+  }
+
+  voidContract(contractId: string, reason: string, actor: string): Contract {
+    const current = this.contract(contractId);
+    if (!current) throw new Error(`No such contract: ${contractId}`);
+    if (current.status === 'signed') throw new ContractError('A signed contract cannot be voided');
+
+    this.db.prepare("UPDATE contracts SET status = 'void' WHERE id = ?").run(contractId);
+    this.audit({ actor, action: 'contract.voided', entity: 'contract', entityId: contractId, details: { reason } });
+    return this.contract(contractId)!;
   }
 
   // --- audit -------------------------------------------------------------

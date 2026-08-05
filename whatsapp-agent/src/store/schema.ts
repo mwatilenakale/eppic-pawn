@@ -174,4 +174,49 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX audit_log_entity ON audit_log(entity, entity_id, at);
   `,
+
+  // 2 — contracts, generated from an approved application and signed before handover
+  `
+  CREATE TABLE contracts (
+    id                TEXT PRIMARY KEY,
+    approval_id       TEXT NOT NULL REFERENCES approvals(id),
+    customer_id       TEXT NOT NULL REFERENCES customers(id),
+    item_id           TEXT NOT NULL REFERENCES items(id),
+    -- Set when the customer signs: the loan starts at handover, not at approval.
+    loan_id           TEXT REFERENCES loans(id),
+    -- Human reference, e.g. EPP-2026-0007.
+    number            TEXT NOT NULL UNIQUE,
+    -- Secret in the signing link. Not guessable, not reused.
+    token             TEXT NOT NULL UNIQUE,
+    principal_cents   INTEGER NOT NULL,
+    rate_pct          REAL NOT NULL,
+    rate_rule         TEXT NOT NULL,
+    term_days         INTEGER NOT NULL,
+    interest_cents    INTEGER NOT NULL,
+    total_due_cents   INTEGER NOT NULL,
+    start_date        TEXT NOT NULL,
+    due_date          TEXT NOT NULL,
+    grace_ends_date   TEXT NOT NULL,
+    -- The exact document put in front of the customer, kept verbatim.
+    body_html         TEXT NOT NULL,
+    body_sha256       TEXT NOT NULL,
+    status            TEXT NOT NULL CHECK (status IN ('pending', 'signed', 'void')),
+    expires_at        TEXT NOT NULL,
+    signed_at         TEXT,
+    signed_name       TEXT,
+    signed_id_number  TEXT,
+    -- Encrypted signature image on disk.
+    signature_path    TEXT,
+    created_at        TEXT NOT NULL
+  );
+  CREATE INDEX contracts_approval ON contracts(approval_id);
+  CREATE INDEX contracts_status ON contracts(status, created_at);
+
+  -- What was signed must stay exactly as it was signed. A wrong contract is
+  -- voided and reissued, never edited.
+  CREATE TRIGGER contracts_body_immutable BEFORE UPDATE OF body_html, body_sha256 ON contracts
+  BEGIN
+    SELECT RAISE(ABORT, 'a contract body cannot be edited — void it and issue a new one');
+  END;
+  `,
 ];
