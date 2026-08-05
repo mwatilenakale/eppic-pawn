@@ -12,6 +12,7 @@ import type { Store, User } from './store/index.ts';
 import { IntakeAgent, type IntakeSubmission } from './intake/agent.ts';
 import { ApprovalWorkflow } from './approval/index.ts';
 import type { MarketEstimate } from './valuation.ts';
+import type { ContractService, SignedContract } from './contract/index.ts';
 import { samePhone, type InboundEvent } from './whatsapp/webhook.ts';
 import type { WhatsAppTransport } from './whatsapp/transport.ts';
 
@@ -31,6 +32,8 @@ export interface RouterOptions {
   ownerPhone: string;
   ownerName?: string;
   valuator?: Valuator;
+  /** Issues the agreement once Lukas approves. Omit to skip contracts. */
+  contracts?: ContractService;
   /** Called with anything that goes wrong while handling one message. */
   onError?: (error: unknown, event: InboundEvent) => void;
 }
@@ -43,6 +46,7 @@ export class AgentRouter {
   readonly #ownerPhone: string;
   readonly #owner: User;
   readonly #valuator: Valuator | null;
+  readonly #contracts: ContractService | null;
   readonly #onError: (error: unknown, event: InboundEvent) => void;
 
   constructor(options: RouterOptions) {
@@ -57,6 +61,7 @@ export class AgentRouter {
       role: 'owner',
     });
     this.#valuator = options.valuator ?? null;
+    this.#contracts = options.contracts ?? null;
     this.#onError = options.onError ?? ((error) => console.error('[agent]', error));
   }
 
@@ -117,9 +122,37 @@ export class AgentRouter {
       const conversationId = result.approval?.conversation_id;
       if (conversationId) {
         this.#store.recordOutbound({ conversationId, body: result.customerMessage });
-        this.#store.closeConversation(conversationId);
       }
+
+      if (result.approval?.status === 'approved' && this.#contracts) {
+        await this.#sendContract(result.approval.id, result.customerPhone, conversationId);
+      }
+
+      // The application is decided, so the next customer message starts a new one.
+      if (conversationId) this.#store.closeConversation(conversationId);
     }
+  }
+
+  /** Generates the agreement and sends the customer their signing link. */
+  async #sendContract(approvalId: string, customerPhone: string, conversationId: string | null | undefined): Promise<void> {
+    try {
+      const issued = this.#contracts!.issueForApproval(approvalId, { actor: this.#owner.id });
+      await this.#transport.sendText({ to: customerPhone, body: issued.customerMessage });
+      await this.#transport.sendText({ to: this.#ownerPhone, body: issued.ownerMessage });
+      if (conversationId) this.#store.recordOutbound({ conversationId, body: issued.customerMessage });
+    } catch (error) {
+      this.#onError(error, { from: customerPhone, messageId: '', type: 'text' });
+      await this.#safeSend(
+        this.#ownerPhone,
+        'The offer went out, but the contract could not be generated. Check the agent logs before handover.',
+      );
+    }
+  }
+
+  /** Called by the web server once a customer has signed. */
+  async announceSignature(signed: SignedContract): Promise<void> {
+    await this.#safeSend(this.#ownerPhone, signed.ownerMessage);
+    await this.#safeSend(signed.customerPhone, signed.customerMessage);
   }
 
   async #safeSend(to: string, body: string): Promise<void> {

@@ -14,11 +14,14 @@ import { AgentRouter, type Valuator } from './router.ts';
 import { CloudApiTransport, type WhatsAppTransport } from './whatsapp/transport.ts';
 import { parseWebhookPayload, verifySignature, verifySubscription } from './whatsapp/webhook.ts';
 import { createValuator } from './valuator/index.ts';
+import { ContractError } from './store/index.ts';
+import { ContractService, contractErrorPage, signedPage, signingPage } from './contract/index.ts';
 
 export interface BuiltServer {
   server: Server;
   store: Store;
   router: AgentRouter;
+  contracts: ContractService;
   config: Config;
 }
 
@@ -38,6 +41,8 @@ export function buildServer(
   const valuator =
     overrides.valuator === undefined ? createValuator(config.anthropicApiKey, rules) : overrides.valuator;
 
+  const contracts = new ContractService(store, rules, { baseUrl: config.publicBaseUrl });
+
   const router = new AgentRouter({
     store,
     rules,
@@ -45,16 +50,17 @@ export function buildServer(
     ownerPhone: config.ownerPhone,
     ownerName: config.ownerName,
     valuator: valuator ?? undefined,
+    contracts,
   });
 
   const server = createServer((request, response) => {
-    handleRequest(request, response, config, router).catch((error) => {
+    handleRequest(request, response, config, router, contracts).catch((error) => {
       console.error('[server]', error);
       if (!response.headersSent) respond(response, 500, 'Internal error');
     });
   });
 
-  return { server, store, router, config };
+  return { server, store, router, contracts, config };
 }
 
 async function handleRequest(
@@ -62,6 +68,7 @@ async function handleRequest(
   response: ServerResponse,
   config: Config,
   router: AgentRouter,
+  contracts: ContractService,
 ): Promise<void> {
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
 
@@ -95,7 +102,56 @@ async function handleRequest(
     return;
   }
 
+  // --- the customer's signing page ---------------------------------------
+  // The token in the link is the only credential, so the page is never cached
+  // and never framed.
+  const signing = /^\/c\/([A-Za-z0-9_-]+)$/.exec(url.pathname);
+  if (signing && (request.method === 'GET' || request.method === 'POST')) {
+    const token = signing[1]!;
+
+    if (request.method === 'GET') {
+      try {
+        const contract = contracts.openForSigning(token);
+        return respondHtml(response, 200, contract.status === 'signed' ? signedPage(contract) : signingPage(contract));
+      } catch (error) {
+        return respondHtml(response, 404, contractErrorPage(messageFor(error)));
+      }
+    }
+
+    const form = new URLSearchParams((await readBody(request)).toString('utf8'));
+    try {
+      const signed = contracts.sign(token, {
+        name: form.get('name') ?? '',
+        idNumber: form.get('idNumber') ?? '',
+        signatureDataUrl: form.get('signature') ?? '',
+      });
+      // Tell Lukas and the customer, but never fail the signature because a
+      // WhatsApp message did not go out — the contract is already signed.
+      router.announceSignature(signed).catch((error) => console.error('[server]', error));
+      return respondHtml(response, 200, signedPage(signed.contract));
+    } catch (error) {
+      if (!(error instanceof ContractError)) throw error;
+      const contract = contracts.openForSigning(token);
+      return respondHtml(response, 400, signingPage(contract, { error: messageFor(error) }));
+    }
+  }
+
   respond(response, 404, 'Not found');
+}
+
+function messageFor(error: unknown): string {
+  return error instanceof Error ? error.message : 'Something went wrong.';
+}
+
+function respondHtml(response: ServerResponse, status: number, body: string): void {
+  response.writeHead(status, {
+    'content-type': 'text/html; charset=utf-8',
+    'cache-control': 'no-store',
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'no-referrer',
+    'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'",
+  });
+  response.end(body);
 }
 
 function readBody(request: IncomingMessage): Promise<Buffer> {

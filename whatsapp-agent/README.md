@@ -15,8 +15,10 @@ npm run sim
 You type as the customer. `/lukas approve A1B2 3000` types as Lukas. Everything
 runs in memory, so nothing touches real records.
 
+`/sign` signs the contract the way a customer would on their phone.
+
 ```bash
-npm test          # 111 tests, no network
+npm test          # 136 tests, no network
 npm run typecheck
 ```
 
@@ -38,6 +40,10 @@ WhatsApp  ──▶ server.ts ──▶ router.ts ──┬──▶ intake/    
                                          └──▶ approval/  (Lukas)
                                                his reply, and only then a
                                                figure to the customer
+                                                 │
+              /c/<token> ────────────────────────┴──▶ contract/
+              (the customer signs on their phone)      agreement, signature,
+                                                       and the loan it opens
 
 playbook/  reads docs/playbook.md + architecture.md at runtime
 valuation/ applies the playbook's formula and rate table
@@ -66,8 +72,9 @@ is not ours to answer.
   "approved" is a parsed reply from Lukas's number.
 - **No approval tiers.** One owner, one hire who inspects. The `users` table
   allows exactly those two roles.
-- **The loan is not created at approval.** Approving is a decision; the loan
-  starts at handover, once the in-person checks pass.
+- **The loan is not created at approval.** Approving is a decision. The loan row
+  and the ledger open when the customer signs the agreement, and the message to
+  Lukas says to verify the in-person checks before the money changes hands.
 - **In-person-only checks are never asked over chat** — a mechanic's inspection,
   a 20-30 minute console load test, a reset done in front of staff. They go to
   Lukas as the verification list (playbook Section 7).

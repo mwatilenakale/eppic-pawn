@@ -18,6 +18,8 @@ export interface Config {
   };
   ownerPhone: string;
   ownerName: string;
+  /** Public origin customers reach the signing page on. */
+  publicBaseUrl: string;
   dbPath: string;
   mediaDirectory: string;
   mediaKey: Buffer;
@@ -51,6 +53,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     },
     ownerPhone: normalizePhone(required('OWNER_PHONE', "Lukas's WhatsApp number, e.g. 081 282 3046.")),
     ownerName: env['OWNER_NAME'] ?? 'Lukas',
+    publicBaseUrl: (env['PUBLIC_BASE_URL'] ?? `http://localhost:${Number(env['PORT'] ?? 8080)}`).replace(/\/$/, ''),
     dbPath: resolve(env['EPPIC_DB_PATH'] ?? 'data/eppic.db'),
     mediaDirectory: resolve(env['EPPIC_MEDIA_DIR'] ?? 'data/media'),
     mediaKey: Buffer.from(mediaKeyHex, 'hex'),

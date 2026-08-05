@@ -16,9 +16,21 @@ import { addDays } from '../valuation.ts';
 import { buildContract, type ContractDocument } from './document.ts';
 
 export * from './document.ts';
+export { signingPage, signedPage, contractErrorPage } from './page.ts';
+
+/** A signature bigger than this is not a signature. */
+const MAX_SIGNATURE_BYTES = 1_000_000;
 
 /** How long a signing link stays valid. */
 const DEFAULT_VALID_DAYS = 7;
+
+export interface SignedContract {
+  contract: Contract;
+  loanId: string;
+  customerPhone: string;
+  customerMessage: string;
+  ownerMessage: string;
+}
 
 export interface IssuedContract {
   contract: Contract;
@@ -139,6 +151,89 @@ export class ContractService {
     return contract;
   }
 
+  /**
+   * Records the signature and starts the loan.
+   *
+   * This is the point the money becomes real: the loan row is written and the
+   * ledger is opened with the principal and the term's interest, so the balance
+   * is what the contract says is due. Everything is refused rather than
+   * half-applied — a bad signature leaves no loan behind.
+   */
+  sign(token: string, submission: { name: string; idNumber: string; signatureDataUrl: string }): SignedContract {
+    const contract = this.openForSigning(token);
+    if (contract.status === 'signed') throw new ContractError(`Contract ${contract.number} is already signed`);
+
+    const name = submission.name.trim();
+    const idNumber = submission.idNumber.trim();
+    if (name.length < 3) throw new ContractError('Please enter your full name as it appears on your ID');
+    if (idNumber.length < 4) throw new ContractError('Please enter your ID number');
+
+    const image = readSignatureImage(submission.signatureDataUrl);
+    if (!image) throw new ContractError('Please sign in the box before submitting');
+
+    const item = this.#store.item(contract.item_id)!;
+    const loan = this.#store.createLoan({
+      customerId: contract.customer_id,
+      itemId: contract.item_id,
+      approvalId: contract.approval_id,
+      principalCents: contract.principal_cents,
+      ratePct: contract.rate_pct,
+      rateRule: contract.rate_rule,
+      termDays: contract.term_days,
+      interestCents: contract.interest_cents,
+      startDate: contract.start_date,
+      dueDate: contract.due_date,
+      graceEndsDate: contract.grace_ends_date,
+      actor: contract.customer_id,
+    });
+
+    // A pawn loan's interest is fixed for the term, not accrued daily, so both
+    // sides of what is owed are posted at the start. Positive = owed by the
+    // customer; repayments are posted negative.
+    this.#store.postLedgerEntry({
+      loanId: loan.id,
+      entryType: 'principal',
+      amountCents: contract.principal_cents,
+      memo: `Contract ${contract.number}`,
+      actor: contract.customer_id,
+    });
+    this.#store.postLedgerEntry({
+      loanId: loan.id,
+      entryType: 'interest',
+      amountCents: contract.interest_cents,
+      memo: `${contract.rate_pct}% over ${contract.term_days} days`,
+      actor: contract.customer_id,
+    });
+
+    const signed = this.#store.signContract({
+      contractId: contract.id,
+      name,
+      idNumber,
+      image,
+      loanId: loan.id,
+      actor: contract.customer_id,
+    });
+    this.#store.updateItem(item.id, { status: 'pledged' });
+
+    const customerPhone = (
+      this.#store.db.prepare('SELECT phone FROM customers WHERE id = ?').get(contract.customer_id) as { phone: string }
+    ).phone;
+
+    return {
+      contract: signed,
+      loanId: loan.id,
+      customerPhone,
+      customerMessage:
+        `Contract ${contract.number} is signed — thank you, ${name}.\n\n` +
+        `Bring the item and your documents in to collect ${formatAmount(contract.principal_cents)}. ` +
+        `${formatAmount(contract.total_due_cents)} is due by ${contract.due_date}, with a grace period to ${contract.grace_ends_date}.`,
+      ownerMessage:
+        `✍️ ${name} signed contract ${contract.number} (${formatAmount(contract.principal_cents)} on ${item.description || 'the item'}).\n` +
+        `ID given: ${idNumber}\n` +
+        `The loan is open: ${formatAmount(contract.total_due_cents)} due ${contract.due_date}. Verify the in-person checks before handing over the money.`,
+    };
+  }
+
   #customerMessage(document: ContractDocument, signingUrl: string): string {
     return [
       `Your agreement is ready — contract ${document.number}.`,
@@ -154,4 +249,17 @@ export class ContractService {
       ...document.requirements.map((requirement) => `• ${requirement}`),
     ].join('\n');
   }
+}
+
+
+/** Reads the PNG the signature pad produced, rejecting anything else. */
+function readSignatureImage(dataUrl: string): Buffer | null {
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec((dataUrl ?? '').trim());
+  if (!match) return null;
+
+  const image = Buffer.from(match[1]!, 'base64');
+  if (image.length === 0 || image.length > MAX_SIGNATURE_BYTES) return null;
+  // PNG magic number — the pad produces one; anything else is not from it.
+  if (!image.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return null;
+  return image;
 }

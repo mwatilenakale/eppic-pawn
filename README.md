@@ -40,8 +40,12 @@ npm test
   rate table (29%/30 days, 40%/60 days from N$15,000, the 9/20 referral split),
   grace, interest compounding on partial payments, and the Section 8 margin
   check.
-- **Records** — SQLite with an append-only ledger, encrypted ID photos and an
-  audit log of who decided what.
+- **Contract, signed before handover** (architecture step 3) — the agreement
+  auto-fills from the approved amount and the playbook's rules, the customer
+  signs it with their finger on a phone, and only then does the loan open with
+  its ledger. The document is kept exactly as it was signed, with its digest.
+- **Records** — SQLite with an append-only ledger, encrypted ID photos and
+  signatures, and an audit log of who decided what.
 
 Every rate, term and screening question is read from `docs/playbook.md` at
 runtime. Nothing is hard-coded, and the loader refuses to start rather than
@@ -49,8 +53,11 @@ default a rule it cannot find.
 
 ## Still to build (same section, later steps)
 
-3. Contract generator 4. Valuation engine phase 2, calibrated on the Ledger
 5. Customer de-duplication 6. Website 7. Ledger migration from the workbook
+8. Valuation engine phase 2, calibrated on the Ledger's own outcomes
+
+The contract wording is plain-language and derived from the playbook. Have a
+lawyer read it before it is used with real customers.
 
 ## Two things that are not code
 

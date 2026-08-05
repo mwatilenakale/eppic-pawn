@@ -267,6 +267,7 @@ describe('http server', () => {
     whatsapp: { token: 't', phoneNumberId: 'p', appSecret: APP_SECRET, verifyToken: 'verify-me' },
     ownerPhone: OWNER,
     ownerName: 'Lukas',
+    publicBaseUrl: 'https://eppic.example',
     dbPath: ':memory:',
     mediaDirectory: mkdtempSync(join(tmpdir(), 'eppic-http-')),
     mediaKey: Buffer.from(generateMediaKey(), 'hex'),
