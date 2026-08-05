@@ -32,6 +32,8 @@ export interface Answer {
 
 export interface IntakeState {
   step: 'category' | 'variant' | 'questions' | 'amount' | 'submitted';
+  /** False until the customer has been greeted, so "hi" isn't read as an item. */
+  greeted: boolean;
   itemId: string | null;
   categorySlug: string | null;
   variant: string | null;
@@ -145,10 +147,17 @@ export class IntakeAgent {
   }
 
   #handleCategory(state: IntakeState, text: string): IntakeOutcome {
-    if (!text) return { replies: [copy.welcome(this.#categoryLabels())] };
+    const category = text ? this.#rules.category(text) : null;
 
-    const category = this.#rules.category(text);
+    // An opening "hi" is a greeting, not an item — greet back and ask, rather
+    // than telling someone we don't accept "hi".
+    if (!state.greeted) {
+      state.greeted = true;
+      if (!category) return { replies: [copy.welcome(this.#categoryLabels())] };
+    }
+
     if (!category) {
+      if (!text) return { replies: [copy.welcome(this.#categoryLabels())] };
       return { replies: [copy.notAccepted(text, this.#categoryLabels())] };
     }
 
@@ -355,5 +364,13 @@ function isAskingForAPrice(text: string, question: Question): boolean {
 }
 
 export function initialState(): IntakeState {
-  return { step: 'category', itemId: null, categorySlug: null, variant: null, answers: {}, requestedAmountCents: null };
+  return {
+    step: 'category',
+    greeted: false,
+    itemId: null,
+    categorySlug: null,
+    variant: null,
+    answers: {},
+    requestedAmountCents: null,
+  };
 }
