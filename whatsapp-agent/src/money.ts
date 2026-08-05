@@ -6,11 +6,17 @@
 
 export const CENTS = 100;
 
-/** N$1,087.50 -> 108750. Rejects anything that isn't a plain amount. */
+/**
+ * N$1,087.50 -> 108750. Rejects anything that isn't a plain amount.
+ *
+ * A space is only treated as a thousands separator when it actually separates
+ * groups of three ("3 750"), so two numbers side by side ("1234 20000") are
+ * rejected rather than silently glued into one enormous amount.
+ */
 export function parseAmount(text: string): number | null {
   const cleaned = text
     .replace(/n\$|nad|\bn\s?\$/gi, '')
-    .replace(/[\s,](?=\d)/g, '')
+    .replace(/(?<=\d)[\s,](?=\d{3}(\D|$))/g, '')
     .trim();
   if (!/^-?\d+(\.\d{1,2})?$/.test(cleaned)) return null;
   return round(Number(cleaned) * CENTS);

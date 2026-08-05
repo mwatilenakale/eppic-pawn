@@ -109,7 +109,8 @@ export const MIGRATIONS: string[] = [
     valuation_id          TEXT REFERENCES valuations(id),
     conversation_id       TEXT REFERENCES conversations(id),
     status                TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'declined')),
-    suggested_loan_cents  INTEGER NOT NULL,
+    -- Null when no market estimate exists yet and Lukas sets the amount himself.
+    suggested_loan_cents  INTEGER,
     approved_loan_cents   INTEGER,
     decided_by            TEXT REFERENCES users(id),
     decided_at            TEXT,

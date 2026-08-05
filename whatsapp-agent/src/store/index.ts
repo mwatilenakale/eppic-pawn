@@ -49,7 +49,7 @@ export interface Approval {
   valuation_id: string | null;
   conversation_id: string | null;
   status: ApprovalStatus;
-  suggested_loan_cents: number;
+  suggested_loan_cents: number | null;
   approved_loan_cents: number | null;
   decided_by: string | null;
   decided_at: string | null;
@@ -358,7 +358,7 @@ export class Store {
     itemId: string;
     valuationId?: string | null;
     conversationId?: string | null;
-    suggestedLoanCents: number;
+    suggestedLoanCents: number | null;
   }): Approval {
     const row: Approval = {
       id: randomUUID(),
@@ -366,7 +366,7 @@ export class Store {
       valuation_id: approval.valuationId ?? null,
       conversation_id: approval.conversationId ?? null,
       status: 'pending',
-      suggested_loan_cents: approval.suggestedLoanCents,
+      suggested_loan_cents: approval.suggestedLoanCents ?? null,
       approved_loan_cents: null,
       decided_by: null,
       decided_at: null,
