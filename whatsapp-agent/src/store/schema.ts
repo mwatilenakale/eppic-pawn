@@ -256,4 +256,42 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX prechecks_category ON prechecks(category_slug, created_at);
   `,
+
+  // 5 — importing the Eppic workbook (architecture step 7). The ledger cannot
+  // be deleted from, so an import has to be safe to get wrong: every row it
+  // creates is recorded against its source reference, which makes a re-run
+  // skip what it already did, and makes a bad import reversible by posting
+  // reversing entries rather than by removing anything.
+  `
+  CREATE TABLE imports (
+    id             TEXT PRIMARY KEY,
+    -- File name and digest: which workbook, and which version of it.
+    source         TEXT NOT NULL,
+    source_sha256  TEXT NOT NULL,
+    status         TEXT NOT NULL CHECK (status IN ('complete', 'reverted')),
+    summary        TEXT NOT NULL DEFAULT '{}',
+    actor          TEXT NOT NULL,
+    created_at     TEXT NOT NULL,
+    reverted_at    TEXT,
+    reverted_note  TEXT
+  );
+  CREATE INDEX imports_created ON imports(created_at);
+
+  CREATE TABLE imported_rows (
+    id            TEXT PRIMARY KEY,
+    import_id     TEXT NOT NULL REFERENCES imports(id),
+    source_sheet  TEXT NOT NULL,
+    -- The workbook's own identifier: LN0001, CUST0068, ITM0001.
+    source_ref    TEXT NOT NULL,
+    entity        TEXT NOT NULL CHECK (entity IN ('customer', 'item', 'loan')),
+    entity_id     TEXT NOT NULL,
+    reverted      INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT NOT NULL
+  );
+  -- One live record per workbook row, so importing the same book twice cannot
+  -- post the same loan twice. Reverted rows drop out and may be imported again.
+  CREATE UNIQUE INDEX imported_rows_source ON imported_rows(source_sheet, source_ref, entity)
+    WHERE reverted = 0;
+  CREATE INDEX imported_rows_import ON imported_rows(import_id, entity);
+  `,
 ];

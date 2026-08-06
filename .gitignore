@@ -3,3 +3,8 @@ node_modules/
 *.db
 *.db-journal
 data/
+
+# The Eppic workbook holds real customers' names, numbers and PINs.
+*.xlsx
+*.xls
+*.csv

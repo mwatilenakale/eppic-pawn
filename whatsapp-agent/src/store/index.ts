@@ -138,6 +138,29 @@ export interface Contract {
   created_at: string;
 }
 
+export interface ImportBatch {
+  id: string;
+  source: string;
+  source_sha256: string;
+  status: 'complete' | 'reverted';
+  summary: string;
+  actor: string;
+  created_at: string;
+  reverted_at: string | null;
+  reverted_note: string | null;
+}
+
+export interface ImportedRow {
+  id: string;
+  import_id: string;
+  source_sheet: string;
+  source_ref: string;
+  entity: 'customer' | 'item' | 'loan';
+  entity_id: string;
+  reverted: number;
+  created_at: string;
+}
+
 export class LedgerError extends Error {}
 export class ContractError extends Error {}
 
@@ -192,7 +215,11 @@ export class Store {
     return (this.db.prepare('SELECT * FROM customers WHERE phone = ?').get(phone) as unknown as Customer) ?? null;
   }
 
-  upsertCustomer(phone: string, name?: string): Customer {
+  /**
+   * `since` back-dates the record to when the relationship actually began —
+   * used when importing history, so an old customer does not look new.
+   */
+  upsertCustomer(phone: string, name?: string, since?: string): Customer {
     const existing = this.customerByPhone(phone);
     if (existing) {
       if (name && name !== existing.name) {
@@ -204,7 +231,7 @@ export class Store {
     }
 
     const customer: Customer = { id: randomUUID(), phone, name: name ?? null, id_number: null };
-    const at = this.#now();
+    const at = since ?? this.#now();
     this.db
       .prepare('INSERT INTO customers (id, phone, name, id_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(customer.id, customer.phone, customer.name, null, at, at);
@@ -425,6 +452,8 @@ export class Store {
     variant?: string | null;
     description?: string;
     status?: string;
+    /** Back-dates an imported item to when it was actually taken in. */
+    at?: string;
   }): Item {
     const row: Item = {
       id: randomUUID(),
@@ -436,7 +465,7 @@ export class Store {
       declared_details: '{}',
       status: item.status ?? 'intake',
     };
-    const at = this.#now();
+    const at = item.at ?? this.#now();
     this.db
       .prepare('INSERT INTO items (id, customer_id, conversation_id, category_slug, variant, description, declared_details, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run(row.id, row.customer_id, row.conversation_id, row.category_slug, row.variant, row.description, row.declared_details, row.status, at, at);
@@ -615,6 +644,9 @@ export class Store {
     dueDate: string;
     graceEndsDate: string;
     actor: string;
+    status?: string;
+    /** Back-dates an imported loan to the day it was actually issued. */
+    at?: string;
   }): Loan {
     const row: Loan = {
       id: randomUUID(),
@@ -628,9 +660,9 @@ export class Store {
       start_date: loan.startDate,
       due_date: loan.dueDate,
       grace_ends_date: loan.graceEndsDate,
-      status: 'active',
+      status: loan.status ?? 'active',
     };
-    const at = this.#now();
+    const at = loan.at ?? this.#now();
     this.db
       .prepare('INSERT INTO loans (id, customer_id, item_id, approval_id, principal_cents, rate_pct, rate_rule, term_days, interest_cents, start_date, due_date, grace_ends_date, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run(row.id, row.customer_id, row.item_id, loan.approvalId ?? null, row.principal_cents, row.rate_pct, row.rate_rule, row.term_days, row.interest_cents, row.start_date, row.due_date, row.grace_ends_date, row.status, at, at);
@@ -642,8 +674,19 @@ export class Store {
     return (this.db.prepare('SELECT * FROM loans WHERE id = ?').get(loanId) as unknown as Loan) ?? null;
   }
 
-  /** Appends a ledger entry. Entries are never edited afterwards. */
-  postLedgerEntry(entry: { loanId: string; entryType: string; amountCents: number; memo?: string; actor: string }): LedgerEntry {
+  updateLoanStatus(loanId: string, status: string, actor: string): void {
+    this.db.prepare('UPDATE loans SET status = ?, updated_at = ? WHERE id = ?').run(status, this.#now(), loanId);
+    this.audit({ actor, action: 'loan.status', entity: 'loan', entityId: loanId, details: { status } });
+  }
+
+  /**
+   * Appends a ledger entry. Entries are never edited afterwards.
+   *
+   * `at` is the date the money moved, which for imported history is not the
+   * date the row was inserted. The audit log still records the real insert
+   * time, so back-dating an entry never hides when it was written.
+   */
+  postLedgerEntry(entry: { loanId: string; entryType: string; amountCents: number; memo?: string; actor: string; at?: string }): LedgerEntry {
     const row: LedgerEntry = {
       id: randomUUID(),
       loan_id: entry.loanId,
@@ -652,7 +695,7 @@ export class Store {
       memo: entry.memo ?? '',
       actor: entry.actor,
       reverses_entry_id: null,
-      created_at: this.#now(),
+      created_at: entry.at ?? this.#now(),
     };
     this.db
       .prepare('INSERT INTO ledger_entries (id, loan_id, entry_type, amount_cents, memo, actor, reverses_entry_id, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)')
@@ -871,6 +914,109 @@ export class Store {
     return this.db
       .prepare('SELECT category_slug, status, COUNT(*) AS count FROM prechecks GROUP BY category_slug, status ORDER BY count DESC')
       .all() as unknown as { category_slug: string; status: string; count: number }[];
+  }
+
+  // --- workbook imports (architecture step 7) -----------------------------
+
+  /**
+   * Opens an import batch. Everything the import creates is recorded against
+   * it, which is what makes the whole thing undoable — the ledger itself can
+   * only ever be added to.
+   */
+  startImport(batch: { source: string; sourceSha256: string; actor: string }): ImportBatch {
+    const row: ImportBatch = {
+      id: randomUUID(),
+      source: batch.source,
+      source_sha256: batch.sourceSha256,
+      status: 'complete',
+      summary: '{}',
+      actor: batch.actor,
+      created_at: this.#now(),
+      reverted_at: null,
+      reverted_note: null,
+    };
+    this.db
+      .prepare('INSERT INTO imports (id, source, source_sha256, status, summary, actor, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(row.id, row.source, row.source_sha256, row.status, row.summary, row.actor, row.created_at);
+    this.audit({ actor: batch.actor, action: 'import.started', entity: 'import', entityId: row.id, details: { source: batch.source, sha256: batch.sourceSha256 } });
+    return row;
+  }
+
+  /** Links a workbook row to the record it produced. */
+  recordImportedRow(row: { importId: string; sourceSheet: string; sourceRef: string; entity: 'customer' | 'item' | 'loan'; entityId: string }): void {
+    this.db
+      .prepare('INSERT INTO imported_rows (id, import_id, source_sheet, source_ref, entity, entity_id, reverted, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?)')
+      .run(randomUUID(), row.importId, row.sourceSheet, row.sourceRef, row.entity, row.entityId, this.#now());
+  }
+
+  /** What a workbook reference became last time, if it has been imported before. */
+  importedRow(sourceSheet: string, sourceRef: string, entity: 'customer' | 'item' | 'loan'): ImportedRow | null {
+    return (
+      (this.db
+        .prepare('SELECT * FROM imported_rows WHERE source_sheet = ? AND source_ref = ? AND entity = ? AND reverted = 0')
+        .get(sourceSheet, sourceRef, entity) as unknown as ImportedRow) ?? null
+    );
+  }
+
+  importedRows(importId: string, entity?: 'customer' | 'item' | 'loan'): ImportedRow[] {
+    const sql = entity
+      ? 'SELECT * FROM imported_rows WHERE import_id = ? AND entity = ? ORDER BY created_at, rowid'
+      : 'SELECT * FROM imported_rows WHERE import_id = ? ORDER BY created_at, rowid';
+    const parameters = entity ? [importId, entity] : [importId];
+    return this.db.prepare(sql).all(...parameters) as unknown as ImportedRow[];
+  }
+
+  finishImport(importId: string, summary: unknown): void {
+    this.db.prepare('UPDATE imports SET summary = ? WHERE id = ?').run(JSON.stringify(summary), importId);
+    this.audit({ actor: 'import', action: 'import.finished', entity: 'import', entityId: importId, details: summary });
+  }
+
+  importBatch(importId: string): ImportBatch | null {
+    return (this.db.prepare('SELECT * FROM imports WHERE id = ?').get(importId) as unknown as ImportBatch) ?? null;
+  }
+
+  imports(): ImportBatch[] {
+    return this.db.prepare('SELECT * FROM imports ORDER BY created_at').all() as unknown as ImportBatch[];
+  }
+
+  /**
+   * Undoes an import the only way an append-only ledger allows: every entry
+   * it posted gets a reversing entry, and the rows it created are marked
+   * reverted so the workbook can be imported again once it is corrected.
+   *
+   * Nothing is deleted. Customers created by the import are left in place —
+   * they may have had a real conversation since, and a person is not a
+   * bookkeeping mistake.
+   */
+  revertImport(importId: string, actor: string, note: string): { entriesReversed: number; loansReverted: number } {
+    const batch = this.importBatch(importId);
+    if (!batch) throw new Error(`No such import: ${importId}`);
+    if (batch.status === 'reverted') throw new LedgerError('That import has already been reverted');
+
+    const loans = this.importedRows(importId, 'loan');
+    let entriesReversed = 0;
+
+    for (const row of loans) {
+      for (const entry of this.ledger(row.entity_id)) {
+        if (entry.reverses_entry_id) continue;
+        const already = this.db.prepare('SELECT id FROM ledger_entries WHERE reverses_entry_id = ?').get(entry.id);
+        if (already) continue;
+        this.reverseLedgerEntry({ entryId: entry.id, actor, reason: `Import reverted: ${note}` });
+        entriesReversed += 1;
+      }
+      this.updateLoanStatus(row.entity_id, 'import-reverted', actor);
+    }
+
+    for (const row of this.importedRows(importId, 'item')) {
+      this.updateItem(row.entity_id, { status: 'import-reverted' });
+    }
+
+    const at = this.#now();
+    this.db.prepare('UPDATE imported_rows SET reverted = 1 WHERE import_id = ?').run(importId);
+    this.db.prepare("UPDATE imports SET status = 'reverted', reverted_at = ?, reverted_note = ? WHERE id = ?").run(at, note, importId);
+    this.audit({ actor, action: 'import.reverted', entity: 'import', entityId: importId, details: { note, entriesReversed, loansReverted: loans.length } });
+
+    return { entriesReversed, loansReverted: loans.length };
   }
 
   // --- audit -------------------------------------------------------------

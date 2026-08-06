@@ -23,6 +23,7 @@ cd whatsapp-agent
 npm install
 npm run sim     # drive the whole flow in your terminal — no Meta account needed
 npm test
+npm run import -- ~/Eppic_PawnWorkbook.xlsx   # dry run against the existing book
 ```
 
 ## What is built (architecture Section 5, step 1)
@@ -53,6 +54,14 @@ npm test
   It asks for no name, number or photos, quotes no figure, and rejects nobody:
   a playbook condition answered "no" is explained, and the conversation is still
   offered.
+- **The existing workbook, imported** (architecture step 7) — the LEDGER and
+  CUSTOMERS tabs read straight from the .xlsx, with every loan kept at the rate
+  and term it actually ran at rather than recalculated against today's playbook.
+  A dry run reports the totals to check against the workbook's own DASHBOARD,
+  the rows whose arithmetic disagrees with itself, and every place the book and
+  the playbook differ. Device PINs written into the description column move into
+  encrypted storage on the way in. A second run imports nothing twice, and a bad
+  import is undone by reversing entries, never by deleting any.
 - **Records** — SQLite with an append-only ledger, encrypted ID photos and
   signatures, and an audit log of who decided what.
 
@@ -62,8 +71,9 @@ default a rule it cannot find.
 
 ## Still to build (same section, later steps)
 
-7. Ledger migration from the workbook
-8. Valuation engine phase 2, calibrated on the Ledger's own outcomes
+8. Valuation engine phase 2, calibrated on the Ledger's own outcomes. Now
+   partly unblocked: the imported book has 372 loans of real history in it,
+   though it records no item categories to calibrate against.
 
 The contract wording is plain-language and derived from the playbook. Have a
 lawyer read it before it is used with real customers.

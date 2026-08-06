@@ -61,10 +61,41 @@ playbook/  reads docs/playbook.md + architecture.md at runtime
 valuation/ applies the playbook's formula and rate table
 store/     SQLite: append-only ledger, encrypted photos, audit log
 valuator/  Claude API: market estimates only, never a loan amount
+migrate/   brings the existing Eppic workbook into the database
+xlsx/      reads .xlsx with no dependency — a zip of XML, and Node can inflate
 ```
 
 Rules are read from the documents at runtime and reload when the files change,
 so changing a rate means editing `docs/playbook.md` — not this code.
+
+## Importing the existing workbook
+
+```bash
+npm run import -- ~/Eppic_PawnWorkbook.xlsx          # dry run: reports, writes nothing
+npm run import -- ~/Eppic_PawnWorkbook.xlsx --write  # actually import
+npm run import -- --list                             # imports already run
+npm run import -- --revert <id>                      # undo one
+```
+
+Read the dry run first. Its totals are meant to be checked against the
+workbook's own DASHBOARD tab before anything is written, and it is where two
+other things surface:
+
+- **Rows whose arithmetic disagrees with itself** — interest that isn't the
+  stated percentage of the principal, a loan marked paid off that still shows
+  an outstanding balance.
+- **Where the book and the playbook disagree.** Loans are imported at the rate,
+  term and grace period they actually ran at — a book that ran at 30% does not
+  become one that ran at 29% because `docs/playbook.md` says 29% today. The
+  import reports the gap and changes nothing; whether the playbook or the book
+  is out of date is Lukas's call, made by editing the playbook.
+
+Importing is safe to get wrong. Every record is tagged with the workbook row
+that produced it, so a second run skips what it already did, and `--revert`
+undoes a batch by posting reversing entries — the ledger is never edited or
+deleted from. Device PINs written into the workbook's description column
+(playbook Section 9 flags this) are moved into the encrypted store on the way
+in, so `EPPIC_MEDIA_KEY` is required to import.
 
 ## The decisions this step made
 

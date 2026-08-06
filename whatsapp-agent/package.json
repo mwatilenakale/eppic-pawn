@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning src/server.ts",
     "sim": "node --disable-warning=ExperimentalWarning src/sim.ts",
+    "import": "node --disable-warning=ExperimentalWarning src/migrate/cli.ts",
     "test": "node --disable-warning=ExperimentalWarning --test 'test/**/*.test.ts'",
     "typecheck": "tsc --noEmit"
   },
