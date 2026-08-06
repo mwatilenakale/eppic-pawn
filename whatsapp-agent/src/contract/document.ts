@@ -15,9 +15,12 @@
  */
 
 import { formatAmount } from '../money.ts';
+import { escapeHtml } from '../html.ts';
 import type { Rules } from '../playbook/index.ts';
 import type { Customer, Item } from '../store/index.ts';
 import { loanTerms, schedule, type LoanTerms, type Schedule } from '../valuation.ts';
+
+export { escapeHtml };
 
 export const BUSINESS = {
   name: 'Mwatile Eppic Investment CC',
@@ -207,13 +210,4 @@ function renderHtml(input: ContractInput, sections: Section[], declarations: str
     <ul>${declarations.map((text) => `<li>${escapeHtml(text)}</li>`).join('')}</ul>
   </section>
 </article>`;
-}
-
-export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }

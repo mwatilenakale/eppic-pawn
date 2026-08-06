@@ -18,18 +18,24 @@ runs in memory, so nothing touches real records.
 `/sign` signs the contract the way a customer would on their phone.
 
 ```bash
-npm test          # 169 tests, no network
+npm test          # 191 tests, no network
 npm run typecheck
 ```
 
 ## Run it for real
 
 1. Copy `.env.example` to `.env` and fill it in (see the open questions below).
-2. `npm start` — the webhook listens on `PORT` (default 8080).
+2. `npm start` — one process serves everything on `PORT` (default 8080).
 3. Point the Meta webhook at `https://<your-host>/webhook`, using the same
    verify token, and subscribe to `messages`.
 
-`GET /health` returns `ok` for uptime checks.
+| Route | What it is |
+|---|---|
+| `GET /` | The public website — what the shop takes, and the pre-check |
+| `GET|POST /apply` | The pre-check form and its result |
+| `GET|POST /c/<token>` | A customer's contract, and signing it |
+| `GET|POST /webhook` | Meta's webhook (verified by signature) |
+| `GET /health` | `ok`, for uptime checks |
 
 ## How it fits together
 
@@ -50,6 +56,7 @@ WhatsApp  ──▶ server.ts ──▶ router.ts ──┬──▶ intake/    
                                                        possible duplicates,
                                                        flagged for Lukas
 
+web/       the public site: same questions, no figures, no personal data
 playbook/  reads docs/playbook.md + architecture.md at runtime
 valuation/ applies the playbook's formula and rate table
 store/     SQLite: append-only ledger, encrypted photos, audit log

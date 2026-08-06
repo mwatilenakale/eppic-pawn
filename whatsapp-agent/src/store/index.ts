@@ -841,6 +841,38 @@ export class Store {
     return this.contract(contractId)!;
   }
 
+  // --- website pre-checks -------------------------------------------------
+
+  /** Records that someone checked an item on the website. Nothing identifies them. */
+  recordPrecheck(precheck: {
+    categorySlug: string;
+    variant?: string | null;
+    description?: string;
+    answers: unknown;
+    status: string;
+  }): string {
+    const id = randomUUID();
+    this.db
+      .prepare('INSERT INTO prechecks (id, category_slug, variant, description, answers, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(
+        id,
+        precheck.categorySlug,
+        precheck.variant ?? null,
+        (precheck.description ?? '').slice(0, 160),
+        JSON.stringify(precheck.answers),
+        precheck.status,
+        this.#now(),
+      );
+    return id;
+  }
+
+  /** How many pre-checks by category — what the website is actually bringing in. */
+  precheckCounts(): { category_slug: string; status: string; count: number }[] {
+    return this.db
+      .prepare('SELECT category_slug, status, COUNT(*) AS count FROM prechecks GROUP BY category_slug, status ORDER BY count DESC')
+      .all() as unknown as { category_slug: string; status: string; count: number }[];
+  }
+
   // --- audit -------------------------------------------------------------
 
   audit(entry: { actor: string; action: string; entity: string; entityId: string; details?: unknown }): void {

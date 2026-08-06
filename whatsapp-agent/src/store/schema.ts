@@ -241,4 +241,19 @@ export const MIGRATIONS: string[] = [
   CREATE UNIQUE INDEX duplicate_flags_pair ON duplicate_flags(customer_id, other_customer_id);
   CREATE INDEX duplicate_flags_status ON duplicate_flags(status, created_at);
   `,
+
+  // 4 — website pre-checks. No name, no number, no photos: the website asks for
+  // nothing that identifies anyone, so this is a record of demand, not of people.
+  `
+  CREATE TABLE prechecks (
+    id             TEXT PRIMARY KEY,
+    category_slug  TEXT NOT NULL,
+    variant        TEXT,
+    description    TEXT NOT NULL DEFAULT '',
+    answers        TEXT NOT NULL DEFAULT '{}',
+    status         TEXT NOT NULL,
+    created_at     TEXT NOT NULL
+  );
+  CREATE INDEX prechecks_category ON prechecks(category_slug, created_at);
+  `,
 ];

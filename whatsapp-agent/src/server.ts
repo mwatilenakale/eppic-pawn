@@ -17,6 +17,8 @@ import { createValuator } from './valuator/index.ts';
 import { ContractError } from './store/index.ts';
 import { ContractService, contractErrorPage, signedPage, signingPage } from './contract/index.ts';
 import { CustomerDirectory } from './customers/directory.ts';
+import { chooseCategoryPage, landingPage, outcomePage, questionsPage } from './web/pages.ts';
+import { evaluatePrecheck, precheckQuestions } from './web/precheck.ts';
 
 export interface BuiltServer {
   server: Server;
@@ -57,7 +59,7 @@ export function buildServer(
   });
 
   const server = createServer((request, response) => {
-    handleRequest(request, response, config, router, contracts).catch((error) => {
+    handleRequest(request, response, config, router, contracts, store).catch((error) => {
       console.error('[server]', error);
       if (!response.headersSent) respond(response, 500, 'Internal error');
     });
@@ -72,11 +74,60 @@ async function handleRequest(
   config: Config,
   router: AgentRouter,
   contracts: ContractService,
+  store: Store,
 ): Promise<void> {
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
+  const rules = getRules();
 
   if (request.method === 'GET' && url.pathname === '/health') {
     return respond(response, 200, 'ok');
+  }
+
+  // --- the public website (architecture step 6) ---------------------------
+  if (request.method === 'GET' && url.pathname === '/') {
+    return respondHtml(response, 200, landingPage(rules));
+  }
+
+  if (request.method === 'GET' && url.pathname === '/apply') {
+    const wanted = url.searchParams.get('category');
+    if (!wanted) return respondHtml(response, 200, chooseCategoryPage(rules));
+
+    const category = rules.category(wanted);
+    if (!category) {
+      return respondHtml(response, 404, chooseCategoryPage(rules, `We don't take ${wanted} — here is what we do take.`));
+    }
+
+    const variant = url.searchParams.get('variant');
+    return respondHtml(
+      response,
+      200,
+      questionsPage(rules, category, variant, precheckQuestions(rules, category.slug, variant)),
+    );
+  }
+
+  if (request.method === 'POST' && url.pathname === '/apply') {
+    const form = new URLSearchParams((await readBody(request)).toString('utf8'));
+    const answers = Object.fromEntries([...form.entries()].filter(([key]) => !['category', 'variant', 'description'].includes(key)));
+
+    const outcome = evaluatePrecheck(rules, {
+      category: form.get('category') ?? '',
+      variant: form.get('variant'),
+      description: form.get('description') ?? '',
+      answers,
+    });
+
+    const category = rules.category(form.get('category') ?? '');
+    if (category) {
+      store.recordPrecheck({
+        categorySlug: category.slug,
+        variant: form.get('variant'),
+        description: form.get('description') ?? '',
+        answers: outcome.answers,
+        status: outcome.status,
+      });
+    }
+
+    return respondHtml(response, 200, outcomePage(outcome));
   }
 
   if (request.method === 'GET' && url.pathname === '/webhook') {
@@ -149,6 +200,7 @@ function messageFor(error: unknown): string {
 function respondHtml(response: ServerResponse, status: number, body: string): void {
   response.writeHead(status, {
     'content-type': 'text/html; charset=utf-8',
+    // Everything this app serves is either a contract or a form: never cached.
     'cache-control': 'no-store',
     'x-frame-options': 'DENY',
     'referrer-policy': 'no-referrer',

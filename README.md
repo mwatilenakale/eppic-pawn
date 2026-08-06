@@ -48,6 +48,11 @@ npm test
   matched on ID number and name similarity, never on name alone, and two
   different ID numbers rule a pair out. Lukas replies SAME or DIFFERENT over
   WhatsApp; both records are kept either way.
+- **A website front door** (architecture step 6) — the same screening questions,
+  built by the same code, as a one-minute pre-check that hands off to WhatsApp.
+  It asks for no name, number or photos, quotes no figure, and rejects nobody:
+  a playbook condition answered "no" is explained, and the conversation is still
+  offered.
 - **Records** — SQLite with an append-only ledger, encrypted ID photos and
   signatures, and an audit log of who decided what.
 
@@ -57,7 +62,7 @@ default a rule it cannot find.
 
 ## Still to build (same section, later steps)
 
-6. Website 7. Ledger migration from the workbook
+7. Ledger migration from the workbook
 8. Valuation engine phase 2, calibrated on the Ledger's own outcomes
 
 The contract wording is plain-language and derived from the playbook. Have a
