@@ -12,7 +12,8 @@ eppic-pawn/
 ├── docs/
 │   ├── playbook.md        ← every business rule: rates, terms, screening,
 │   │                         collections logic. The source of truth.
-│   └── architecture.md    ← full system design and build order
+│   ├── architecture.md    ← full system design and build order
+│   └── whatsapp-setup.md  ← getting the shop onto Meta's Cloud API
 └── whatsapp-agent/        ← Step 1, built. See its README to run it.
 ```
 
@@ -90,8 +91,10 @@ lawyer read it before it is used with real customers.
   rate cap applies to pawnbroking is still unresolved. It doesn't block this
   build, but it matters before the business scales.
 - **WhatsApp Business API access** — the Meta account and registered number are
-  a prerequisite with their own lead time. Until they exist, `npm run sim`
-  exercises the entire flow locally.
+  a prerequisite with their own lead time. `docs/whatsapp-setup.md` walks
+  through it, including the two-number rule and the 24-hour messaging window
+  that collections outreach runs into. Until it exists, `npm run sim` exercises
+  the entire flow locally.
 
 ## Keeping this current
 
