@@ -1,7 +1,13 @@
 # Eppic Pawn Shop — Business Playbook
 
-Windhoek. WhatsApp: 081-282-3046. Run solo, alongside an FNB job (can't get
+Windhoek. WhatsApp: 081-813-1462. Run solo, alongside an FNB job (can't get
 FNB financing for this because of the conflict of interest).
+
+The number above is the shop's — the one registered with Meta, printed on the
+flyer and the contract, and the one customers message. Lukas's own phone
+(081-282-3046) is separate: approvals arrive there and he replies from it. A
+number registered on the WhatsApp Cloud API cannot also run the normal
+WhatsApp app, so these can never be the same number.
 
 This is the "how we do things here" reference — the context every agent
 (intake, records, contracts) reads before it acts. When a rule changes,

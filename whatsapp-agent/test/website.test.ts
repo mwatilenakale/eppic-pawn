@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { loadRules } from '../src/playbook/index.ts';
 import { Store, generateMediaKey } from '../src/store/index.ts';
 import { MemoryTransport } from '../src/whatsapp/transport.ts';
+import { normalizePhone } from '../src/whatsapp/webhook.ts';
 import { buildServer } from '../src/server.ts';
 import { precheckQuestions } from '../src/web/precheck.ts';
 
@@ -118,7 +119,10 @@ describe('submitting the pre-check', () => {
 
     assert.equal(status, 200);
     assert.match(html, /Nothing here stops an application/);
-    assert.match(html, /https:\/\/wa\.me\/264812823046\?text=/);
+    // Derived from the playbook, not pinned here — a literal would go stale
+    // the next time the shop changes number, which is what just happened.
+    const shopNumber = normalizePhone(rules.playbook.whatsapp).replace('+', '');
+    assert.match(html, new RegExp(`https://wa\\.me/${shopNumber}\\?text=`));
     assert.match(html, /Samsung/);
     assert.match(html, /Police declaration/i);
     assert.doesNotMatch(html, /N\$\s?\d/);
@@ -162,7 +166,7 @@ describe('submitting the pre-check', () => {
   test('a category the playbook does not take is handled on submit too', async () => {
     const { html } = await post('/apply', { category: 'a double bed' });
     assert.match(html, /don&#39;t take a double bed|don't take a double bed/i);
-    assert.doesNotMatch(html, /wa\.me\/264812823046\?text=Hello%2C%20I%20filled/, 'no handoff for an item we cannot take');
+    assert.doesNotMatch(html, /wa\.me\/\d+\?text=Hello%2C%20I%20filled/, 'no handoff for an item we cannot take');
   });
 });
 
