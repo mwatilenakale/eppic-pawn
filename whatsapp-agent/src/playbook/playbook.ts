@@ -75,6 +75,8 @@ export interface ChecklistItem {
 
 export interface Playbook {
   path: string;
+  /** The number customers are told to message, from the document's header. */
+  whatsapp: string;
   categories: Category[];
   loanSizing: {
     /** Which of the market estimates to start from, verbatim from section 3. */
@@ -113,6 +115,7 @@ export function loadPlaybook(path: string): Playbook {
 
   return {
     path,
+    whatsapp: readBusinessNumber(path, markdown),
     categories,
     loanSizing: readLoanSizing(path, need(SECTIONS.loanSizing, 'loan sizing')),
     rates: readRates(path, need(SECTIONS.rates, 'interest rates & terms')),
@@ -121,6 +124,21 @@ export function loadPlaybook(path: string): Playbook {
     requirements: bullets(need(SECTIONS.requirements, 'requirements')).map(plain),
     screening,
   };
+}
+
+/**
+ * The number on the contract, on the website and on the flyer. It lives in the
+ * playbook's header line ("Windhoek. WhatsApp: 081-282-3046.") rather than in
+ * code, because changing the shop's number should mean editing one document —
+ * not hunting through pages, agreements and links for a copy that went stale.
+ */
+function readBusinessNumber(path: string, markdown: string): string {
+  // Mid-sentence in the header: "Windhoek. WhatsApp: 081-282-3046. Run solo…"
+  const match = /WhatsApp:\s*(\+?[\d\s()-]{7,})/i.exec(markdown);
+  if (!match) {
+    throw new PlaybookError(path, 'the header does not give the business WhatsApp number (expected a line like "WhatsApp: 081-282-3046")');
+  }
+  return match[1]!.trim().replace(/[.,]$/, '');
 }
 
 export class PlaybookError extends Error {

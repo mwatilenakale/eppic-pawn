@@ -18,7 +18,9 @@ import { referenceFor } from '../src/approval/index.ts';
 
 const rules = loadRules();
 const CUSTOMER = '+264811234567';
-const OWNER = '+264812823046';
+// Lukas's own phone. Deliberately not the shop's number in the playbook:
+// the number registered with Meta cannot also be the one he replies from.
+const OWNER = '+264811110000';
 
 /** Stands in for the Claude valuator with fixed numbers, so the test is stable. */
 const valuator: Valuator = {

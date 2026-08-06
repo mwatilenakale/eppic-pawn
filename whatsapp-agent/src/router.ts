@@ -78,6 +78,19 @@ export class AgentRouter {
     this.#valuator = options.valuator ?? null;
     this.#contracts = options.contracts ?? null;
     this.#directory = options.directory ?? null;
+    // Two different numbers, and it has to be two. The shop's number is the one
+    // registered on the Cloud API and published to customers; OWNER_PHONE is
+    // the phone in Lukas's pocket that approvals arrive on. If they are the
+    // same, the agent is trying to message itself: Meta will not deliver it, no
+    // approval ever arrives, and every customer message looks like it came from
+    // the owner. Better to refuse to start than to run looking fine.
+    if (samePhone(options.ownerPhone, options.rules.playbook.whatsapp)) {
+      throw new Error(
+        `OWNER_PHONE (${options.ownerPhone}) is the same number as the shop's WhatsApp in ${options.rules.playbook.path}. ` +
+          "The shop's number is the one registered with Meta; OWNER_PHONE must be your own separate phone.",
+      );
+    }
+
     this.#book = new Book(options.store);
     this.#onError = options.onError ?? ((error) => console.error('[agent]', error));
   }

@@ -51,7 +51,7 @@ const STYLES = `
   footer { margin-top: 2rem; text-align: center; }
 `;
 
-function page(title: string, body: string): string {
+function page(title: string, body: string, whatsapp: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -63,7 +63,7 @@ function page(title: string, body: string): string {
 </head>
 <body><main>${body}
 <footer class="muted">${escapeHtml(BUSINESS.name)} t/a ${escapeHtml(BUSINESS.tradingAs)} · ${escapeHtml(BUSINESS.place)}<br>
-WhatsApp ${escapeHtml(BUSINESS.whatsapp)}</footer>
+WhatsApp ${escapeHtml(whatsapp)}</footer>
 </main></body>
 </html>`;
 }
@@ -102,7 +102,7 @@ export function landingPage(rules: Rules): string {
       <ul>${requirements}</ul>
     </div>
 
-    <a class="button" href="/apply">Start the pre-check</a>`);
+    <a class="button" href="/apply">Start the pre-check</a>`, rules.playbook.whatsapp);
 }
 
 export function chooseCategoryPage(rules: Rules, error?: string): string {
@@ -114,7 +114,7 @@ export function chooseCategoryPage(rules: Rules, error?: string): string {
     <header><h1>What do you have?</h1></header>
     ${error ? `<div class="card note">${escapeHtml(error)}</div>` : ''}
     <div class="card"><ul class="categories">${categories}</ul></div>
-    <p class="muted">We only take these five, on purpose — nothing that needs extra storage.</p>`);
+    <p class="muted">We only take these five, on purpose — nothing that needs extra storage.</p>`, rules.playbook.whatsapp);
 }
 
 export function questionsPage(
@@ -141,7 +141,7 @@ export function questionsPage(
       : '';
 
   if (variantChooser) {
-    return page(`${category.label} — Eppic Pawn Shop`, `<header><h1>${escapeHtml(category.label)}</h1></header>${variantChooser}`);
+    return page(`${category.label} — Eppic Pawn Shop`, `<header><h1>${escapeHtml(category.label)}</h1></header>${variantChooser}`, rules.playbook.whatsapp);
   }
 
   const fields = questions
@@ -179,17 +179,17 @@ export function questionsPage(
       <button type="submit">See what happens next</button>
     </form>
 
-    <p class="muted">We don't ask for your name or number here, and nothing you enter is an application.</p>`);
+    <p class="muted">We don't ask for your name or number here, and nothing you enter is an application.</p>`, rules.playbook.whatsapp);
 }
 
-export function outcomePage(outcome: PrecheckOutcome): string {
-  const link = whatsappLink(BUSINESS.whatsapp, outcome.whatsappText);
+export function outcomePage(outcome: PrecheckOutcome, whatsapp: string): string {
+  const link = whatsappLink(whatsapp, outcome.whatsappText);
 
   if (outcome.status === 'not-accepted') {
     return page('We cannot take that — Eppic Pawn Shop', `
       <header><h1>${escapeHtml(outcome.headline)}</h1></header>
       <div class="card note">${outcome.notes.map((note) => `<p>${escapeHtml(note)}</p>`).join('')}</div>
-      <a class="button secondary" href="/apply">Check something else</a>`);
+      <a class="button secondary" href="/apply">Check something else</a>`, whatsapp);
   }
 
   const notes = outcome.notes.length
@@ -220,7 +220,7 @@ export function outcomePage(outcome: PrecheckOutcome): string {
     </div>
 
     <a class="button" href="${escapeHtml(link)}">Continue on WhatsApp</a>
-    <p class="muted" style="text-align:center;margin-top:.75rem">or message ${escapeHtml(BUSINESS.whatsapp)}</p>`);
+    <p class="muted" style="text-align:center;margin-top:.75rem">or message ${escapeHtml(whatsapp)}</p>`, whatsapp);
 }
 
 function shorten(ask: string): string {

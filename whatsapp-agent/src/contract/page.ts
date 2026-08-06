@@ -158,7 +158,7 @@ export function signingPage(contract: Contract, options: { error?: string } = {}
     <script>${SIGNATURE_SCRIPT}</script>`);
 }
 
-export function signedPage(contract: Contract): string {
+export function signedPage(contract: Contract, whatsapp: string): string {
   return page(`Contract ${contract.number} signed`, `
     <div class="card">
       <h1>Signed — thank you</h1>
@@ -168,16 +168,16 @@ export function signedPage(contract: Contract): string {
       <p>Bring your item and documents in to collect ${formatAmount(contract.principal_cents)}. The loan starts
       when you hand the item over, and ${formatAmount(contract.total_due_cents)} is due by
       ${escapeHtml(contract.due_date)}.</p>
-      <p class="meta">Questions? WhatsApp ${escapeHtml(BUSINESS.whatsapp)}.</p>
+      <p class="meta">Questions? WhatsApp ${escapeHtml(whatsapp)}.</p>
     </div>
     <div class="card">${contract.body_html}</div>`);
 }
 
-export function contractErrorPage(message: string): string {
+export function contractErrorPage(message: string, whatsapp: string): string {
   return page('Contract unavailable', `
     <div class="card">
       <h1>This link cannot be used</h1>
       <p class="error">${escapeHtml(message)}</p>
-      <p class="meta">WhatsApp ${escapeHtml(BUSINESS.whatsapp)} and Lukas will sort it out.</p>
+      <p class="meta">WhatsApp ${escapeHtml(whatsapp)} and Lukas will sort it out.</p>
     </div>`);
 }

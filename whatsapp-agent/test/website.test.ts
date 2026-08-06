@@ -19,7 +19,7 @@ const rules = loadRules();
 const config = {
   port: 0,
   whatsapp: { token: 't', phoneNumberId: 'p', appSecret: 's', verifyToken: 'v' },
-  ownerPhone: '+264812823046',
+  ownerPhone: '+264811110000',
   ownerName: 'Lukas',
   publicBaseUrl: 'http://127.0.0.1',
   dbPath: ':memory:',

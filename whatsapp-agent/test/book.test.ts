@@ -19,7 +19,9 @@ import { Book, parseBookCommand } from '../src/book/index.ts';
 import { addDays } from '../src/valuation.ts';
 
 const rules = loadRules();
-const OWNER = '+264812823046';
+// Lukas's own phone. Deliberately not the shop's number in the playbook:
+// the number registered with Meta cannot also be the one he replies from.
+const OWNER = '+264811110000';
 const TODAY = '2026-08-06';
 
 let store: Store;

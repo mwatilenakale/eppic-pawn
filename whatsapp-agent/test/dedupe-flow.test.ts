@@ -17,7 +17,9 @@ import { AgentRouter } from '../src/router.ts';
 import { MemoryTransport } from '../src/whatsapp/transport.ts';
 
 const rules = loadRules();
-const OWNER = '+264812823046';
+// Lukas's own phone. Deliberately not the shop's number in the playbook:
+// the number registered with Meta cannot also be the one he replies from.
+const OWNER = '+264811110000';
 const SIGNATURE =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 

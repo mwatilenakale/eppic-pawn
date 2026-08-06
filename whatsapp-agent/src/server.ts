@@ -127,7 +127,7 @@ async function handleRequest(
       });
     }
 
-    return respondHtml(response, 200, outcomePage(outcome));
+    return respondHtml(response, 200, outcomePage(outcome, rules.playbook.whatsapp));
   }
 
   if (request.method === 'GET' && url.pathname === '/webhook') {
@@ -166,9 +166,9 @@ async function handleRequest(
     if (request.method === 'GET') {
       try {
         const contract = contracts.openForSigning(token);
-        return respondHtml(response, 200, contract.status === 'signed' ? signedPage(contract) : signingPage(contract));
+        return respondHtml(response, 200, contract.status === 'signed' ? signedPage(contract, rules.playbook.whatsapp) : signingPage(contract));
       } catch (error) {
-        return respondHtml(response, 404, contractErrorPage(messageFor(error)));
+        return respondHtml(response, 404, contractErrorPage(messageFor(error), rules.playbook.whatsapp));
       }
     }
 
@@ -182,7 +182,7 @@ async function handleRequest(
       // Tell Lukas and the customer, but never fail the signature because a
       // WhatsApp message did not go out — the contract is already signed.
       router.announceSignature(signed).catch((error) => console.error('[server]', error));
-      return respondHtml(response, 200, signedPage(signed.contract));
+      return respondHtml(response, 200, signedPage(signed.contract, rules.playbook.whatsapp));
     } catch (error) {
       if (!(error instanceof ContractError)) throw error;
       const contract = contracts.openForSigning(token);

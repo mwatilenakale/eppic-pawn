@@ -22,11 +22,19 @@ import { loanTerms, schedule, type LoanTerms, type Schedule } from '../valuation
 
 export { escapeHtml };
 
+/**
+ * The shop's legal identity. Not business *rules*, so not in the playbook —
+ * these do not change without a trip to BIPA.
+ *
+ * The WhatsApp number is deliberately absent: it is a contact detail that does
+ * change, it appears on contracts and on the website, and a second copy here
+ * would quietly go stale the first time the shop moves number. It comes from
+ * the playbook's header instead — `rules.playbook.whatsapp`.
+ */
 export const BUSINESS = {
   name: 'Mwatile Eppic Investment CC',
   tradingAs: 'Eppic Pawn Shop',
   place: 'Windhoek, Namibia',
-  whatsapp: '081-282-3046',
 } as const;
 
 export interface ContractInput {
@@ -105,7 +113,7 @@ function buildSections(input: ContractInput, rules: Rules, terms: LoanTerms, dat
     {
       heading: 'Parties',
       rows: [
-        ['Pawnbroker', `${BUSINESS.name} t/a ${BUSINESS.tradingAs}, ${BUSINESS.place} (WhatsApp ${BUSINESS.whatsapp})`],
+        ['Pawnbroker', `${BUSINESS.name} t/a ${BUSINESS.tradingAs}, ${BUSINESS.place} (WhatsApp ${rules.playbook.whatsapp})`],
         ['Customer', input.customer.name ?? '(name to be confirmed at handover)'],
         ['Customer ID number', input.customer.id_number ?? '(to be confirmed at handover)'],
         ['Customer phone', input.customer.phone],

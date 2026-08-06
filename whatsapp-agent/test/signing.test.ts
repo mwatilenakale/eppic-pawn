@@ -11,7 +11,9 @@ import { buildServer } from '../src/server.ts';
 import { AgentRouter } from '../src/router.ts';
 
 const rules = loadRules();
-const OWNER = '+264812823046';
+// Lukas's own phone. Deliberately not the shop's number in the playbook:
+// the number registered with Meta cannot also be the one he replies from.
+const OWNER = '+264811110000';
 const CUSTOMER = '+264811234567';
 
 /** A 1x1 PNG — what the signature pad produces, in miniature. */

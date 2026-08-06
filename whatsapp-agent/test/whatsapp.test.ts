@@ -20,7 +20,9 @@ import { buildServer } from '../src/server.ts';
 import { loadConfig, ConfigError } from '../src/config.ts';
 
 const rules = loadRules();
-const OWNER = '+264812823046';
+// Lukas's own phone. Deliberately not the shop's number in the playbook:
+// the number registered with Meta cannot also be the one he replies from.
+const OWNER = '+264811110000';
 const CUSTOMER = '+264811234567';
 const APP_SECRET = 'test-app-secret';
 
@@ -318,6 +320,21 @@ describe('configuration', () => {
     assert.throws(() => loadConfig({ EPPIC_MEDIA_KEY: 'not-hex' }), /64 hex/);
   });
 
+  test('refuses to run with the shop\'s own number as the owner number', () => {
+    // The number registered with Meta cannot also be the phone Lukas replies
+    // from — the agent would be messaging itself, and no approval would ever
+    // arrive. Caught at start-up rather than discovered in production.
+    const store = new Store(':memory:');
+    try {
+      assert.throws(
+        () => new AgentRouter({ store, rules, transport: new MemoryTransport(), ownerPhone: rules.playbook.whatsapp }),
+        /same number as the shop's WhatsApp/,
+      );
+    } finally {
+      store.close();
+    }
+  });
+
   test('accepts a complete environment and normalises the owner number', () => {
     const config = loadConfig({
       EPPIC_MEDIA_KEY: generateMediaKey(),
@@ -325,7 +342,7 @@ describe('configuration', () => {
       WHATSAPP_PHONE_NUMBER_ID: 'p',
       WHATSAPP_APP_SECRET: 's',
       WHATSAPP_VERIFY_TOKEN: 'v',
-      OWNER_PHONE: '081 282 3046',
+      OWNER_PHONE: '081 111 0000',
     });
     assert.equal(config.ownerPhone, OWNER);
     assert.equal(config.anthropicApiKey, null);
