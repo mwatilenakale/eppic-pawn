@@ -9,6 +9,7 @@
  */
 
 import { formatAmount, parseAmount } from '../money.ts';
+import { referenceFor } from '../reference.ts';
 import type { Rules } from '../playbook/index.ts';
 import type { Approval, Store, User } from '../store/index.ts';
 import type { IntakeSubmission } from '../intake/agent.ts';
@@ -45,6 +46,8 @@ const HELP =
   '• *APPROVE <ref> <amount>* — approve at your own amount\n' +
   '• *DECLINE <ref> <reason>* — turn it down\n\n' +
   'The reference is the code in the application message, e.g. APPROVE A1B2 3000.';
+
+export { referenceFor };
 
 export class ApprovalWorkflow {
   readonly #store: Store;
@@ -197,28 +200,6 @@ export class ApprovalWorkflow {
     const item = this.#store.item(approval.item_id);
     return item ? `${item.category_slug}: ${item.description || 'no description'}` : 'unknown item';
   }
-}
-
-/**
- * Short code Lukas types back, e.g. `KP7R`.
- *
- * The first character is always a letter and the alphabet drops I/O/0/1, so a
- * reference can never be mistaken for the amount that follows it, and can't be
- * misread off a phone screen.
- */
-const REFERENCE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-const REFERENCE_ALPHABET = `${REFERENCE_LETTERS}23456789`;
-
-export function referenceFor(approvalId: string): string {
-  let value = Number.parseInt(approvalId.replace(/-/g, '').slice(0, 8), 16);
-  const characters = [REFERENCE_LETTERS[value % REFERENCE_LETTERS.length]!];
-  value = Math.floor(value / REFERENCE_LETTERS.length);
-
-  for (let index = 1; index < 4; index += 1) {
-    characters.push(REFERENCE_ALPHABET[value % REFERENCE_ALPHABET.length]!);
-    value = Math.floor(value / REFERENCE_ALPHABET.length);
-  }
-  return characters.join('');
 }
 
 /**

@@ -21,7 +21,27 @@ export type Role = 'owner' | 'inspector';
 export type ApprovalStatus = 'pending' | 'approved' | 'declined';
 
 export interface User { id: string; name: string; phone: string; role: Role }
-export interface Customer { id: string; phone: string; name: string | null; id_number: string | null }
+export interface Customer {
+  id: string;
+  phone: string;
+  name: string | null;
+  id_number: string | null;
+  /** Set when Lukas rules that this record is the same person as another. */
+  merged_into?: string | null;
+  created_at?: string;
+}
+
+export interface DuplicateFlag {
+  id: string;
+  customer_id: string;
+  other_customer_id: string;
+  score: number;
+  reasons: string;
+  status: 'pending' | 'same' | 'different';
+  decided_by: string | null;
+  decided_at: string | null;
+  created_at: string;
+}
 export interface Conversation { id: string; customer_id: string; status: 'active' | 'closed'; state: string }
 export interface Item {
   id: string;
@@ -190,6 +210,143 @@ export class Store {
       .run(customer.id, customer.phone, customer.name, null, at, at);
     this.audit({ actor: 'agent', action: 'customer.created', entity: 'customer', entityId: customer.id, details: { phone } });
     return customer;
+  }
+
+  customer(customerId: string): Customer | null {
+    return (this.db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId) as unknown as Customer) ?? null;
+  }
+
+  customers(): Customer[] {
+    return this.db.prepare('SELECT * FROM customers ORDER BY created_at').all() as unknown as Customer[];
+  }
+
+  /** Records the name and ID number a customer gave, e.g. when signing. */
+  updateCustomerIdentity(customerId: string, identity: { name?: string; idNumber?: string }, actor: string): Customer {
+    const sets: string[] = [];
+    const values: string[] = [];
+    if (identity.name) { sets.push('name = ?'); values.push(identity.name); }
+    if (identity.idNumber) { sets.push('id_number = ?'); values.push(identity.idNumber); }
+    if (sets.length === 0) return this.customer(customerId)!;
+
+    sets.push('updated_at = ?');
+    values.push(this.#now(), customerId);
+    this.db.prepare(`UPDATE customers SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+    this.audit({
+      actor,
+      action: 'customer.identified',
+      entity: 'customer',
+      entityId: customerId,
+      details: { name: identity.name ?? null, idNumberGiven: Boolean(identity.idNumber) },
+    });
+    return this.customer(customerId)!;
+  }
+
+  // --- possible duplicates (architecture 2.6) ----------------------------
+
+  /** Flags a pair for Lukas. The same pair is never flagged twice. */
+  raiseDuplicateFlag(flag: {
+    customerId: string;
+    otherCustomerId: string;
+    score: number;
+    reasons: string[];
+  }): DuplicateFlag | null {
+    // Order the pair so A/B and B/A are the same row.
+    const [first, second] = [flag.customerId, flag.otherCustomerId].sort() as [string, string];
+    const existing = this.db
+      .prepare('SELECT * FROM duplicate_flags WHERE customer_id = ? AND other_customer_id = ?')
+      .get(first, second) as unknown as DuplicateFlag | undefined;
+    if (existing) return null;
+
+    const row: DuplicateFlag = {
+      id: randomUUID(),
+      customer_id: first,
+      other_customer_id: second,
+      score: flag.score,
+      reasons: JSON.stringify(flag.reasons),
+      status: 'pending',
+      decided_by: null,
+      decided_at: null,
+      created_at: this.#now(),
+    };
+    this.db
+      .prepare("INSERT INTO duplicate_flags (id, customer_id, other_customer_id, score, reasons, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)")
+      .run(row.id, row.customer_id, row.other_customer_id, row.score, row.reasons, row.created_at);
+    // Audit both records: whoever looks at either customer should see it.
+    for (const [subject, other] of [[first, second], [second, first]] as const) {
+      this.audit({
+        actor: 'agent',
+        action: 'duplicate.flagged',
+        entity: 'customer',
+        entityId: subject,
+        details: { otherCustomerId: other, score: flag.score, reasons: flag.reasons },
+      });
+    }
+    return row;
+  }
+
+  duplicateFlag(flagId: string): DuplicateFlag | null {
+    return (this.db.prepare('SELECT * FROM duplicate_flags WHERE id = ?').get(flagId) as unknown as DuplicateFlag) ?? null;
+  }
+
+  pendingDuplicateFlags(): DuplicateFlag[] {
+    return this.db
+      .prepare("SELECT * FROM duplicate_flags WHERE status = 'pending' ORDER BY score DESC, created_at")
+      .all() as unknown as DuplicateFlag[];
+  }
+
+  duplicateFlagsFor(customerId: string): DuplicateFlag[] {
+    return this.db
+      .prepare('SELECT * FROM duplicate_flags WHERE customer_id = ? OR other_customer_id = ? ORDER BY created_at')
+      .all(customerId, customerId) as unknown as DuplicateFlag[];
+  }
+
+  /** Lukas's ruling. `same` links the records; neither row is ever deleted. */
+  resolveDuplicateFlag(decision: { flagId: string; status: 'same' | 'different'; decidedBy: string }): DuplicateFlag {
+    const flag = this.duplicateFlag(decision.flagId);
+    if (!flag) throw new Error(`No such duplicate flag: ${decision.flagId}`);
+    if (flag.status !== 'pending') throw new Error(`That pair was already marked ${flag.status}`);
+
+    const at = this.#now();
+    this.db
+      .prepare('UPDATE duplicate_flags SET status = ?, decided_by = ?, decided_at = ? WHERE id = ?')
+      .run(decision.status, decision.decidedBy, at, decision.flagId);
+    for (const [subject, other] of [
+      [flag.customer_id, flag.other_customer_id],
+      [flag.other_customer_id, flag.customer_id],
+    ] as const) {
+      this.audit({
+        actor: decision.decidedBy,
+        action: `duplicate.${decision.status}`,
+        entity: 'customer',
+        entityId: subject,
+        details: { otherCustomerId: other },
+      });
+    }
+    return this.duplicateFlag(decision.flagId)!;
+  }
+
+  /** Points one record at another. Both rows stay; nothing is overwritten. */
+  mergeCustomer(duplicateId: string, survivorId: string, actor: string): void {
+    if (duplicateId === survivorId) return;
+    this.db.prepare('UPDATE customers SET merged_into = ?, updated_at = ? WHERE id = ?').run(survivorId, this.#now(), duplicateId);
+    this.audit({
+      actor,
+      action: 'customer.merged',
+      entity: 'customer',
+      entityId: duplicateId,
+      details: { mergedInto: survivorId },
+    });
+  }
+
+  /** Follows the merge chain to the record that survived. */
+  survivingCustomer(customerId: string): Customer | null {
+    let current = this.customer(customerId);
+    const seen = new Set<string>();
+    while (current?.merged_into && !seen.has(current.id)) {
+      seen.add(current.id);
+      current = this.customer(current.merged_into);
+    }
+    return current;
   }
 
   // --- conversations & messages -----------------------------------------

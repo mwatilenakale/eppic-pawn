@@ -219,4 +219,26 @@ export const MIGRATIONS: string[] = [
     SELECT RAISE(ABORT, 'a contract body cannot be edited — void it and issue a new one');
   END;
   `,
+
+  // 3 — possible-duplicate customers (architecture 2.6). Records are never
+  // merged automatically: a pair is flagged, Lukas rules on it, and both rows
+  // stay with the duplicate pointing at the record that survives.
+  `
+  ALTER TABLE customers ADD COLUMN merged_into TEXT REFERENCES customers(id);
+
+  CREATE TABLE duplicate_flags (
+    id                 TEXT PRIMARY KEY,
+    -- Always stored with the older record first, so a pair is only flagged once.
+    customer_id        TEXT NOT NULL REFERENCES customers(id),
+    other_customer_id  TEXT NOT NULL REFERENCES customers(id),
+    score              REAL NOT NULL,
+    reasons            TEXT NOT NULL,
+    status             TEXT NOT NULL CHECK (status IN ('pending', 'same', 'different')),
+    decided_by         TEXT REFERENCES users(id),
+    decided_at         TEXT,
+    created_at         TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX duplicate_flags_pair ON duplicate_flags(customer_id, other_customer_id);
+  CREATE INDEX duplicate_flags_status ON duplicate_flags(status, created_at);
+  `,
 ];
