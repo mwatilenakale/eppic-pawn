@@ -14,6 +14,16 @@ import { ApprovalWorkflow } from './approval/index.ts';
 import type { MarketEstimate } from './valuation.ts';
 import type { ContractService, SignedContract } from './contract/index.ts';
 import { parseDuplicateReply, type CustomerDirectory } from './customers/directory.ts';
+import {
+  Book,
+  parseBookCommand,
+  renderSummary,
+  renderDue,
+  renderOverdue,
+  renderHistory,
+  renderCustomerChoices,
+  type BookCommand,
+} from './book/index.ts';
 import { samePhone, type InboundEvent } from './whatsapp/webhook.ts';
 import type { WhatsAppTransport } from './whatsapp/transport.ts';
 
@@ -51,6 +61,7 @@ export class AgentRouter {
   readonly #valuator: Valuator | null;
   readonly #contracts: ContractService | null;
   readonly #directory: CustomerDirectory | null;
+  readonly #book: Book;
   readonly #onError: (error: unknown, event: InboundEvent) => void;
 
   constructor(options: RouterOptions) {
@@ -67,6 +78,7 @@ export class AgentRouter {
     this.#valuator = options.valuator ?? null;
     this.#contracts = options.contracts ?? null;
     this.#directory = options.directory ?? null;
+    this.#book = new Book(options.store);
     this.#onError = options.onError ?? ((error) => console.error('[agent]', error));
   }
 
@@ -116,6 +128,14 @@ export class AgentRouter {
   }
 
   async #handleOwner(event: InboundEvent): Promise<void> {
+    // Asking to see the book is not a decision. Checked first, and answered
+    // without touching anything — these commands have no write path.
+    const query = parseBookCommand(event.text ?? '');
+    if (query) {
+      await this.#transport.sendText({ to: this.#ownerPhone, body: this.#answer(query) });
+      return;
+    }
+
     // A ruling on a possible-duplicate pair is not an approval, and must never
     // be read as one.
     const ruling = parseDuplicateReply(event.text ?? '');
@@ -145,6 +165,27 @@ export class AgentRouter {
       // The application is decided, so the next customer message starts a new one.
       if (conversationId) this.#store.closeConversation(conversationId);
     }
+  }
+
+  /**
+   * Answers a book query. Every branch reads; none of them writes, which is
+   * what makes it safe for Lukas to poke at his book from his phone without
+   * any chance of moving an application along by accident.
+   */
+  #answer(query: BookCommand): string {
+    const today = new Date().toISOString().slice(0, 10);
+
+    if (query.kind === 'summary') return renderSummary(this.#book.summary(), today);
+    if (query.kind === 'due') return renderDue(this.#book.due(), today);
+    if (query.kind === 'overdue') return renderOverdue(this.#book.overdue(), this.#book.inGrace());
+
+    if (!query.query) return 'Send *CUSTOMER* with part of a name or a phone number, e.g. CUSTOMER 081 555 0101.';
+
+    const matches = this.#book.findCustomers(query.query);
+    if (matches.length !== 1) return renderCustomerChoices(matches, query.query);
+
+    const history = this.#book.history(matches[0]!.id);
+    return history ? renderHistory(history) : renderCustomerChoices([], query.query);
   }
 
   /** Generates the agreement and sends the customer their signing link. */

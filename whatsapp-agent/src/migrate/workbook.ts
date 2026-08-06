@@ -26,6 +26,7 @@ import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { Workbook, type CellValue } from '../xlsx/index.ts';
 import { Store } from '../store/index.ts';
+import { CustomerDirectory } from '../customers/directory.ts';
 import { normalizePhone } from '../whatsapp/webhook.ts';
 import { loanTerms, addDays, ValuationError } from '../valuation.ts';
 import { formatAmount, round } from '../money.ts';
@@ -69,7 +70,7 @@ export interface ImportReport {
   sourceSha256: string;
   importId: string | null;
   dryRun: boolean;
-  customers: { created: number; alreadyKnown: number; withoutPhone: number };
+  customers: { created: number; alreadyKnown: number; withoutPhone: number; possibleDuplicates: number };
   items: { created: number; secretsMovedToEncryptedStore: number };
   loans: { imported: number; skipped: number; active: number; paidOff: number };
   ledgerEntries: number;
@@ -123,7 +124,7 @@ export function importWorkbook(path: string, store: Store, rules: Rules, options
     sourceSha256,
     importId: null,
     dryRun: Boolean(options.dryRun),
-    customers: { created: 0, alreadyKnown: 0, withoutPhone: 0 },
+    customers: { created: 0, alreadyKnown: 0, withoutPhone: 0, possibleDuplicates: 0 },
     items: { created: 0, secretsMovedToEncryptedStore: 0 },
     loans: { imported: 0, skipped: 0, active: 0, paidOff: 0 },
     ledgerEntries: 0,
@@ -174,8 +175,34 @@ export function importWorkbook(path: string, store: Store, rules: Rules, options
     writeLoan(row, store, batch.id, options.actor, report);
   }
 
+  flagPossibleDuplicates(store, batch.id, report);
   store.finishImport(batch.id, report);
   return report;
+}
+
+/**
+ * The workbook has the same person under several spellings — the migration
+ * work earlier this year found exactly that (architecture 2.6). Importing it
+ * without checking would bake those in as separate customers.
+ *
+ * Flags only: nothing is merged, and no WhatsApp message goes out. A hundred
+ * and ninety customers arriving at once could mean a great many pairs, and a
+ * flood of messages is not a review — they wait for him in the pending list.
+ */
+function flagPossibleDuplicates(store: Store, importId: string, report: ImportReport): void {
+  const directory = new CustomerDirectory(store);
+  let flagged = 0;
+
+  for (const row of store.importedRows(importId, 'customer')) {
+    flagged += directory.check(row.entity_id).length;
+  }
+
+  report.customers.possibleDuplicates = flagged;
+  if (flagged > 0) {
+    report.notes.push(
+      `${flagged} possible duplicate customer ${flagged === 1 ? 'pair is' : 'pairs are'} waiting for a SAME or DIFFERENT ruling. Nothing was merged.`,
+    );
+  }
 }
 
 /**
@@ -254,7 +281,11 @@ function parseLedgerRow(record: Record<string, CellValue>, directory: Map<string
   const rawStatus = text(record['Status']).toLowerCase();
   const status = rawStatus.startsWith('paid') ? 'paid' : 'active';
 
-  const { description, secrets } = separateSecrets(text(record['Item Description']));
+  // Both columns carry PINs, and the name one is what gets shown back on
+  // Lukas's phone — so both are swept, and the same PIN written in both is
+  // only stored once.
+  const item = separateSecrets(text(record['Item Description']));
+  const fromName = separateSecrets(text(record['Customer Name']));
 
   return {
     ref,
@@ -263,8 +294,8 @@ function parseLedgerRow(record: Record<string, CellValue>, directory: Map<string
     itemRef: text(record['ItemID']) || `${ref}-item`,
     name: known?.name || cleanName(text(record['Customer Name'])),
     phone: known?.phone ?? readPhone(record['Customer Phone']),
-    description,
-    secrets,
+    description: item.description,
+    secrets: [...new Set([...item.secrets, ...fromName.secrets])],
     principalCents,
     interestCents: cents(record['Interest for Period (N$)'], 'Interest for Period'),
     interestPaidCents: cents(record['Interest Paid To Date (N$)'], 'Interest Paid To Date'),
@@ -585,7 +616,11 @@ function readPhone(value: CellValue | undefined): string | null {
  * cell, leaving the part that is actually a name.
  */
 export function cleanName(value: string): string {
-  return value
+  // The name column carries PINs too ("Richard pawn (pin: Happiness)"), not
+  // just the description column. A secret left here would defeat the whole
+  // point of encrypting the other one — and this is the field that gets shown
+  // back on Lukas's phone.
+  return separateSecrets(value).description
     // Non-breaking spaces and direction marks ride along with pasted numbers.
     .replace(/[\u00a0\u2000-\u200f\u202a-\u202e]/g, ' ')
     .replace(/\+?\d[\d\s-]{5,}\d/g, ' ')

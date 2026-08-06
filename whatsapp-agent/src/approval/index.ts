@@ -45,7 +45,12 @@ const HELP =
   '• *APPROVE <ref>* — approve at the suggested amount\n' +
   '• *APPROVE <ref> <amount>* — approve at your own amount\n' +
   '• *DECLINE <ref> <reason>* — turn it down\n\n' +
-  'The reference is the code in the application message, e.g. APPROVE A1B2 3000.';
+  'The reference is the code in the application message, e.g. APPROVE A1B2 3000.\n\n' +
+  'To look at the book instead:\n' +
+  '• *BOOK* — what is out, what is coming in\n' +
+  '• *DUE* — falling due this week\n' +
+  '• *OVERDUE* — past grace, and what is in grace\n' +
+  '• *CUSTOMER <name or number>* — one person’s history';
 
 export { referenceFor };
 

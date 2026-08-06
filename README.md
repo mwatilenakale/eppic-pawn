@@ -62,6 +62,12 @@ npm run import -- ~/Eppic_PawnWorkbook.xlsx   # dry run against the existing boo
   the playbook differ. Device PINs written into the description column move into
   encrypted storage on the way in. A second run imports nothing twice, and a bad
   import is undone by reversing entries, never by deleting any.
+- **Your book, over WhatsApp** — `BOOK` for what's out and what's come in,
+  `DUE` for the week ahead, `OVERDUE` for what's past grace and what's still in
+  it, `CUSTOMER <name or number>` for one person's history. This is what the
+  workbook's DASHBOARD and ACTIVE LOANS tabs were doing, so there's no longer a
+  reason to keep both. Every figure is summed from the ledger, and none of
+  these commands can write anything.
 - **Records** — SQLite with an append-only ledger, encrypted ID photos and
   signatures, and an audit log of who decided what.
 

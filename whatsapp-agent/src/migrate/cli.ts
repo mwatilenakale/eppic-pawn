@@ -98,7 +98,10 @@ export function render(report: ImportReport): string {
   lines.push(`  Items           ${report.items.created}`);
   lines.push(`  Ledger entries  ${report.ledgerEntries}`);
   if (report.items.secretsMovedToEncryptedStore > 0) {
-    lines.push(`  Device PINs     ${report.items.secretsMovedToEncryptedStore} moved out of the description into encrypted storage`);
+    lines.push(`  Device PINs     ${report.items.secretsMovedToEncryptedStore} moved out of the name and description columns into encrypted storage`);
+  }
+  if (report.customers.possibleDuplicates > 0) {
+    lines.push(`  Possible dupes  ${report.customers.possibleDuplicates} pairs flagged for you to rule on — nothing merged`);
   }
 
   lines.push('', 'Money');

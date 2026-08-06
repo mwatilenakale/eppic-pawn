@@ -266,6 +266,45 @@ describe('customers', () => {
     runImport(writeWorkbook(directory));
     assert.equal(store.customers()[0]!.created_at!.slice(0, 10), '2025-05-12');
   });
+
+  test('the same person under two spellings is flagged, never merged', () => {
+    const path = writeWorkbook(directory, {
+      loans: [
+        paidRow({ CustomerID: 'CUST0001' }),
+        paidRow({ LoanID: 'LN0009', ItemID: 'ITM0009', CustomerID: 'CUST0002', 'Customer Phone': '081 555 0202' }),
+      ],
+      customers: [
+        ['CUST0001', 'David Strubie', '081 555 0101'],
+        ['CUST0002', 'Strubie David', '081 555 0202'],
+      ],
+    });
+    const report = runImport(path);
+
+    assert.equal(report.customers.possibleDuplicates, 1);
+    assert.equal(store.customers().length, 2, 'both records are kept');
+    assert.equal(store.customers().filter((customer) => customer.merged_into).length, 0, 'nothing is merged by the import');
+
+    const [flag] = store.pendingDuplicateFlags();
+    assert.ok(flag, 'it waits for a SAME or DIFFERENT ruling');
+    assert.match(report.notes.join(' '), /waiting for a SAME or DIFFERENT ruling/);
+  });
+
+  test('two different people are not flagged', () => {
+    const path = writeWorkbook(directory, {
+      loans: [
+        paidRow({ CustomerID: 'CUST0001' }),
+        paidRow({ LoanID: 'LN0009', ItemID: 'ITM0009', CustomerID: 'CUST0002', 'Customer Phone': '081 555 0202' }),
+      ],
+      customers: [
+        ['CUST0001', 'Aina Shipanga', '081 555 0101'],
+        ['CUST0002', 'Bernhard Katiti', '081 555 0202'],
+      ],
+    });
+    const report = runImport(path);
+
+    assert.equal(report.customers.possibleDuplicates, 0);
+    assert.equal(store.pendingDuplicateFlags().length, 0);
+  });
 });
 
 describe('the PINs sitting in the description column', () => {
@@ -283,6 +322,18 @@ describe('the PINs sitting in the description column', () => {
     assert.equal(photo!.kind, 'device-secret');
     assert.equal(store.media!.get(photo!.media_path).toString('utf8'), 'phone password: 230104');
     assert.doesNotMatch(readFileSync(photo!.media_path).toString('binary'), /230104/, 'and it is encrypted on disk');
+  });
+
+  test('a PIN in the name column is caught as well, and stored once', () => {
+    const path = writeWorkbook(directory, {
+      loans: [paidRow({ 'Customer Name': 'Richard pawn (pin: Happiness)', 'Item Description': 'Richard pawn (pin: Happiness)' })],
+      customers: [['CUST0001', 'Richard pawn (pin: Happiness)', '081 555 0101']],
+    });
+    const report = runImport(path);
+
+    const customer = store.customers()[0]!;
+    assert.equal(customer.name, 'Richard pawn', 'no PIN on the record Lukas reads');
+    assert.equal(report.items.secretsMovedToEncryptedStore, 1, 'the same PIN in both columns is stored once');
   });
 
   test('a name that merely contains "pin" is left alone', () => {
@@ -415,6 +466,13 @@ describe('tidying up what people typed', () => {
   });
 
   test('but not the notes people write there, which is why the customer sheet wins', () => {
-    assert.equal(cleanName('Mulijani , paying 2400 at month end'), 'Mulijani , paying 2400 at month end');
+    assert.equal(cleanName('Mulijani , paying 2400 at month end'), 'Mulijani, paying 2400 at month end');
+  });
+
+  test('a PIN written into the name column does not survive either', () => {
+    // This one matters more than the description: the name is what gets shown
+    // back on Lukas's phone when he asks about a customer.
+    assert.equal(cleanName('Richard pawn (pin: Happiness)'), 'Richard pawn');
+    assert.equal(cleanName('Indira pin 199214, paying 6 June'), 'Indira, paying 6 June');
   });
 });

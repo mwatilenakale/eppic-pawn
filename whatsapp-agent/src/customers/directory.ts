@@ -46,7 +46,18 @@ export class CustomerDirectory {
    */
   recordIdentity(customerId: string, identity: { name?: string; idNumber?: string }, actor: string): IdentityResult {
     this.#store.updateCustomerIdentity(customerId, identity, actor);
-    const subject = this.#store.customer(customerId)!;
+    const raised = this.check(customerId);
+    return { raised, ownerMessage: raised.length > 0 ? composeFlagMessage(raised) : null };
+  }
+
+  /**
+   * Checks one record against everyone else and flags the pairs worth a look,
+   * without claiming an identity was newly given. The import uses this: those
+   * customers came off a spreadsheet, they did not tell us anything.
+   */
+  check(customerId: string): RaisedFlag[] {
+    const subject = this.#store.customer(customerId);
+    if (!subject) return [];
 
     const raised: RaisedFlag[] = [];
 
@@ -80,7 +91,7 @@ export class CustomerDirectory {
       });
     }
 
-    return { raised, ownerMessage: raised.length > 0 ? composeFlagMessage(raised) : null };
+    return raised;
   }
 
   pending(): RaisedFlag[] {

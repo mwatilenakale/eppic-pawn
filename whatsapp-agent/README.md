@@ -56,6 +56,7 @@ WhatsApp  ──▶ server.ts ──▶ router.ts ──┬──▶ intake/    
                                                        possible duplicates,
                                                        flagged for Lukas
 
+book/      Lukas's own book, read-only: BOOK, DUE, OVERDUE, CUSTOMER
 web/       the public site: same questions, no figures, no personal data
 playbook/  reads docs/playbook.md + architecture.md at runtime
 valuation/ applies the playbook's formula and rate table
@@ -89,6 +90,13 @@ other things surface:
   become one that ran at 29% because `docs/playbook.md` says 29% today. The
   import reports the gap and changes nothing; whether the playbook or the book
   is out of date is Lukas's call, made by editing the playbook.
+
+Two things the import does on the way in, both because the workbook shows they
+are needed: device PINs written into the *name* column as well as the
+description are moved into encrypted storage, and every imported customer is
+checked against everyone else so the same person under two spellings is flagged
+rather than baked in as two people. Nothing is merged, and no message goes out —
+the pairs wait in the pending list for a SAME or DIFFERENT ruling.
 
 Importing is safe to get wrong. Every record is tagged with the workbook row
 that produced it, so a second run skips what it already did, and `--revert`
