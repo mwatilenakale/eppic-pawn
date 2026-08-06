@@ -18,7 +18,7 @@ runs in memory, so nothing touches real records.
 `/sign` signs the contract the way a customer would on their phone.
 
 ```bash
-npm test          # 136 tests, no network
+npm test          # 169 tests, no network
 npm run typecheck
 ```
 
@@ -44,6 +44,11 @@ WhatsApp  ──▶ server.ts ──▶ router.ts ──┬──▶ intake/    
               /c/<token> ────────────────────────┴──▶ contract/
               (the customer signs on their phone)      agreement, signature,
                                                        and the loan it opens
+                                                         │ name + ID number
+                                                         ▼
+                                                       customers/
+                                                       possible duplicates,
+                                                       flagged for Lukas
 
 playbook/  reads docs/playbook.md + architecture.md at runtime
 valuation/ applies the playbook's formula and rate table
@@ -75,6 +80,10 @@ is not ours to answer.
 - **The loan is not created at approval.** Approving is a decision. The loan row
   and the ledger open when the customer signs the agreement, and the message to
   Lukas says to verify the in-person checks before the money changes hands.
+- **No silent merging of customer records.** A possible duplicate is flagged
+  with its reasons and waits for Lukas to reply SAME or DIFFERENT. Both rows are
+  kept either way; the duplicate points at the older record rather than being
+  overwritten.
 - **In-person-only checks are never asked over chat** — a mechanic's inspection,
   a 20-30 minute console load test, a reset done in front of staff. They go to
   Lukas as the verification list (playbook Section 7).

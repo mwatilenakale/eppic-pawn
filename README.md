@@ -44,6 +44,10 @@ npm test
   auto-fills from the approved amount and the playbook's rules, the customer
   signs it with their finger on a phone, and only then does the loan open with
   its ledger. The document is kept exactly as it was signed, with its digest.
+- **Possible duplicate customers flagged, never merged** (architecture step 5) —
+  matched on ID number and name similarity, never on name alone, and two
+  different ID numbers rule a pair out. Lukas replies SAME or DIFFERENT over
+  WhatsApp; both records are kept either way.
 - **Records** — SQLite with an append-only ledger, encrypted ID photos and
   signatures, and an audit log of who decided what.
 
@@ -53,7 +57,7 @@ default a rule it cannot find.
 
 ## Still to build (same section, later steps)
 
-5. Customer de-duplication 6. Website 7. Ledger migration from the workbook
+6. Website 7. Ledger migration from the workbook
 8. Valuation engine phase 2, calibrated on the Ledger's own outcomes
 
 The contract wording is plain-language and derived from the playbook. Have a

@@ -13,6 +13,7 @@ import { IntakeAgent, type IntakeSubmission } from './intake/agent.ts';
 import { ApprovalWorkflow } from './approval/index.ts';
 import type { MarketEstimate } from './valuation.ts';
 import type { ContractService, SignedContract } from './contract/index.ts';
+import { parseDuplicateReply, type CustomerDirectory } from './customers/directory.ts';
 import { samePhone, type InboundEvent } from './whatsapp/webhook.ts';
 import type { WhatsAppTransport } from './whatsapp/transport.ts';
 
@@ -34,6 +35,8 @@ export interface RouterOptions {
   valuator?: Valuator;
   /** Issues the agreement once Lukas approves. Omit to skip contracts. */
   contracts?: ContractService;
+  /** Checks a newly identified customer against everyone already known. */
+  directory?: CustomerDirectory;
   /** Called with anything that goes wrong while handling one message. */
   onError?: (error: unknown, event: InboundEvent) => void;
 }
@@ -47,6 +50,7 @@ export class AgentRouter {
   readonly #owner: User;
   readonly #valuator: Valuator | null;
   readonly #contracts: ContractService | null;
+  readonly #directory: CustomerDirectory | null;
   readonly #onError: (error: unknown, event: InboundEvent) => void;
 
   constructor(options: RouterOptions) {
@@ -62,6 +66,7 @@ export class AgentRouter {
     });
     this.#valuator = options.valuator ?? null;
     this.#contracts = options.contracts ?? null;
+    this.#directory = options.directory ?? null;
     this.#onError = options.onError ?? ((error) => console.error('[agent]', error));
   }
 
@@ -111,6 +116,15 @@ export class AgentRouter {
   }
 
   async #handleOwner(event: InboundEvent): Promise<void> {
+    // A ruling on a possible-duplicate pair is not an approval, and must never
+    // be read as one.
+    const ruling = parseDuplicateReply(event.text ?? '');
+    if (ruling && this.#directory) {
+      const resolution = this.#directory.resolve(ruling.reference, ruling.status, this.#owner);
+      await this.#transport.sendText({ to: this.#ownerPhone, body: resolution.ownerMessage });
+      return;
+    }
+
     const result = this.#approvals.handleOwnerReply(event.text ?? '', this.#owner);
     await this.#transport.sendText({ to: this.#ownerPhone, body: result.ownerMessage });
 
@@ -153,6 +167,20 @@ export class AgentRouter {
   async announceSignature(signed: SignedContract): Promise<void> {
     await this.#safeSend(this.#ownerPhone, signed.ownerMessage);
     await this.#safeSend(signed.customerPhone, signed.customerMessage);
+
+    // Signing is where a real name and ID number are captured, so it is the
+    // point at which a second record for the same person becomes visible.
+    if (!this.#directory) return;
+    try {
+      const identity = this.#directory.recordIdentity(
+        signed.contract.customer_id,
+        { name: signed.contract.signed_name ?? undefined, idNumber: signed.contract.signed_id_number ?? undefined },
+        this.#owner.id,
+      );
+      if (identity.ownerMessage) await this.#safeSend(this.#ownerPhone, identity.ownerMessage);
+    } catch (error) {
+      this.#onError(error, { from: signed.customerPhone, messageId: '', type: 'text' });
+    }
   }
 
   async #safeSend(to: string, body: string): Promise<void> {

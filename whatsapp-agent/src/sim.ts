@@ -19,6 +19,7 @@ import { AgentRouter } from './router.ts';
 import { MemoryTransport } from './whatsapp/transport.ts';
 import { createValuator } from './valuator/index.ts';
 import { ContractService } from './contract/index.ts';
+import { CustomerDirectory } from './customers/directory.ts';
 import type { InboundEvent } from './whatsapp/webhook.ts';
 
 const CUSTOMER = '+264811234567';
@@ -32,6 +33,7 @@ Commands:
   /sign             sign the open contract, as the customer would on their phone
   /pending          list applications waiting for a decision
   /contract         show the agreement as plain text
+  /duplicates       list customer records waiting for a same/different ruling
   /rules            show the rules currently loaded from the documents
   /quit             exit
 `;
@@ -44,8 +46,10 @@ async function main(): Promise<void> {
   });
   const transport = new MemoryTransport();
   const contracts = new ContractService(store, rules, { baseUrl: 'http://localhost:8080' });
+  const directory = new CustomerDirectory(store);
   const router = new AgentRouter({
     contracts,
+    directory,
     store,
     rules,
     transport,
@@ -81,6 +85,18 @@ async function main(): Promise<void> {
       if (line === '/pending') {
         const pending = store.pendingApprovals();
         console.log(pending.length === 0 ? 'Nothing waiting.' : pending.map((entry) => `  ${entry.id} — ${store.item(entry.item_id)?.description ?? ''}`).join('\n'));
+        continue;
+      }
+
+      if (line === '/duplicates') {
+        const pending = directory.pending();
+        console.log(
+          pending.length === 0
+            ? 'No possible duplicates waiting.'
+            : pending
+                .map((entry) => `  ${entry.reference} — ${entry.records.map((record) => record.phone).join(' / ')} (${entry.reasons.join('; ')})`)
+                .join('\n'),
+        );
         continue;
       }
 

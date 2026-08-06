@@ -16,6 +16,7 @@ import { parseWebhookPayload, verifySignature, verifySubscription } from './what
 import { createValuator } from './valuator/index.ts';
 import { ContractError } from './store/index.ts';
 import { ContractService, contractErrorPage, signedPage, signingPage } from './contract/index.ts';
+import { CustomerDirectory } from './customers/directory.ts';
 
 export interface BuiltServer {
   server: Server;
@@ -42,6 +43,7 @@ export function buildServer(
     overrides.valuator === undefined ? createValuator(config.anthropicApiKey, rules) : overrides.valuator;
 
   const contracts = new ContractService(store, rules, { baseUrl: config.publicBaseUrl });
+  const directory = new CustomerDirectory(store);
 
   const router = new AgentRouter({
     store,
@@ -51,6 +53,7 @@ export function buildServer(
     ownerName: config.ownerName,
     valuator: valuator ?? undefined,
     contracts,
+    directory,
   });
 
   const server = createServer((request, response) => {
