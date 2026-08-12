@@ -54,6 +54,7 @@ describe('valuation formula (playbook section 3)', () => {
       'lowest market estimate: N$10,000.00 (Marketplace)',
       'x 0.75 = N$7,500.00 assessed value',
       '/ 2 = N$3,750.00 suggested loan',
+      `+ ${rules.playbook.loanSizing.buyNowMarkupPct}% = N$4,687.50 to buy it outright`,
     ]);
   });
 

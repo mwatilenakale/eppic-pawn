@@ -49,6 +49,8 @@ export interface RouterOptions {
   directory?: CustomerDirectory;
   /** Called with anything that goes wrong while handling one message. */
   onError?: (error: unknown, event: InboundEvent) => void;
+  /** Overrides "today" for the book queries. Tests only. */
+  clock?: () => Date;
 }
 
 export class AgentRouter {
@@ -91,7 +93,7 @@ export class AgentRouter {
       );
     }
 
-    this.#book = new Book(options.store);
+    this.#book = new Book(options.store, { clock: options.clock });
     this.#onError = options.onError ?? ((error) => console.error('[agent]', error));
   }
 
@@ -186,7 +188,9 @@ export class AgentRouter {
    * any chance of moving an application along by accident.
    */
   #answer(query: BookCommand): string {
-    const today = new Date().toISOString().slice(0, 10);
+    // From the book's own clock, not a second one — two clocks in one reply is
+    // how "3 days past grace" and "due tomorrow" end up disagreeing.
+    const today = this.#book.today();
 
     if (query.kind === 'summary') return renderSummary(this.#book.summary(), today);
     if (query.kind === 'due') return renderDue(this.#book.due(), today);

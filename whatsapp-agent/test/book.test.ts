@@ -36,7 +36,7 @@ beforeEach(() => {
     mediaKey: Buffer.from(generateMediaKey(), 'hex'),
   });
   transport = new MemoryTransport();
-  router = new AgentRouter({ store, rules, transport, ownerPhone: OWNER });
+  router = new AgentRouter({ store, rules, transport, ownerPhone: OWNER, clock: () => new Date(`${TODAY}T09:00:00Z`) });
   book = new Book(store, { clock: () => new Date(`${TODAY}T09:00:00Z`) });
   lukas = store.owner()!.id;
 });

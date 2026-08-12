@@ -85,7 +85,11 @@ export interface Playbook {
     divisor: number;
     /** Human-readable formula, for approval messages. */
     formula: string;
+    /** How much more than the pawn loan an outright purchase pays, as a percentage. */
+    buyNowMarkupPct: number;
   };
+  /** Days an override by Lukas is reused before it expires (section 3). */
+  adjustmentMemoryDays: number;
   rates: RateRule[];
   grace: { defaultDays: number; flexibleUpToDays: number };
   partialPaymentCompounds: boolean;
@@ -118,6 +122,7 @@ export function loadPlaybook(path: string): Playbook {
     whatsapp: readBusinessNumber(path, markdown),
     categories,
     loanSizing: readLoanSizing(path, need(SECTIONS.loanSizing, 'loan sizing')),
+    adjustmentMemoryDays: readAdjustmentMemoryDays(path, need(SECTIONS.loanSizing, 'loan sizing')),
     rates: readRates(path, need(SECTIONS.rates, 'interest rates & terms')),
     ...readGraceAndPartials(path, need(SECTIONS.rates, 'interest rates & terms')),
     collections: readCollections(path, need(SECTIONS.collections, 'default & collections')),
@@ -182,19 +187,37 @@ function readLoanSizing(path: string, block: string): Playbook['loanSizing'] {
 
   const discountFactor = find(/multiply by\s+(\d+(?:\.\d+)?)/i);
   const divisor = find(/divide (?:that )?by\s+(\d+(?:\.\d+)?)/i);
+  const buyNowMarkupPct = find(/buy-now price:\s*the pawn loan plus\s+(\d+(?:\.\d+)?)\s*%/i);
   const basisLine = steps.find((step) => /take the\s+\*?\*?(lowest|highest|average)/i.test(step));
   const basis = /lowest/i.test(basisLine ?? '') ? 'lowest' : /highest/i.test(basisLine ?? '') ? 'highest' : 'average';
 
   if (discountFactor === null || divisor === null || !basisLine) {
     throw new PlaybookError(path, `section ${SECTIONS.loanSizing} does not state the loan-sizing formula`);
   }
+  if (buyNowMarkupPct === null) {
+    throw new PlaybookError(path, `section ${SECTIONS.loanSizing} does not state the buy-now price`);
+  }
 
   return {
     basis,
     discountFactor,
     divisor,
+    buyNowMarkupPct,
     formula: `${basis} market estimate x ${discountFactor} / ${divisor}`,
   };
+}
+
+/**
+ * How long Lukas's override outlives the item it was made for. His correction
+ * beats the estimate; a fortnight later it is just an old price.
+ */
+function readAdjustmentMemoryDays(path: string, block: string): number {
+  const line = block.split('\n').map(plain).find((step) => /remember|reuse/i.test(step) && /\bdays?\b/i.test(step));
+  const match = line ? /(\d+)\s*days?/i.exec(line) : null;
+  if (!match) {
+    throw new PlaybookError(path, `section ${SECTIONS.loanSizing} does not say how long an adjusted price is reused`);
+  }
+  return Number(match[1]);
 }
 
 function readRates(path: string, block: string): RateRule[] {

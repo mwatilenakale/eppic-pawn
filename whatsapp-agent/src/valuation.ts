@@ -29,6 +29,12 @@ export interface Valuation {
   /** Basis after the playbook's discount factor — the assessed value. */
   assessedValueCents: number;
   suggestedLoanCents: number;
+  /**
+   * What the shop pays to buy the item outright — higher than the loan, per
+   * playbook section 3. The loan is lower because the customer keeps a month
+   * to redeem; a purchase can be resold the next day.
+   */
+  buyNowCents: number;
   /** Share of the basis estimate the suggested loan represents. */
   loanToEstimatePct: number;
   /** Step-by-step working, shown in the approval message. */
@@ -46,25 +52,28 @@ export function suggestValuation(estimates: MarketEstimate[], rules: Rules): Val
     throw new ValuationError('Market estimates must be positive amounts');
   }
 
-  const { basis: basisRule, discountFactor, divisor, formula } = rules.playbook.loanSizing;
+  const { basis: basisRule, discountFactor, divisor, formula, buyNowMarkupPct } = rules.playbook.loanSizing;
   const sorted = [...estimates].sort((a, b) => a.amountCents - b.amountCents);
   const basis =
     basisRule === 'highest' ? sorted[sorted.length - 1]! : basisRule === 'lowest' ? sorted[0]! : averageOf(sorted);
 
   const assessedValueCents = round(basis.amountCents * discountFactor);
   const suggestedLoanCents = round(assessedValueCents / divisor);
+  const buyNowCents = suggestedLoanCents + percentOf(suggestedLoanCents, buyNowMarkupPct);
 
   return {
     estimates,
     basis,
     assessedValueCents,
     suggestedLoanCents,
+    buyNowCents,
     loanToEstimatePct: (suggestedLoanCents / basis.amountCents) * 100,
     formula,
     workings: [
       `${basisRule} market estimate: ${formatAmount(basis.amountCents)} (${basis.source})`,
       `x ${discountFactor} = ${formatAmount(assessedValueCents)} assessed value`,
       `/ ${divisor} = ${formatAmount(suggestedLoanCents)} suggested loan`,
+      `+ ${buyNowMarkupPct}% = ${formatAmount(buyNowCents)} to buy it outright`,
     ],
   };
 }

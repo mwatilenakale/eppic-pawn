@@ -56,7 +56,37 @@ storage container for delicate ones (smaller separate fee).
 
 Pricing is not something an intake agent should quote automatically —
 it stays a human sign-off, since it's the step most exposed to fraud
-(false specs, stock photos, misrepresented condition).
+(false specs, stock photos, misrepresented condition). What a customer
+sees on the website is an **estimate**, clearly marked as not final until
+Lukas has approved it.
+
+### Buying outright
+
+Some customers would rather sell the item than pawn it. That offer is
+**higher** than the pawn loan, deliberately:
+
+- **Buy-now price: the pawn loan plus 25%.**
+
+The pawn loan is lower because the customer keeps the right to redeem for
+a month — the capital is tied up and the item can't be sold. Buying it
+outright means it can be resold the next day, so the money comes back in
+days rather than in thirty. At the assessed value that's roughly a 60%
+margin on resale, which is why the customer can be paid more up front.
+
+Worked through on a N$10,440 item: assessed N$7,830, pawn loan N$3,915,
+buy-now N$4,894. At the typical N$1,000 loan the buy-now offer is N$1,250.
+
+**[decide]** — 25% is the starting figure, chosen so the gap lands near
+N$250-500 across the loan sizes the book actually runs at. Revisit it once
+there are real buy-outright sales to measure against.
+
+### Adjusted prices are remembered for 14 days
+
+When Lukas overrides an estimate, that decision is kept and reused for
+**14 days** for items of the same kind, instead of estimating that item
+from scratch again. His correction is better information than the
+estimate was. After 14 days it expires — second-hand prices move, and a
+stale correction is worse than a fresh estimate.
 
 ## 4. Interest rates & terms
 

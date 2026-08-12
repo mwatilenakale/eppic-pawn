@@ -294,4 +294,41 @@ export const MIGRATIONS: string[] = [
     WHERE reverted = 0;
   CREATE INDEX imported_rows_import ON imported_rows(import_id, entity);
   `,
+
+  // 6 — what Lukas's corrections taught the system (playbook section 3).
+  //
+  // When he overrides an estimate, that decision is better information than
+  // the estimate was, so it is reused for the next item of the same kind
+  // instead of estimating from scratch. It expires: second-hand prices move,
+  // and a stale correction is worse than a fresh estimate. The window is the
+  // playbook's, not a constant here.
+  //
+  // Rows are never updated — a later adjustment is a new row that supersedes
+  // the earlier one, so what he decided and when stays readable.
+  `
+  CREATE TABLE price_adjustments (
+    id                   TEXT PRIMARY KEY,
+    -- What kind of item this applies to: category, variant and a normalised
+    -- form of the description, so "iPhone 13 Pro 256GB" matches itself later.
+    fingerprint          TEXT NOT NULL,
+    category_slug        TEXT NOT NULL,
+    variant              TEXT,
+    description          TEXT NOT NULL DEFAULT '',
+    -- The item this was decided on, kept so the working can be traced back.
+    item_id              TEXT REFERENCES items(id),
+    valuation_id         TEXT REFERENCES valuations(id),
+    -- What the engine suggested, and what Lukas made it.
+    suggested_loan_cents INTEGER,
+    loan_cents           INTEGER NOT NULL,
+    buy_now_cents        INTEGER,
+    assessed_value_cents INTEGER,
+    note                 TEXT NOT NULL DEFAULT '',
+    adjusted_by          TEXT NOT NULL REFERENCES users(id),
+    created_at           TEXT NOT NULL,
+    -- created_at + the playbook's window, resolved when the row is written.
+    expires_at           TEXT NOT NULL
+  );
+  CREATE INDEX price_adjustments_lookup ON price_adjustments(fingerprint, expires_at);
+  CREATE INDEX price_adjustments_recent ON price_adjustments(created_at);
+  `,
 ];

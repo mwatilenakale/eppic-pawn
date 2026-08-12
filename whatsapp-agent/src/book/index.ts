@@ -68,6 +68,11 @@ export class Book {
     this.#today = () => clock().toISOString().slice(0, 10);
   }
 
+  /** The date every "days past grace" is measured from. */
+  today(): string {
+    return this.#today();
+  }
+
   // --- the figures ---------------------------------------------------------
 
   summary(): BookSummary {
