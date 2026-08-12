@@ -52,9 +52,8 @@ npm run import -- ~/Eppic_PawnWorkbook.xlsx   # dry run against the existing boo
   WhatsApp; both records are kept either way.
 - **A website front door** (architecture step 6) — the same screening questions,
   built by the same code, as a one-minute pre-check that hands off to WhatsApp.
-  It asks for no name, number or photos, quotes no figure, and rejects nobody:
-  a playbook condition answered "no" is explained, and the conversation is still
-  offered.
+  It asks for no name, number or photos, and rejects nobody: a playbook
+  condition answered "no" is explained, and the conversation is still offered.
 - **The existing workbook, imported** (architecture step 7) — the LEDGER and
   CUSTOMERS tabs read straight from the .xlsx, with every loan kept at the rate
   and term it actually ran at rather than recalculated against today's playbook.
