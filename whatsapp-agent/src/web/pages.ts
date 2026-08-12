@@ -1,57 +1,28 @@
 /**
- * The public website (architecture step 6): a front door onto the same engine.
+ * The public website (architecture step 6), on the Eppic design system.
  *
- * Deliberately small. It tells people what the shop takes, runs the pre-check,
- * and hands them to WhatsApp. It asks for no name, no number and no photos —
- * there is nothing here worth stealing, and nothing to leak.
+ * Four steps, as the design specifies: category, details, research, quote.
  *
- * Like the signing page, it loads nothing from anywhere else.
+ * What the quote screen shows changed on Lukas's instruction: the customer now
+ * sees an **estimate**, not nothing. It is labelled as an estimate everywhere
+ * it appears and carries the verification banner, because it is not an offer —
+ * he still approves every figure, and that has not changed. See root CLAUDE.md.
+ *
+ * Loads nothing from anywhere else: no fonts, no scripts, no images. There is
+ * nothing here worth stealing and nothing to leak.
  */
 
 import { escapeHtml } from '../html.ts';
 import { BUSINESS } from '../contract/document.ts';
+import { formatAmount } from '../money.ts';
 import type { Rules } from '../playbook/index.ts';
 import type { Question } from '../intake/questions.ts';
-import { whatsappLink, type PrecheckOutcome } from './precheck.ts';
+import { THEME, iconFor } from './theme.ts';
+import { whatsappLink, type PrecheckOutcome, type PrecheckQuote } from './precheck.ts';
 
-const STYLES = `
-  :root { color-scheme: light; }
-  * { box-sizing: border-box; }
-  body { margin: 0; padding: 1.25rem 1rem 3rem; background: #f6f5f3; color: #1a1a1a;
-         font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 40rem; margin: 0 auto; }
-  header { margin-bottom: 1.5rem; }
-  h1 { font-size: 1.6rem; margin: 0 0 .35rem; letter-spacing: -.01em; }
-  h2 { font-size: 1.05rem; margin: 1.75rem 0 .5rem; }
-  p.lead { font-size: 1.05rem; color: #4a453f; margin: 0 0 1.25rem; }
-  .card { background: #fff; border: 1px solid #e2ded8; border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
-  ul { padding-left: 1.15rem; margin: .5rem 0; }
-  li { margin: .35rem 0; }
-  .categories { list-style: none; padding: 0; display: grid; gap: .5rem; }
-  .categories a { display: block; padding: .9rem 1rem; border: 1px solid #cfc9c2; border-radius: 10px;
-                  text-decoration: none; color: inherit; background: #fff; font-weight: 600; }
-  .categories a:hover { border-color: #1a5c3a; }
-  fieldset { border: 0; padding: 0; margin: 0 0 1.25rem; }
-  legend { font-weight: 600; padding: 0; margin-bottom: .5rem; }
-  .choices { display: flex; gap: .5rem; }
-  .choices label { flex: 1; text-align: center; border: 1px solid #cfc9c2; border-radius: 8px;
-                   padding: .6rem .4rem; cursor: pointer; background: #fff; font-size: .95rem; }
-  .choices input { position: absolute; opacity: 0; pointer-events: none; }
-  .choices input:checked + span { font-weight: 700; }
-  .choices label:has(input:checked) { border-color: #1a5c3a; background: #eaf5ee; }
-  input[type=text], textarea { width: 100%; padding: .75rem; font: inherit; border: 1px solid #cfc9c2;
-                               border-radius: 8px; background: #fff; }
-  button, .button { display: block; width: 100%; text-align: center; font: inherit; font-weight: 600;
-                    padding: 1rem; border-radius: 10px; border: 1px solid #1a5c3a; background: #1a5c3a;
-                    color: #fff; text-decoration: none; cursor: pointer; }
-  .button.secondary { background: #fff; color: #1a5c3a; }
-  .note { background: #fff8e6; border: 1px solid #e8d9a8; border-radius: 10px; padding: .9rem; }
-  .good { background: #eaf5ee; border: 1px solid #b6dcc3; border-radius: 10px; padding: .9rem; }
-  .muted { color: #6b6560; font-size: .9rem; }
-  footer { margin-top: 2rem; text-align: center; }
-`;
+const STEPS = ['Item', 'Details', 'Research', 'Quote'] as const;
 
-function page(title: string, body: string, whatsapp: string): string {
+function page(title: string, body: string, whatsapp: string, step?: number): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -59,62 +30,89 @@ function page(title: string, body: string, whatsapp: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <meta name="description" content="Eppic Pawn Shop, Windhoek — cash against cars, phones, laptops, TVs and consoles.">
-<style>${STYLES}</style>
+<meta name="color-scheme" content="dark">
+<style>${THEME}</style>
 </head>
-<body><main>${body}
-<footer class="muted">${escapeHtml(BUSINESS.name)} t/a ${escapeHtml(BUSINESS.tradingAs)} · ${escapeHtml(BUSINESS.place)}<br>
+<body><div class="container page-enter">
+${step ? stepBar(step) : ''}
+${body}
+<footer>${escapeHtml(BUSINESS.name)} t/a ${escapeHtml(BUSINESS.tradingAs)} · ${escapeHtml(BUSINESS.place)}<br>
 WhatsApp ${escapeHtml(whatsapp)}</footer>
-</main></body>
+</div></body>
 </html>`;
+}
+
+/** 1 Item → 2 Details → 3 Research → 4 Quote. */
+function stepBar(current: number): string {
+  return `<div class="step-bar">${STEPS.map((label, index) => {
+    const number = index + 1;
+    const state = number < current ? 'completed' : number === current ? 'active' : 'pending';
+    const connector = index > 0 ? `<div class="step-connector ${number <= current ? 'completed' : ''}"></div>` : '';
+    return `${connector}<div class="step">
+      <div class="step-number ${state}">${number < current ? '&check;' : number}</div>
+      <span class="step-label ${state === 'active' ? 'active' : ''}">${label}</span>
+    </div>`;
+  }).join('')}</div>`;
 }
 
 export function landingPage(rules: Rules): string {
   const categories = rules.categories
-    .map((category) => `<li><a href="/apply?category=${encodeURIComponent(category.slug)}">${escapeHtml(category.label)}</a></li>`)
+    .map(
+      (category) => `<li><a class="category-card" href="/apply?category=${encodeURIComponent(category.slug)}">
+        <span class="category-icon">${iconFor(category.slug)}</span>
+        <span class="category-name">${escapeHtml(shortLabel(category.label))}</span>
+      </a></li>`,
+    )
     .join('');
 
   const requirements = rules.playbook.requirements.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
 
   return page(`${BUSINESS.tradingAs} — cash against your item, in Windhoek`, `
     <header>
-      <h1>${escapeHtml(BUSINESS.tradingAs)}</h1>
-      <p class="lead">Cash against something you own, in ${escapeHtml(BUSINESS.place.split(',')[0]!)}.
-      Check in a minute whether we can look at your item — no name or phone number needed.</p>
+      <h1>Cash for your<br>stuff. Today.</h1>
+      <p class="lead">Get an instant estimate on what ${escapeHtml(BUSINESS.tradingAs)} would lend you —
+      or pay you outright — in ${escapeHtml(BUSINESS.place.split(',')[0]!)}. No name or number needed.</p>
     </header>
 
     <div class="card">
-      <h2>What we take</h2>
-      <ul class="categories">${categories}</ul>
+      <h2>What do you have?</h2>
+      <ul class="category-grid stagger-children" style="margin-top:var(--space-4)">${categories}</ul>
     </div>
 
     <div class="card">
       <h2>How it works</h2>
-      <ul>
-        <li>Answer a few questions here about your item.</li>
-        <li>If nothing stops it, you carry on with Lukas on WhatsApp — he asks for photos and the details.</li>
-        <li>Lukas decides the amount himself and messages you. Nothing on this website is an offer.</li>
-        <li>You sign the agreement on your phone, then bring the item in.</li>
+      <ul class="plain">
+        <li>Tell us what the item is and answer a few questions.</li>
+        <li>We work out an estimate from what the item is worth second-hand.</li>
+        <li>Lukas checks it and confirms the final figure on WhatsApp.</li>
+        <li>You sign on your phone, then bring the item in.</li>
       </ul>
     </div>
 
     <div class="card">
-      <h2>What to bring</h2>
-      <ul>${requirements}</ul>
+      <h2>Bring with you</h2>
+      <ul class="plain">${requirements}</ul>
     </div>
 
-    <a class="button" href="/apply">Start the pre-check</a>`, rules.playbook.whatsapp);
+    <a class="btn btn-primary" href="/apply">Get my estimate</a>`, rules.playbook.whatsapp, 1);
 }
 
 export function chooseCategoryPage(rules: Rules, error?: string): string {
   const categories = rules.categories
-    .map((category) => `<li><a href="/apply?category=${encodeURIComponent(category.slug)}">${escapeHtml(category.label)}</a></li>`)
+    .map(
+      (category) => `<li><a class="category-card" href="/apply?category=${encodeURIComponent(category.slug)}">
+        <span class="category-icon">${iconFor(category.slug)}</span>
+        <span class="category-name">${escapeHtml(shortLabel(category.label))}</span>
+      </a></li>`,
+    )
     .join('');
 
   return page('What do you have? — Eppic Pawn Shop', `
     <header><h1>What do you have?</h1></header>
-    ${error ? `<div class="card note">${escapeHtml(error)}</div>` : ''}
-    <div class="card"><ul class="categories">${categories}</ul></div>
-    <p class="muted">We only take these five, on purpose — nothing that needs extra storage.</p>`, rules.playbook.whatsapp);
+    ${error ? `<div class="verification-banner" role="alert"><strong>${escapeHtml(error)}</strong></div>` : ''}
+    <div class="card"><ul class="category-grid stagger-children">${categories}</ul></div>
+    <p class="muted">We take these five only, on purpose — nothing that needs extra storage.</p>`,
+    rules.playbook.whatsapp, 1);
 }
 
 export function questionsPage(
@@ -125,23 +123,22 @@ export function questionsPage(
 ): string {
   const variants = rules.variantsFor(category.slug);
 
-  const variantChooser =
-    variants.length > 1 && !variant
-      ? `<div class="card">
-           <fieldset>
-             <legend>Which one is it?</legend>
-             <ul class="categories">${variants
-               .map(
-                 (group) =>
-                   `<li><a href="/apply?category=${encodeURIComponent(category.slug)}&amp;variant=${encodeURIComponent(group.variant!)}">${escapeHtml(group.label)}</a></li>`,
-               )
-               .join('')}</ul>
-           </fieldset>
-         </div>`
-      : '';
+  if (variants.length > 1 && !variant) {
+    const choices = variants
+      .map(
+        (group) => `<li><a class="category-card" href="/apply?category=${encodeURIComponent(category.slug)}&amp;variant=${encodeURIComponent(group.variant!)}">
+          <span class="category-icon">${iconFor(category.slug)}</span>
+          <span class="category-name">${escapeHtml(group.label)}</span>
+        </a></li>`,
+      )
+      .join('');
 
-  if (variantChooser) {
-    return page(`${category.label} — Eppic Pawn Shop`, `<header><h1>${escapeHtml(category.label)}</h1></header>${variantChooser}`, rules.playbook.whatsapp);
+    return page(`${category.label} — Eppic Pawn Shop`, `
+      <header><h1>${escapeHtml(shortLabel(category.label))}</h1></header>
+      <div class="card">
+        <h2>Which one is it?</h2>
+        <ul class="category-grid stagger-children" style="margin-top:var(--space-4)">${choices}</ul>
+      </div>`, rules.playbook.whatsapp, 1);
   }
 
   const fields = questions
@@ -162,24 +159,27 @@ export function questionsPage(
 
   return page(`${category.label} — Eppic Pawn Shop`, `
     <header>
-      <h1>${escapeHtml(category.label)}</h1>
-      <p class="lead">Answer honestly — this is a check for you, not a test. Lukas confirms everything in person anyway.</p>
+      <h1>${escapeHtml(shortLabel(category.label))}</h1>
+      <p class="lead">Answer honestly — this is a check for you, not a test. Everything is confirmed in person anyway.</p>
     </header>
 
     <form method="post" action="/apply" class="card">
       <input type="hidden" name="category" value="${escapeHtml(category.slug)}">
       ${variant ? `<input type="hidden" name="variant" value="${escapeHtml(variant)}">` : ''}
 
-      <fieldset>
-        <legend>What is it, exactly?</legend>
-        <input type="text" name="description" maxlength="160" placeholder="e.g. iPhone 13 Pro, 256GB, good condition">
-      </fieldset>
+      <div class="input-group">
+        <label class="input-label" for="description">What is it, exactly?</label>
+        <input class="input" type="text" id="description" name="description" maxlength="160"
+               placeholder="e.g. iPhone 13 Pro, 256GB" autocomplete="off">
+        <p class="muted" style="margin-top:var(--space-2)">The more exact, the closer the estimate.</p>
+      </div>
 
       ${fields}
-      <button type="submit">See what happens next</button>
+      <button class="btn btn-primary" type="submit">Research market value &rarr;</button>
     </form>
 
-    <p class="muted">We don't ask for your name or number here, and nothing you enter is an application.</p>`, rules.playbook.whatsapp);
+    <p class="muted">We don't ask for your name or number here, and nothing you enter is an application.</p>`,
+    rules.playbook.whatsapp, 2);
 }
 
 export function outcomePage(outcome: PrecheckOutcome, whatsapp: string): string {
@@ -188,39 +188,108 @@ export function outcomePage(outcome: PrecheckOutcome, whatsapp: string): string 
   if (outcome.status === 'not-accepted') {
     return page('We cannot take that — Eppic Pawn Shop', `
       <header><h1>${escapeHtml(outcome.headline)}</h1></header>
-      <div class="card note">${outcome.notes.map((note) => `<p>${escapeHtml(note)}</p>`).join('')}</div>
-      <a class="button secondary" href="/apply">Check something else</a>`, whatsapp);
+      <div class="verification-banner" role="alert">
+        ${outcome.notes.map((note) => `<p>${escapeHtml(note)}</p>`).join('')}
+      </div>
+      <a class="btn btn-secondary" href="/apply">Check something else</a>`, whatsapp, 1);
   }
 
-  const notes = outcome.notes.length
-    ? `<div class="card note"><h2>Worth knowing first</h2><ul>${outcome.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul></div>`
-    : '';
+  return page('Your estimate — Eppic Pawn Shop', `
+    <header>
+      <h1>${escapeHtml(outcome.headline)}</h1>
+    </header>
 
-  const inPerson = outcome.verifiedInPerson.length
-    ? `<div class="card"><h2>Checked when you bring it in</h2><ul>${outcome.verifiedInPerson
-        .map((check) => `<li>${escapeHtml(check)}</li>`)
-        .join('')}</ul></div>`
-    : '';
+    ${outcome.quote ? quoteCard(outcome.quote) : noQuoteCard()}
 
-  return page('Next step — Eppic Pawn Shop', `
-    <header><h1>${escapeHtml(outcome.headline)}</h1></header>
+    ${verificationBanner()}
 
-    ${outcome.status === 'ready' ? '<div class="card good">Nothing you answered stops an application.</div>' : ''}
-    ${notes}
+    ${
+      outcome.notes.length
+        ? `<div class="card">
+             <h2>Worth knowing first</h2>
+             <ul class="plain">${outcome.notes.map((note) => `<li class="warn">${escapeHtml(note)}</li>`).join('')}</ul>
+           </div>`
+        : ''
+    }
 
     <div class="card">
       <h2>Bring with you</h2>
-      <ul>${outcome.bring.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+      <ul class="plain">${outcome.bring.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
     </div>
 
-    ${inPerson}
+    ${
+      outcome.verifiedInPerson.length
+        ? `<div class="card">
+             <h2>Checked when you bring it in</h2>
+             <ul class="plain">${outcome.verifiedInPerson.map((check) => `<li>${escapeHtml(check)}</li>`).join('')}</ul>
+           </div>`
+        : ''
+    }
 
-    <div class="card">
-      <p>Lukas decides the amount himself once he has seen the details and the photos. Nothing here is an offer.</p>
+    <a class="btn btn-primary" href="${escapeHtml(link)}">Continue on WhatsApp</a>
+    <p class="muted" style="text-align:center;margin-top:var(--space-3)">or message ${escapeHtml(whatsapp)}</p>`,
+    whatsapp, 4);
+}
+
+/**
+ * The figures. Every one of them is labelled an estimate, and the pawn loan is
+ * marked as the better deal only in the sense the design intends — more cash
+ * kept, since the item comes back.
+ */
+function quoteCard(quote: PrecheckQuote): string {
+  return `<div class="card card-highlight">
+    <span class="label">Estimated pawn loan</span>
+    <div class="price-display price-large price-accent" style="margin:var(--space-2) 0 var(--space-6)">
+      ${escapeHtml(formatAmount(quote.loanCents))}
     </div>
 
-    <a class="button" href="${escapeHtml(link)}">Continue on WhatsApp</a>
-    <p class="muted" style="text-align:center;margin-top:.75rem">or message ${escapeHtml(whatsapp)}</p>`, whatsapp);
+    <div class="price-row">
+      <span class="label">Market value</span>
+      <strong class="dim">${escapeHtml(formatAmount(quote.marketValueCents))}</strong>
+    </div>
+    <div class="price-row">
+      <span class="label">Assessed value</span>
+      <strong class="dim">${escapeHtml(formatAmount(quote.assessedValueCents))}</strong>
+    </div>
+    <div class="price-row">
+      <span class="label">Pawn loan<span class="badge">Keep it</span></span>
+      <strong class="price-accent">${escapeHtml(formatAmount(quote.loanCents))}</strong>
+    </div>
+    <div class="price-row">
+      <span class="label">We buy it outright<span class="badge">Most cash</span></span>
+      <strong class="price-success">${escapeHtml(formatAmount(quote.buyNowCents))}</strong>
+    </div>
+
+    <p class="muted" style="margin-top:var(--space-5)">
+      Pawn it and you pay the loan back with interest and keep the item. Sell it outright and you get more
+      cash now, but the item is ours.
+    </p>
+  </div>`;
+}
+
+function noQuoteCard(): string {
+  return `<div class="card">
+    <h2>Lukas will work out your figure</h2>
+    <p class="lead" style="margin-top:var(--space-3)">We could not price this one automatically — send it over on
+    WhatsApp with a photo and he will come back to you himself.</p>
+  </div>`;
+}
+
+/** Section 5H of the design. `role="alert"` per its accessibility section. */
+function verificationBanner(): string {
+  return `<div class="verification-banner" role="alert">
+    <span class="verification-icon" aria-hidden="true">&#9888;</span>
+    <h2>This is an estimate, not an offer</h2>
+    <p class="lead" style="margin-top:var(--space-2)">
+      Every figure here is worked out from what the item is worth second-hand. Lukas confirms the final
+      amount himself once he has seen the item and the photos — it can go up or down.
+    </p>
+  </div>`;
+}
+
+/** `Phones (iPhone and Android)` -> `Phones`, for a card that has to fit. */
+function shortLabel(label: string): string {
+  return label.replace(/\s*\(.*\)$/, '');
 }
 
 function shorten(ask: string): string {

@@ -65,16 +65,19 @@ describe('the landing page', () => {
     const { status, html } = await get('/');
     assert.equal(status, 200);
 
+    // Cards show the short label — "Phones", not "Phones (iPhone and Android)" —
+    // so the grid fits on a phone. The variant is asked on the next step.
     for (const category of rules.categories) {
-      assert.match(html, new RegExp(category.label.replace(/[()]/g, '\\$&')));
+      assert.match(html, new RegExp(category.label.replace(/\s*\(.*\)$/, '')));
+      assert.match(html, new RegExp(`/apply\\?category=${category.slug}`));
     }
     assert.doesNotMatch(html, /furniture|bed|fridge/i);
   });
 
-  test('says what to bring, and never quotes a figure', async () => {
+  test('says what to bring, and quotes nothing before an item is described', async () => {
     const { html } = await get('/');
     assert.match(html, /Police declaration/i);
-    assert.doesNotMatch(html, /N\$\s?\d/, 'the website never puts a number in front of anyone');
+    assert.doesNotMatch(html, /N\$\s?\d/, 'no figure before there is an item to price');
   });
 
   test('loads nothing from anywhere else', async () => {

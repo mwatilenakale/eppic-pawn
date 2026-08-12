@@ -23,7 +23,9 @@ exists.
 
 ## Hard constraints (see root CLAUDE.md — these are not optional)
 
-- The agent never quotes a binding number to the customer itself.
+- The agent never quotes a **binding** number to the customer itself.
+  The website shows an estimate, marked as one; the WhatsApp agent still
+  quotes nothing until Lukas has replied.
 - The agent never marks anything approved on its own.
 - No n8n or workflow-automation tool — this is application code.
 - Read screening questions and rates from `docs/playbook.md` — don't

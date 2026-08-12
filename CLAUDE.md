@@ -36,6 +36,11 @@ loan terms; it's unresolved and matters.
   decision routes to Lukas via WhatsApp and waits for his reply. This is
   permanent, not a v1 stand-in — do not build a path that skips it, even
   behind a flag.
+  - The website *does* show the customer an estimate (Lukas's decision,
+    August 2026). That is not a loosening of the rule: the figure is
+    labelled an estimate, carries the verification banner, and binds
+    nobody. What must never happen is a figure presented as final, or an
+    application progressing, without his reply.
 - **Sized for the actual team**: Lukas, plus one hire who inspects items
   but has no approval authority. Do not build multi-tier approval roles,
   admin hierarchies, or permission systems sized for a staff that

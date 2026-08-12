@@ -48,6 +48,19 @@ export interface PrecheckAnswer {
   mustHave: boolean;
 }
 
+/**
+ * The figures on the quote screen. An estimate, and labelled as one wherever
+ * it is shown: Lukas still sets the number that counts.
+ */
+export interface PrecheckQuote {
+  marketValueCents: number;
+  assessedValueCents: number;
+  loanCents: number;
+  buyNowCents: number;
+  /** True when this came from an adjustment Lukas made, not from an estimate. */
+  fromAdjustment: boolean;
+}
+
 export interface PrecheckOutcome {
   status: PrecheckStatus;
   headline: string;
@@ -60,6 +73,8 @@ export interface PrecheckOutcome {
   verifiedInPerson: string[];
   /** Prefilled WhatsApp handoff — the real intake still runs from scratch. */
   whatsappText: string;
+  /** Null when no market estimate could be had; then Lukas is asked instead. */
+  quote: PrecheckQuote | null;
 }
 
 /** The questions the web form asks — the same ones WhatsApp would. */
@@ -79,6 +94,8 @@ export interface PrecheckSubmission {
   description?: string;
   /** questionId -> whatever the form sent. */
   answers: Record<string, string>;
+  /** Figures for the quote screen, when they could be worked out. */
+  quote?: PrecheckQuote | null;
 }
 
 export function evaluatePrecheck(rules: Rules, submission: PrecheckSubmission): PrecheckOutcome {
@@ -93,6 +110,7 @@ export function evaluatePrecheck(rules: Rules, submission: PrecheckSubmission): 
       bring: [],
       verifiedInPerson: [],
       whatsappText: 'Hello, I would like to ask about pawning an item.',
+      quote: null,
     };
   }
 
@@ -127,13 +145,16 @@ export function evaluatePrecheck(rules: Rules, submission: PrecheckSubmission): 
     status,
     headline:
       status === 'ready'
-        ? 'Nothing here stops an application — send it to Lukas on WhatsApp.'
+        ? submission.quote
+          ? 'Here is your estimate'
+          : 'Nothing here stops an application — send it to Lukas on WhatsApp.'
         : 'There is something to sort out first, but you can still ask Lukas.',
     notes,
     answers,
     bring: rules.playbook.requirements,
     verifiedInPerson: plan.inPersonChecks.map((check) => check.text),
     whatsappText: composeHandoff(category.label, submission.description ?? '', blocking.length > 0),
+    quote: submission.quote ?? null,
   };
 }
 

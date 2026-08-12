@@ -18,7 +18,11 @@ import { ContractError } from './store/index.ts';
 import { ContractService, contractErrorPage, signedPage, signingPage } from './contract/index.ts';
 import { CustomerDirectory } from './customers/directory.ts';
 import { chooseCategoryPage, landingPage, outcomePage, questionsPage } from './web/pages.ts';
-import { evaluatePrecheck, precheckQuestions } from './web/precheck.ts';
+import { evaluatePrecheck, precheckQuestions, type PrecheckQuote } from './web/precheck.ts';
+import { PriceMemory } from './valuator/memory.ts';
+import { suggestValuation } from './valuation.ts';
+import { percentOf } from './money.ts';
+import type { Rules } from './playbook/index.ts';
 
 export interface BuiltServer {
   server: Server;
@@ -58,8 +62,51 @@ export function buildServer(
     directory,
   });
 
+  const memory = new PriceMemory(store, rules);
+
+  /**
+   * Step 3 of the design: what the "Researching..." state is actually doing.
+   *
+   * An adjustment Lukas made in the last fortnight beats a fresh estimate —
+   * his correction is a fact about what this shop pays, the estimate is a
+   * guess. With neither, the customer gets no figure rather than an invented
+   * one, and is asked to send it to him.
+   */
+  const priceIt = async (categorySlug: string, variant: string | null, description: string): Promise<PrecheckQuote | null> => {
+    const remembered = memory.recall({ categorySlug, variant, description });
+    if (remembered) {
+      return {
+        marketValueCents: remembered.assessedValueCents ?? remembered.loanCents * 2,
+        assessedValueCents: remembered.assessedValueCents ?? remembered.loanCents * 2,
+        loanCents: remembered.loanCents,
+        buyNowCents: remembered.buyNowCents ?? buyNowFrom(remembered.loanCents, rules),
+        fromAdjustment: true,
+      };
+    }
+
+    if (!valuator || !description.trim()) return null;
+
+    try {
+      const estimates = await valuator.estimate({ description, categorySlug, variant });
+      if (estimates.length === 0) return null;
+      const valuation = suggestValuation(estimates, rules);
+      return {
+        marketValueCents: valuation.basis.amountCents,
+        assessedValueCents: valuation.assessedValueCents,
+        loanCents: valuation.suggestedLoanCents,
+        buyNowCents: valuation.buyNowCents,
+        fromAdjustment: false,
+      };
+    } catch (error) {
+      // A failed estimate is not a failed application: the customer still gets
+      // their screening result and the handoff, just without a figure.
+      console.error('[server] valuation failed', error);
+      return null;
+    }
+  };
+
   const server = createServer((request, response) => {
-    handleRequest(request, response, config, router, contracts, store).catch((error) => {
+    handleRequest(request, response, config, router, contracts, store, priceIt).catch((error) => {
       console.error('[server]', error);
       if (!response.headersSent) respond(response, 500, 'Internal error');
     });
@@ -75,6 +122,7 @@ async function handleRequest(
   router: AgentRouter,
   contracts: ContractService,
   store: Store,
+  priceIt: (categorySlug: string, variant: string | null, description: string) => Promise<PrecheckQuote | null>,
 ): Promise<void> {
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
   const rules = getRules();
@@ -109,19 +157,27 @@ async function handleRequest(
     const form = new URLSearchParams((await readBody(request)).toString('utf8'));
     const answers = Object.fromEntries([...form.entries()].filter(([key]) => !['category', 'variant', 'description'].includes(key)));
 
+    const category = rules.category(form.get('category') ?? '');
+    const description = form.get('description') ?? '';
+
+    // Step 3 of the design — the research the loader stands for. Lukas's own
+    // recent adjustment for this kind of item wins over a fresh estimate
+    // (playbook section 3); a valuation only happens if there is none.
+    const quote = category ? await priceIt(category.slug, form.get('variant'), description) : null;
+
     const outcome = evaluatePrecheck(rules, {
       category: form.get('category') ?? '',
       variant: form.get('variant'),
-      description: form.get('description') ?? '',
+      description,
       answers,
+      quote,
     });
 
-    const category = rules.category(form.get('category') ?? '');
     if (category) {
       store.recordPrecheck({
         categorySlug: category.slug,
         variant: form.get('variant'),
-        description: form.get('description') ?? '',
+        description,
         answers: outcome.answers,
         status: outcome.status,
       });
@@ -241,4 +297,9 @@ if (import.meta.filename === process.argv[1]) {
     console.log(`Rules: ${getRules().paths.playbook}`);
     console.log(`Owner: ${active.ownerName} ${active.ownerPhone}`);
   });
+}
+
+/** A remembered adjustment may predate the buy-now rule; derive it if so. */
+function buyNowFrom(loanCents: number, rules: Rules): number {
+  return loanCents + percentOf(loanCents, rules.playbook.loanSizing.buyNowMarkupPct);
 }
