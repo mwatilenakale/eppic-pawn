@@ -331,4 +331,11 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX price_adjustments_lookup ON price_adjustments(fingerprint, expires_at);
   CREATE INDEX price_adjustments_recent ON price_adjustments(created_at);
   `,
+
+  // 7 — every figure on the quote is adjustable, not just the loan. The market
+  // value is the top of the chain the playbook's formula runs down, so it has
+  // to be correctable too: get it right and the rest follows.
+  `
+  ALTER TABLE price_adjustments ADD COLUMN market_value_cents INTEGER;
+  `,
 ];

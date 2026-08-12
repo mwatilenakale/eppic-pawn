@@ -26,6 +26,7 @@ export interface AdjustmentKey {
 export interface RememberedPrice {
   id: string;
   fingerprint: string;
+  marketValueCents: number | null;
   loanCents: number;
   buyNowCents: number | null;
   assessedValueCents: number | null;
@@ -94,6 +95,7 @@ export class PriceMemory {
     loanCents: number;
     buyNowCents?: number | null;
     assessedValueCents?: number | null;
+    marketValueCents?: number | null;
     suggestedLoanCents?: number | null;
     itemId?: string | null;
     valuationId?: string | null;
@@ -108,9 +110,9 @@ export class PriceMemory {
       .prepare(
         `INSERT INTO price_adjustments
            (id, fingerprint, category_slug, variant, description, item_id, valuation_id,
-            suggested_loan_cents, loan_cents, buy_now_cents, assessed_value_cents, note,
-            adjusted_by, created_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            suggested_loan_cents, loan_cents, buy_now_cents, assessed_value_cents,
+            market_value_cents, note, adjusted_by, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -124,6 +126,7 @@ export class PriceMemory {
         adjustment.loanCents,
         adjustment.buyNowCents ?? null,
         adjustment.assessedValueCents ?? null,
+        adjustment.marketValueCents ?? null,
         adjustment.note ?? '',
         adjustment.adjustedBy,
         createdAt.toISOString(),
@@ -160,6 +163,7 @@ function toRemembered(row: Record<string, unknown>): RememberedPrice {
   return {
     id: String(row['id']),
     fingerprint: String(row['fingerprint']),
+    marketValueCents: row['market_value_cents'] === null ? null : Number(row['market_value_cents']),
     loanCents: Number(row['loan_cents']),
     buyNowCents: row['buy_now_cents'] === null ? null : Number(row['buy_now_cents']),
     assessedValueCents: row['assessed_value_cents'] === null ? null : Number(row['assessed_value_cents']),

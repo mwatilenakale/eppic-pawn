@@ -7,6 +7,7 @@ import { loadRules } from '../src/playbook/index.ts';
 import { Store, generateMediaKey, type User } from '../src/store/index.ts';
 import { IntakeAgent, type IntakeSubmission } from '../src/intake/agent.ts';
 import { ApprovalWorkflow, parseOwnerReply, referenceFor } from '../src/approval/index.ts';
+import { PriceMemory } from '../src/valuator/memory.ts';
 
 const rules = loadRules();
 const CUSTOMER = '+264811234567';
@@ -103,15 +104,24 @@ describe('approval message to Lukas', () => {
 
 describe('reading Lukas’s reply', () => {
   test('understands the forms he would actually type', () => {
-    assert.deepEqual(parseOwnerReply('APPROVE A1B2'), { action: 'approve', reference: 'A1B2', amountCents: null, note: null });
-    assert.deepEqual(parseOwnerReply('approve a1b2 3000'), { action: 'approve', reference: 'A1B2', amountCents: 300_000, note: null });
-    assert.deepEqual(parseOwnerReply('approve N$3,500.50'), { action: 'approve', reference: null, amountCents: 350_050, note: null });
+    assert.deepEqual(parseOwnerReply('APPROVE A1B2'), { action: 'approve', reference: 'A1B2', amountCents: null, note: null, edits: {} });
+    assert.deepEqual(parseOwnerReply('approve a1b2 3000'), { action: 'approve', reference: 'A1B2', amountCents: 300_000, note: null, edits: {} });
+    assert.deepEqual(parseOwnerReply('approve N$3,500.50'), { action: 'approve', reference: null, amountCents: 350_050, note: null, edits: {} });
     assert.deepEqual(parseOwnerReply('decline A1B2 no proof of ownership'), {
       action: 'decline',
       reference: 'A1B2',
       amountCents: null,
       note: 'no proof of ownership',
+      edits: {},
     });
+  });
+
+  test('an adjustment names whichever figures he wants to move', () => {
+    assert.deepEqual(parseOwnerReply('ADJUST A1B2 3500').edits, { loan: 350_000 }, 'a bare amount is the loan');
+    assert.deepEqual(parseOwnerReply('adjust A1B2 market 8000 buy 4500').edits, { market: 800_000, buy: 450_000 });
+    assert.deepEqual(parseOwnerReply('adjust A1B2 assessed N$6,000 loan 3000').edits, { assessed: 600_000, loan: 300_000 });
+    assert.equal(parseOwnerReply('adjust A1B2 3500').action, 'adjust');
+    assert.equal(parseOwnerReply('change A1B2 outright 5000').edits.buy, 500_000, 'his own words for it work too');
   });
 
   test('anything it cannot read decides nothing', () => {
@@ -229,5 +239,65 @@ describe('decisions', () => {
     const { approval, reference } = approvals.request(submission, ESTIMATES);
     assert.equal(reference, referenceFor(approval.id));
     assert.match(reference, /^[A-Z0-9]{4}$/);
+  });
+});
+
+describe('adjusting an application', () => {
+  test('changes the figures without deciding anything', () => {
+    const submission = completeIntake();
+    const { reference } = approvals.request(submission, ESTIMATES);
+
+    const result = approvals.handleOwnerReply(`ADJUST ${reference} market 8000`, lukas);
+
+    assert.match(result.ownerMessage, /Market value: N\$8,000\.00/);
+    assert.match(result.ownerMessage, /Pawn loan: \*N\$3,000\.00\*/, 'carried down the playbook chain');
+    assert.match(result.ownerMessage, /Buy outright: \*N\$3,750\.00\*/);
+    assert.equal(result.customerMessage, undefined, 'the customer is told nothing — this is not a decision');
+    assert.equal(store.pendingApprovals().length, 1, 'and it is still waiting on him');
+  });
+
+  test('a second adjustment builds on the first instead of reverting it', () => {
+    const submission = completeIntake();
+    const { reference } = approvals.request(submission, ESTIMATES);
+
+    approvals.handleOwnerReply(`ADJUST ${reference} market 8000`, lukas);
+    const second = approvals.handleOwnerReply(`ADJUST ${reference} buy 4200`, lukas);
+
+    assert.match(second.ownerMessage, /Market value: N\$8,000\.00/, 'his earlier correction still stands');
+    assert.match(second.ownerMessage, /Buy outright: \*N\$4,200\.00\*/);
+  });
+
+  test('the adjustment is remembered for the next item like it', () => {
+    const submission = completeIntake();
+    const { reference } = approvals.request(submission, ESTIMATES);
+    approvals.handleOwnerReply(`ADJUST ${reference} 2500`, lukas);
+
+    const remembered = new PriceMemory(store, rules).recall({
+      categorySlug: submission.item.category_slug,
+      variant: submission.item.variant,
+      description: submission.item.description,
+    });
+
+    assert.equal(remembered?.loanCents, 250_000);
+    assert.equal(remembered?.suggestedLoanCents, 375_000, 'what the engine had said is kept beside his number');
+  });
+
+  test('approving after adjusting uses the adjusted figure', () => {
+    const submission = completeIntake();
+    const { reference } = approvals.request(submission, ESTIMATES);
+    approvals.handleOwnerReply(`ADJUST ${reference} 2500`, lukas);
+
+    const approved = approvals.handleOwnerReply(`APPROVE ${reference}`, lukas);
+    assert.equal(approved.approval?.approved_loan_cents, 250_000);
+    assert.match(approved.customerMessage!, /N\$2,500\.00/);
+  });
+
+  test('an adjustment with no figure in it asks rather than guessing', () => {
+    const submission = completeIntake();
+    const { reference } = approvals.request(submission, ESTIMATES);
+
+    const result = approvals.handleOwnerReply(`ADJUST ${reference}`, lukas);
+    assert.match(result.ownerMessage, /Tell me what to change/);
+    assert.equal(store.pendingApprovals()[0]!.suggested_loan_cents, 375_000, 'nothing moved');
   });
 });

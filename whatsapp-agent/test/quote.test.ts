@@ -184,3 +184,41 @@ describe('the design system is actually applied', () => {
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+describe('adjusting the figures', () => {
+  test('a correction to the market value carries down the playbook chain', async () => {
+    const { applyAdjustment } = await import('../src/valuator/adjust.ts');
+    const before = { marketValueCents: 1_044_000, assessedValueCents: 783_000, loanCents: 391_500, buyNowCents: 489_375 };
+
+    // He says the market has it at N$8,000, not N$10,440. Everything below
+    // that follows from the playbook rather than needing to be retyped.
+    const after = applyAdjustment(before, { market: 800_000 }, rules);
+
+    assert.equal(after.marketValueCents, 800_000);
+    assert.equal(after.assessedValueCents, 600_000, 'x 0.75');
+    assert.equal(after.loanCents, 300_000, '/ 2');
+    assert.equal(after.buyNowCents, 375_000, '+ 25%');
+  });
+
+  test('setting the loan directly overrides the formula and stays put', async () => {
+    const { applyAdjustment } = await import('../src/valuator/adjust.ts');
+    const before = { marketValueCents: 1_044_000, assessedValueCents: 783_000, loanCents: 391_500, buyNowCents: 489_375 };
+
+    const after = applyAdjustment(before, { loan: 500_000 }, rules);
+
+    assert.equal(after.loanCents, 500_000);
+    assert.equal(after.marketValueCents, 1_044_000, 'the market value he did not touch is left alone');
+    assert.equal(after.assessedValueCents, 783_000);
+    assert.equal(after.buyNowCents, 625_000, 'but buy-now follows the loan');
+  });
+
+  test('what he types explicitly always beats what would be derived', async () => {
+    const { applyAdjustment } = await import('../src/valuator/adjust.ts');
+    const before = { marketValueCents: 1_044_000, assessedValueCents: 783_000, loanCents: 391_500, buyNowCents: 489_375 };
+
+    const after = applyAdjustment(before, { market: 800_000, buy: 999_900 }, rules);
+
+    assert.equal(after.loanCents, 300_000, 'derived from the new market value');
+    assert.equal(after.buyNowCents, 999_900, 'except the one he set himself');
+  });
+});

@@ -14,6 +14,8 @@ import type { Rules } from '../playbook/index.ts';
 import type { Approval, Store, User } from '../store/index.ts';
 import type { IntakeSubmission } from '../intake/agent.ts';
 import { loanTerms, schedule, suggestValuation, type MarketEstimate, type Valuation } from '../valuation.ts';
+import { PriceMemory } from '../valuator/memory.ts';
+import { applyAdjustment, describeFigures, parseFigureEdits, type FigureEdits, type Figures } from '../valuator/adjust.ts';
 
 export interface ApprovalRequest {
   approval: Approval;
@@ -22,13 +24,15 @@ export interface ApprovalRequest {
   valuation: Valuation | null;
 }
 
-export type OwnerAction = 'approve' | 'decline' | 'help';
+export type OwnerAction = 'approve' | 'decline' | 'adjust' | 'help';
 
 export interface OwnerReply {
   action: OwnerAction;
   reference: string | null;
   amountCents: number | null;
   note: string | null;
+  /** Which figures he named, for an ADJUST. */
+  edits: FigureEdits;
 }
 
 export interface DecisionResult {
@@ -44,8 +48,11 @@ const HELP =
   'Reply with one of:\n' +
   '• *APPROVE <ref>* — approve at the suggested amount\n' +
   '• *APPROVE <ref> <amount>* — approve at your own amount\n' +
-  '• *DECLINE <ref> <reason>* — turn it down\n\n' +
-  'The reference is the code in the application message, e.g. APPROVE A1B2 3000.\n\n' +
+  '• *DECLINE <ref> <reason>* — turn it down\n' +
+  '• *ADJUST <ref> <amount>* — change the loan and remember it\n' +
+  '• *ADJUST <ref> market 8000 buy 4500* — change any figure by name\n\n' +
+  'The reference is the code in the application message, e.g. APPROVE A1B2 3000.\n' +
+  'Figures you can name: *market*, *assessed*, *loan*, *buy*.\n\n' +
   'To look at the book instead:\n' +
   '• *BOOK* — what is out, what is coming in\n' +
   '• *DUE* — falling due this week\n' +
@@ -126,6 +133,7 @@ export class ApprovalWorkflow {
       return { ownerMessage: `I can't find a pending application with reference ${reply.reference}.` };
     }
 
+    if (reply.action === 'adjust') return this.#adjust(approval, reply, owner);
     return reply.action === 'approve' ? this.#approve(approval, reply, owner) : this.#decline(approval, reply, owner);
   }
 
@@ -176,6 +184,89 @@ export class ApprovalWorkflow {
     };
   }
 
+  /**
+   * Changes the figures without deciding anything. The application stays
+   * pending — adjusting a price is not approving a loan — and what he decided
+   * goes into the knowledge base so the next item of the same kind starts from
+   * his number instead of a fresh guess (playbook section 3).
+   */
+  #adjust(approval: Approval, reply: OwnerReply, owner: User): DecisionResult {
+    const reference = referenceFor(approval.id);
+    if (Object.keys(reply.edits).length === 0) {
+      return {
+        ownerMessage:
+          `Tell me what to change, e.g. *ADJUST ${reference} 3500* for the loan, ` +
+          `or *ADJUST ${reference} market 8000 buy 4500*.`,
+      };
+    }
+
+    const item = this.#store.item(approval.item_id)!;
+    const current = this.#figuresFor(approval);
+    const adjusted = applyAdjustment(current, reply.edits, this.#rules);
+
+    this.#store.updateApprovalSuggestion(approval.id, adjusted.loanCents, owner.id);
+    if (approval.valuation_id) {
+      this.#store.recordValuationOverride(approval.valuation_id, adjusted.loanCents, 'adjusted by Lukas', owner.id);
+    }
+
+    new PriceMemory(this.#store, this.#rules).remember({
+      key: { categorySlug: item.category_slug, variant: item.variant, description: item.description },
+      marketValueCents: adjusted.marketValueCents,
+      assessedValueCents: adjusted.assessedValueCents,
+      loanCents: adjusted.loanCents,
+      buyNowCents: adjusted.buyNowCents,
+      suggestedLoanCents: approval.suggested_loan_cents,
+      itemId: item.id,
+      valuationId: approval.valuation_id,
+      adjustedBy: owner.id,
+    });
+
+    const days = this.#rules.playbook.adjustmentMemoryDays;
+    return {
+      ownerMessage:
+        `Adjusted ${reference} — ${item.description || item.category_slug}\n\n` +
+        `${describeFigures(adjusted, formatAmount)}\n\n` +
+        `Remembered for ${days} days, so the next one like it starts here.\n` +
+        `Still waiting on you: *APPROVE ${reference}* or adjust again.`,
+    };
+  }
+
+  /**
+   * The figures as they stand.
+   *
+   * An adjustment he already made outranks the original valuation, so a second
+   * ADJUST builds on the first instead of silently reverting whatever he
+   * changed last time — he corrects the market value, then the buy price, and
+   * both stick.
+   */
+  #figuresFor(approval: Approval): Figures {
+    const { discountFactor, buyNowMarkupPct } = this.#rules.playbook.loanSizing;
+    const valuation = approval.valuation_id ? this.#store.valuation(approval.valuation_id) : null;
+    const item = this.#store.item(approval.item_id)!;
+
+    const loanCents = approval.suggested_loan_cents ?? valuation?.suggested_loan_cents ?? 0;
+    const fromValuation: Figures = {
+      marketValueCents: valuation ? Math.round(valuation.assessed_value_cents / discountFactor) : null,
+      assessedValueCents: valuation?.assessed_value_cents ?? null,
+      loanCents,
+      buyNowCents: loanCents + Math.round((loanCents * buyNowMarkupPct) / 100),
+    };
+
+    const remembered = new PriceMemory(this.#store, this.#rules).recall({
+      categorySlug: item.category_slug,
+      variant: item.variant,
+      description: item.description,
+    });
+    if (!remembered) return fromValuation;
+
+    return {
+      marketValueCents: remembered.marketValueCents ?? fromValuation.marketValueCents,
+      assessedValueCents: remembered.assessedValueCents ?? fromValuation.assessedValueCents,
+      loanCents: approval.suggested_loan_cents ?? remembered.loanCents,
+      buyNowCents: remembered.buyNowCents ?? fromValuation.buyNowCents,
+    };
+  }
+
   #decline(approval: Approval, reply: OwnerReply, owner: User): DecisionResult {
     const decided = this.#store.decideApproval({
       approvalId: approval.id,
@@ -214,11 +305,15 @@ export class ApprovalWorkflow {
  */
 export function parseOwnerReply(text: string): OwnerReply {
   const trimmed = text.trim();
-  const match = /^(approve|approved|yes|ok|okay|decline|declined|no|reject)\b\s*(.*)$/i.exec(trimmed);
-  if (!match) return { action: 'help', reference: null, amountCents: null, note: null };
+  const match = /^(approve|approved|yes|ok|okay|decline|declined|no|reject|adjust|change|set)\b\s*(.*)$/i.exec(trimmed);
+  if (!match) return { action: 'help', reference: null, amountCents: null, note: null, edits: {} };
 
   const verb = match[1]!.toLowerCase();
-  const action: OwnerAction = /^(decline|declined|no|reject)/.test(verb) ? 'decline' : 'approve';
+  const action: OwnerAction = /^(decline|declined|no|reject)/.test(verb)
+    ? 'decline'
+    : /^(adjust|change|set)/.test(verb)
+      ? 'adjust'
+      : 'approve';
   let rest = match[2]!.trim();
 
   let reference: string | null = null;
@@ -228,6 +323,13 @@ export function parseOwnerReply(text: string): OwnerReply {
     rest = rest.slice(referenceMatch[0].length).trim();
   }
 
+  // An ADJUST can name several figures at once, so its whole tail is read as
+  // field/amount pairs rather than as one amount and a note.
+  if (action === 'adjust') {
+    const edits = parseFigureEdits(rest, parseAmount);
+    return { action, reference, amountCents: edits.loan ?? null, note: null, edits };
+  }
+
   let amountCents: number | null = null;
   const amountMatch = /^(n\$\s?)?[\d][\d\s,.]*/i.exec(rest);
   if (amountMatch) {
@@ -235,7 +337,7 @@ export function parseOwnerReply(text: string): OwnerReply {
     if (amountCents !== null) rest = rest.slice(amountMatch[0].length).trim();
   }
 
-  return { action, reference, amountCents, note: rest.replace(/^[-—:]\s*/, '').trim() || null };
+  return { action, reference, amountCents, note: rest.replace(/^[-—:]\s*/, '').trim() || null, edits: {} };
 }
 
 function isAmount(token: string): boolean {

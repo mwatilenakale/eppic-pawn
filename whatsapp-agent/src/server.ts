@@ -45,8 +45,9 @@ export function buildServer(
     overrides.transport ??
     new CloudApiTransport({ token: config.whatsapp.token, phoneNumberId: config.whatsapp.phoneNumberId });
 
+  const memory = new PriceMemory(store, rules);
   const valuator =
-    overrides.valuator === undefined ? createValuator(config.anthropicApiKey, rules) : overrides.valuator;
+    overrides.valuator === undefined ? createValuator(config.anthropicApiKey, rules, memory) : overrides.valuator;
 
   const contracts = new ContractService(store, rules, { baseUrl: config.publicBaseUrl });
   const directory = new CustomerDirectory(store);
@@ -61,8 +62,6 @@ export function buildServer(
     contracts,
     directory,
   });
-
-  const memory = new PriceMemory(store, rules);
 
   /**
    * Step 3 of the design: what the "Researching..." state is actually doing.

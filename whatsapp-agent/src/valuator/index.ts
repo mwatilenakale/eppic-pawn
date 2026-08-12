@@ -16,6 +16,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import type { Rules } from '../playbook/index.ts';
+import type { PriceMemory } from './memory.ts';
 import type { Valuator } from '../router.ts';
 import type { MarketEstimate } from '../valuation.ts';
 import { CENTS, round } from '../money.ts';
@@ -68,12 +69,19 @@ export interface ClaudeValuatorOptions {
   model?: string;
   maxTokens?: number;
   onError?: (error: unknown) => void;
+  /** Recent owner corrections, given to the model as local evidence. */
+  memory?: PriceMemory | null;
 }
 
 export class ClaudeValuator implements Valuator {
   readonly #client: MessagesClient;
   readonly #rules: Rules;
-  readonly #options: Required<Omit<ClaudeValuatorOptions, 'onError'>> & { onError: (error: unknown) => void };
+  readonly #options: {
+    model: string;
+    maxTokens: number;
+    onError: (error: unknown) => void;
+    memory: PriceMemory | null;
+  };
 
   constructor(client: MessagesClient, rules: Rules, options: ClaudeValuatorOptions = {}) {
     this.#client = client;
@@ -82,6 +90,7 @@ export class ClaudeValuator implements Valuator {
       model: options.model ?? MODEL,
       maxTokens: options.maxTokens ?? 2048,
       onError: options.onError ?? ((error) => console.error('[valuator]', error)),
+      memory: options.memory ?? null,
     };
   }
 
@@ -132,8 +141,49 @@ export class ClaudeValuator implements Valuator {
     return [
       `Category: ${category?.label ?? input.categorySlug}${input.variant ? ` (${input.variant})` : ''}`,
       `Customer's description: ${input.description}`,
+      this.#recentCorrections(input.categorySlug),
       '',
       'What would this sell for second-hand in Namibia?',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  /**
+   * What the owner has actually paid recently, for this category.
+   *
+   * An exact match is used ahead of the model entirely — that lookup happens
+   * before this class is reached. What is passed here is the near misses: real
+   * prices from this shop, in this town, in the last fortnight, which are far
+   * better evidence than anything the model knows about Namibian resale.
+   *
+   * It is context, not instruction. The model still has to price the item in
+   * front of it, and an owner correction on a different phone does not settle
+   * what this one is worth.
+   */
+  #recentCorrections(categorySlug: string): string {
+    if (!this.#options.memory) return '';
+
+    const recent = this.#options.memory
+      .live()
+      .filter((price) => price.fingerprint.startsWith(`${categorySlug}|`))
+      .slice(0, 8);
+
+    if (recent.length === 0) return '';
+
+    const lines = recent.map((price) => {
+      const market = price.marketValueCents ?? (price.assessedValueCents !== null ? price.assessedValueCents / 0.75 : null);
+      const described = price.fingerprint.split('|')[2] || 'similar item';
+      return market !== null
+        ? `- ${described}: the owner valued at N$${Math.round(market / 100).toLocaleString('en-US')}`
+        : `- ${described}: the owner lent N$${Math.round(price.loanCents / 100).toLocaleString('en-US')}`;
+    });
+
+    return [
+      '',
+      'Recent prices this shop actually set for items in this category (owner corrections, last few weeks).',
+      'These are real local figures — weigh them heavily, but price the item described above, not these:',
+      ...lines,
     ].join('\n');
   }
 
@@ -158,7 +208,7 @@ export class ClaudeValuator implements Valuator {
  * Builds the valuator when an API key is configured. Returns null otherwise —
  * the agent runs fine without one, it just asks Lukas for the figure.
  */
-export function createValuator(apiKey: string | null, rules: Rules): Valuator | null {
+export function createValuator(apiKey: string | null, rules: Rules, memory?: PriceMemory): Valuator | null {
   if (!apiKey) return null;
-  return new ClaudeValuator(new Anthropic({ apiKey }) as unknown as MessagesClient, rules);
+  return new ClaudeValuator(new Anthropic({ apiKey }) as unknown as MessagesClient, rules, { memory });
 }

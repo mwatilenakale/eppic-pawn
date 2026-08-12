@@ -561,6 +561,10 @@ export class Store {
     return row;
   }
 
+  valuation(valuationId: string): Valuation | null {
+    return (this.db.prepare('SELECT * FROM valuations WHERE id = ?').get(valuationId) as unknown as Valuation) ?? null;
+  }
+
   /** Keeps the engine's number and records Lukas's alongside it. */
   recordValuationOverride(valuationId: string, overrideCents: number, note: string, actor: string): void {
     this.db.prepare('UPDATE valuations SET override_cents = ?, override_note = ? WHERE id = ?').run(overrideCents, note, valuationId);
@@ -593,6 +597,23 @@ export class Store {
       .run(row.id, row.item_id, row.valuation_id, row.conversation_id, row.suggested_loan_cents, row.created_at);
     this.audit({ actor: 'agent', action: 'approval.requested', entity: 'approval', entityId: row.id, details: { suggestedLoanCents: row.suggested_loan_cents } });
     return row;
+  }
+
+  /**
+   * Moves the suggested figure without deciding the application. Adjusting a
+   * price is not approving a loan — the row stays pending either way.
+   */
+  updateApprovalSuggestion(approvalId: string, suggestedLoanCents: number, actor: string): Approval {
+    const before = this.approval(approvalId);
+    this.db.prepare('UPDATE approvals SET suggested_loan_cents = ? WHERE id = ? AND status = ?').run(suggestedLoanCents, approvalId, 'pending');
+    this.audit({
+      actor,
+      action: 'approval.adjusted',
+      entity: 'approval',
+      entityId: approvalId,
+      details: { from: before?.suggested_loan_cents ?? null, to: suggestedLoanCents },
+    });
+    return this.approval(approvalId)!;
   }
 
   approval(approvalId: string): Approval | null {

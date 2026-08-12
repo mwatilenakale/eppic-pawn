@@ -63,6 +63,13 @@ npm run import -- ~/Eppic_PawnWorkbook.xlsx   # dry run against the existing boo
   the playbook differ. Device PINs written into the description column move into
   encrypted storage on the way in. A second run imports nothing twice, and a bad
   import is undone by reversing entries, never by deleting any.
+- **An estimate on the website, adjustable by you** — the quote screen shows
+  market value, assessed value, the pawn loan and the buy-outright price, all
+  labelled as an estimate and carrying the verification banner. Reply
+  `ADJUST <ref> market 8000 buy 4500` and any figure moves; correcting one high
+  up carries down the playbook's chain, and anything you type explicitly beats
+  what would be derived. Adjustments are remembered for 14 days, reused for the
+  next item of the same kind, and fed to the estimator as local evidence.
 - **Your book, over WhatsApp** — `BOOK` for what's out and what's come in,
   `DUE` for the week ahead, `OVERDUE` for what's past grace and what's still in
   it, `CUSTOMER <name or number>` for one person's history. This is what the
