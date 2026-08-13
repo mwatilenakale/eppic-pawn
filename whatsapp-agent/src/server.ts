@@ -86,6 +86,8 @@ export function buildServer(
         loanCents: remembered.loanCents,
         buyNowCents: remembered.buyNowCents ?? buyNowFrom(remembered.loanCents, rules),
         fromAdjustment: true,
+        belowMinimum: remembered.loanCents < rules.playbook.loanSizing.minimumLoanCents,
+        minimumLoanCents: rules.playbook.loanSizing.minimumLoanCents,
       };
     }
 
@@ -101,6 +103,8 @@ export function buildServer(
         loanCents: valuation.suggestedLoanCents,
         buyNowCents: valuation.buyNowCents,
         fromAdjustment: false,
+        belowMinimum: valuation.belowMinimum,
+        minimumLoanCents: rules.playbook.loanSizing.minimumLoanCents,
       };
     } catch (error) {
       // A failed estimate is not a failed application: the customer still gets

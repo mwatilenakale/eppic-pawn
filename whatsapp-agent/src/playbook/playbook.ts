@@ -87,6 +87,8 @@ export interface Playbook {
     formula: string;
     /** How much more than the pawn loan an outright purchase pays, as a percentage. */
     buyNowMarkupPct: number;
+    /** Below this the shop declines: the handling costs the same either way. */
+    minimumLoanCents: number;
   };
   /** Days an override by Lukas is reused before it expires (section 3). */
   adjustmentMemoryDays: number;
@@ -180,7 +182,8 @@ function readLoanSizing(path: string, block: string): Playbook['loanSizing'] {
   const find = (pattern: RegExp): number | null => {
     for (const step of steps) {
       const match = pattern.exec(step);
-      if (match) return Number(match[1]);
+      // Thousands separators are normal in the document: N$1,000.
+      if (match) return Number(match[1]!.replace(/,/g, ''));
     }
     return null;
   };
@@ -188,6 +191,7 @@ function readLoanSizing(path: string, block: string): Playbook['loanSizing'] {
   const discountFactor = find(/multiply by\s+(\d+(?:\.\d+)?)/i);
   const divisor = find(/divide (?:that )?by\s+(\d+(?:\.\d+)?)/i);
   const buyNowMarkupPct = find(/buy-now price:\s*the pawn loan plus\s+(\d+(?:\.\d+)?)\s*%/i);
+  const minimumLoan = find(/minimum loan:\s*N\$\s?([\d,]+(?:\.\d+)?)/i);
   const basisLine = steps.find((step) => /take the\s+\*?\*?(lowest|highest|average)/i.test(step));
   const basis = /lowest/i.test(basisLine ?? '') ? 'lowest' : /highest/i.test(basisLine ?? '') ? 'highest' : 'average';
 
@@ -197,12 +201,16 @@ function readLoanSizing(path: string, block: string): Playbook['loanSizing'] {
   if (buyNowMarkupPct === null) {
     throw new PlaybookError(path, `section ${SECTIONS.loanSizing} does not state the buy-now price`);
   }
+  if (minimumLoan === null) {
+    throw new PlaybookError(path, `section ${SECTIONS.loanSizing} does not state the minimum loan`);
+  }
 
   return {
     basis,
     discountFactor,
     divisor,
     buyNowMarkupPct,
+    minimumLoanCents: Math.round(minimumLoan * 100),
     formula: `${basis} market estimate x ${discountFactor} / ${divisor}`,
   };
 }

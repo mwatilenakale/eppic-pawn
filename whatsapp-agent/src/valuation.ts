@@ -35,6 +35,11 @@ export interface Valuation {
    * to redeem; a purchase can be resold the next day.
    */
   buyNowCents: number;
+  /**
+   * True when the loan lands under the playbook's floor. Not a fault in the
+   * item — a small loan is the same work as a large one, so the shop declines.
+   */
+  belowMinimum: boolean;
   /** Share of the basis estimate the suggested loan represents. */
   loanToEstimatePct: number;
   /** Step-by-step working, shown in the approval message. */
@@ -52,7 +57,8 @@ export function suggestValuation(estimates: MarketEstimate[], rules: Rules): Val
     throw new ValuationError('Market estimates must be positive amounts');
   }
 
-  const { basis: basisRule, discountFactor, divisor, formula, buyNowMarkupPct } = rules.playbook.loanSizing;
+  const { basis: basisRule, discountFactor, divisor, formula, buyNowMarkupPct, minimumLoanCents } =
+    rules.playbook.loanSizing;
   const sorted = [...estimates].sort((a, b) => a.amountCents - b.amountCents);
   const basis =
     basisRule === 'highest' ? sorted[sorted.length - 1]! : basisRule === 'lowest' ? sorted[0]! : averageOf(sorted);
@@ -67,6 +73,7 @@ export function suggestValuation(estimates: MarketEstimate[], rules: Rules): Val
     assessedValueCents,
     suggestedLoanCents,
     buyNowCents,
+    belowMinimum: suggestedLoanCents < minimumLoanCents,
     loanToEstimatePct: (suggestedLoanCents / basis.amountCents) * 100,
     formula,
     workings: [
@@ -74,6 +81,9 @@ export function suggestValuation(estimates: MarketEstimate[], rules: Rules): Val
       `x ${discountFactor} = ${formatAmount(assessedValueCents)} assessed value`,
       `/ ${divisor} = ${formatAmount(suggestedLoanCents)} suggested loan`,
       `+ ${buyNowMarkupPct}% = ${formatAmount(buyNowCents)} to buy it outright`,
+      ...(suggestedLoanCents < minimumLoanCents
+        ? [`below the ${formatAmount(minimumLoanCents)} minimum — the playbook declines this`]
+        : []),
     ],
   };
 }

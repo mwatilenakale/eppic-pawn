@@ -60,6 +60,19 @@ it stays a human sign-off, since it's the step most exposed to fraud
 sees on the website is an **estimate**, clearly marked as not final until
 Lukas has approved it.
 
+### Minimum loan
+
+- **Minimum loan: N$1,000.** Anything that prices below that is declined.
+
+Not because the item is bad — because a small loan is the same work as a
+large one. The intake, the inspection, the contract, the storage and the
+chasing all cost the same whether the loan is N$300 or N$3,000, and at
+the bottom end the interest does not cover the handling.
+
+This is also what turns away obsolete stock without keeping a list of
+models. An iPhone 7 prices below the floor on its own, and so will an
+iPhone 11 in a few years, with nothing to maintain.
+
 ### Buying outright
 
 Some customers would rather sell the item than pawn it. That offer is

@@ -369,6 +369,13 @@ export function composeApprovalMessage(
     lines.push('*Suggested loan (your formula, not an offer):*');
     for (const step of valuation.workings) lines.push(`  ${step}`);
     lines.push(`  → ${terms.ratePct}% over ${terms.termDays} days = ${formatAmount(terms.totalDueCents)} due ${dates.dueDate}`);
+    if (valuation.belowMinimum) {
+      lines.push('');
+      lines.push(
+        `⚠️ *Under your ${formatAmount(rules.playbook.loanSizing.minimumLoanCents)} minimum.* ` +
+          'The playbook declines these — same work as a big loan, and the interest does not cover it.',
+      );
+    }
   } else {
     lines.push('*No market estimate yet* — reply with the amount you want to offer.');
   }

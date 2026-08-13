@@ -59,6 +59,10 @@ export interface PrecheckQuote {
   buyNowCents: number;
   /** True when this came from an adjustment Lukas made, not from an estimate. */
   fromAdjustment: boolean;
+  /** The loan falls under the playbook's minimum, so the shop declines. */
+  belowMinimum: boolean;
+  /** The floor itself, so the page can say what it is without reading the rules. */
+  minimumLoanCents: number;
 }
 
 export interface PrecheckOutcome {

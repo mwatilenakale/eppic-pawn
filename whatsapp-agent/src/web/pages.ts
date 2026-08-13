@@ -199,9 +199,9 @@ export function outcomePage(outcome: PrecheckOutcome, whatsapp: string): string 
       <h1>${escapeHtml(outcome.headline)}</h1>
     </header>
 
-    ${outcome.quote ? quoteCard(outcome.quote) : noQuoteCard()}
+    ${outcome.quote?.belowMinimum ? tooSmallCard(outcome.quote) : outcome.quote ? quoteCard(outcome.quote) : noQuoteCard()}
 
-    ${verificationBanner()}
+    ${outcome.quote?.belowMinimum ? '' : verificationBanner()}
 
     ${
       outcome.notes.length
@@ -264,6 +264,22 @@ function quoteCard(quote: PrecheckQuote): string {
       Pawn it and you pay the loan back with interest and keep the item. Sell it outright and you get more
       cash now, but the item is ours.
     </p>
+  </div>`;
+}
+
+/**
+ * Under the playbook's floor. Said plainly and without blaming the item —
+ * the reason is the shop's handling cost, not the customer's phone.
+ */
+function tooSmallCard(quote: PrecheckQuote): string {
+  return `<div class="card">
+    <h2>This one is too small for us</h2>
+    <p class="lead" style="margin-top:var(--space-3)">Your item comes out at about
+      ${escapeHtml(formatAmount(quote.loanCents))}, and we don't take on loans under
+      ${escapeHtml(formatAmount(quote.minimumLoanCents))}. A small loan is the same amount of work as a big
+      one, so we would not be doing you any favours at that size.</p>
+    <p class="muted" style="margin-top:var(--space-4)">If you have something worth more — a car,
+      a laptop, a newer phone — we would be glad to look at that instead.</p>
   </div>`;
 }
 

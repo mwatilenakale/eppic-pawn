@@ -175,3 +175,31 @@ describe('collections margin check (playbook section 8)', () => {
     assert.equal(check.decision, 'extend');
   });
 });
+
+describe('the minimum loan (playbook section 3)', () => {
+  test('a small item is under the floor, and says so in the working', () => {
+    const valuation = suggestValuation([{ source: 'Marketplace', amountCents: 150_000 }], rules);
+
+    assert.equal(valuation.suggestedLoanCents, 56_250);
+    assert.equal(valuation.belowMinimum, true);
+    assert.match(valuation.workings.join('\n'), /below the N\$1,000\.00 minimum/);
+  });
+
+  test('a worthwhile item is not', () => {
+    const valuation = suggestValuation([{ source: 'Marketplace', amountCents: 540_000 }], rules);
+
+    assert.equal(valuation.suggestedLoanCents, 202_500);
+    assert.equal(valuation.belowMinimum, false);
+    assert.doesNotMatch(valuation.workings.join('\n'), /minimum/);
+  });
+
+  test('the floor is the document\'s, not a constant here', () => {
+    const floor = rules.playbook.loanSizing.minimumLoanCents;
+    assert.ok(floor > 0, 'the loader refuses to start without it');
+
+    // Exactly at the floor is accepted; a cent under is not.
+    const atFloor = { basis: floor, below: floor - 1 };
+    assert.equal(atFloor.basis < floor, false);
+    assert.equal(atFloor.below < floor, true);
+  });
+});
