@@ -47,7 +47,13 @@ export function buildServer(
 
   const memory = new PriceMemory(store, rules);
   const valuator =
-    overrides.valuator === undefined ? createValuator(config.anthropicApiKey, rules, memory) : overrides.valuator;
+    overrides.valuator === undefined
+      ? createValuator(
+          { openai: config.openaiApiKey, anthropic: config.anthropicApiKey, provider: config.valuatorProvider },
+          rules,
+          memory,
+        )
+      : overrides.valuator;
 
   const contracts = new ContractService(store, rules, { baseUrl: config.publicBaseUrl });
   const directory = new CustomerDirectory(store);

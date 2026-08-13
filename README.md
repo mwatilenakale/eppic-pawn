@@ -75,6 +75,11 @@ npm run import -- ~/Eppic_PawnWorkbook.xlsx   # dry run against the existing boo
   workbook's DASHBOARD and ACTIVE LOANS tabs were doing, so there's no longer a
   reason to keep both. Every figure is summed from the ledger, and none of
   these commands can write anything.
+- **Market estimates from OpenAI or Anthropic** — one env var picks the
+  provider. Both are asked the same question against the same schema, with the
+  same sanity checks, and the playbook's arithmetic runs in code either way, so
+  the choice cannot change what the shop lends. With neither key set the agent
+  still runs end to end and asks Lukas for the amount.
 - **Records** — SQLite with an append-only ledger, encrypted ID photos and
   signatures, and an audit log of who decided what.
 

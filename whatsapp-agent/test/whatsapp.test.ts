@@ -274,6 +274,8 @@ describe('http server', () => {
     mediaDirectory: mkdtempSync(join(tmpdir(), 'eppic-http-')),
     mediaKey: Buffer.from(generateMediaKey(), 'hex'),
     anthropicApiKey: null,
+    openaiApiKey: null,
+    valuatorProvider: null,
   };
 
   test('handshake, signature enforcement and delivery', async () => {

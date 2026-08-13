@@ -54,7 +54,15 @@ async function main(): Promise<void> {
     rules,
     transport,
     ownerPhone: OWNER,
-    valuator: createValuator(process.env['ANTHROPIC_API_KEY'] ?? null, rules) ?? undefined,
+    valuator:
+      createValuator(
+        {
+          openai: process.env['OPENAI_API_KEY'] ?? null,
+          anthropic: process.env['ANTHROPIC_API_KEY'] ?? null,
+          provider: process.env['VALUATOR_PROVIDER'] ?? null,
+        },
+        rules,
+      ) ?? undefined,
   });
 
   console.log('Eppic Pawn Shop — WhatsApp agent simulator');

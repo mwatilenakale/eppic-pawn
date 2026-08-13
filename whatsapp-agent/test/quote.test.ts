@@ -42,6 +42,8 @@ const config = {
   mediaDirectory: mkdtempSync(join(tmpdir(), 'eppic-quote-')),
   mediaKey: Buffer.from(generateMediaKey(), 'hex'),
   anthropicApiKey: null,
+  openaiApiKey: null,
+  valuatorProvider: null,
 };
 
 let store: Store;

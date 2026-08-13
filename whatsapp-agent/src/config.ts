@@ -24,6 +24,9 @@ export interface Config {
   mediaDirectory: string;
   mediaKey: Buffer;
   anthropicApiKey: string | null;
+  openaiApiKey: string | null;
+  /** 'openai' | 'anthropic', or null to pick by whichever key is set. */
+  valuatorProvider: string | null;
 }
 
 export class ConfigError extends Error {}
@@ -58,5 +61,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     mediaDirectory: resolve(env['EPPIC_MEDIA_DIR'] ?? 'data/media'),
     mediaKey: Buffer.from(mediaKeyHex, 'hex'),
     anthropicApiKey: env['ANTHROPIC_API_KEY'] ?? null,
+    openaiApiKey: env['OPENAI_API_KEY'] ?? null,
+    valuatorProvider: env['VALUATOR_PROVIDER'] ?? null,
   };
 }

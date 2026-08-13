@@ -146,6 +146,8 @@ describe('the signing page over HTTP', () => {
     mediaDirectory: mkdtempSync(join(tmpdir(), 'eppic-sign-http-')),
     mediaKey: Buffer.from(generateMediaKey(), 'hex'),
     anthropicApiKey: null,
+  openaiApiKey: null,
+  valuatorProvider: null,
   };
 
   test('a customer can open the contract, sign it, and see it confirmed', async () => {

@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadRules } from '../src/playbook/index.ts';
-import { ClaudeValuator, createValuator, type MessagesClient } from '../src/valuator/index.ts';
+import { ClaudeValuator, OpenAiValuator, createValuator, type MessagesClient } from '../src/valuator/index.ts';
 import { suggestValuation } from '../src/valuation.ts';
 
 const rules = loadRules();
@@ -121,7 +121,104 @@ describe('claude valuator', () => {
   });
 
   test('with no API key there is no valuator — Lukas is asked for the amount', () => {
-    assert.equal(createValuator(null, rules), null);
-    assert.notEqual(createValuator('sk-ant-test', rules), null);
+    assert.equal(createValuator({}, rules), null);
+    assert.equal(createValuator({ openai: null, anthropic: null }, rules), null);
+  });
+
+  test('the provider is whichever key is configured', () => {
+    assert.ok(createValuator({ anthropic: 'sk-ant-test' }, rules) instanceof ClaudeValuator);
+    assert.ok(createValuator({ openai: 'sk-test' }, rules) instanceof OpenAiValuator);
+    // Explicit on this deployment: OpenAI wins when both are present.
+    assert.ok(createValuator({ openai: 'sk-test', anthropic: 'sk-ant-test' }, rules) instanceof OpenAiValuator);
+  });
+
+  test('asking for a provider whose key is missing fails loudly', () => {
+    // Silently falling back would mean paying a different bill than intended,
+    // and quietly using a model nobody chose.
+    assert.throws(() => createValuator({ provider: 'openai', anthropic: 'sk-ant-test' }, rules), /OPENAI_API_KEY is not set/);
+    assert.throws(() => createValuator({ provider: 'anthropic', openai: 'sk-test' }, rules), /ANTHROPIC_API_KEY is not set/);
+  });
+});
+
+describe('the OpenAI valuator', () => {
+  const ITEM_IN = { description: 'iPhone 13 Pro, 256GB, good condition', categorySlug: 'phones', variant: 'iphone' };
+
+  /** Stands in for the API; records what was sent. */
+  const stubFetch = (payload: unknown, calls: { url: string; body: Record<string, unknown> }[] = [], status = 200) =>
+    (async (url: string, init: RequestInit) => {
+      calls.push({ url: String(url), body: JSON.parse(String(init.body)) });
+      return new Response(JSON.stringify(payload), { status });
+    }) as unknown as typeof fetch;
+
+  const reply = (content: unknown) => ({ choices: [{ message: { content: JSON.stringify(content) } }] });
+
+  test('asks the same question, against the same schema', async () => {
+    const calls: { url: string; body: Record<string, unknown> }[] = [];
+    const valuator = new OpenAiValuator('sk-test', rules, {
+      fetch: stubFetch(reply({ estimates: [{ source: 'Marketplace', amount_nad: 9000, condition: 'used' }], confidence: 'high', note: '' }), calls),
+    });
+
+    const estimates = await valuator.estimate(ITEM_IN);
+
+    assert.equal(estimates.length, 1);
+    assert.equal(estimates[0]!.amountCents, 900_000);
+    assert.match(calls[0]!.url, /api\.openai\.com/);
+
+    const body = calls[0]!.body as { messages: { role: string; content: string }[]; response_format: Record<string, never> };
+    assert.equal(body.messages[0]!.role, 'system');
+    assert.match(body.messages[0]!.content, /pawn shop in Windhoek/);
+    assert.match(body.messages[0]!.content, /Never suggest a loan amount/, 'it is never asked what to lend');
+    assert.match(body.messages[1]!.content, /iPhone 13 Pro/);
+    assert.equal((body.response_format as unknown as { type: string }).type, 'json_schema');
+  });
+
+  test('the same sanity checks apply — an absurd figure is dropped', async () => {
+    const valuator = new OpenAiValuator('sk-test', rules, {
+      fetch: stubFetch(
+        reply({
+          estimates: [
+            { source: 'sane', amount_nad: 9000, condition: 'used' },
+            { source: 'typo', amount_nad: 900_000_000, condition: 'used' },
+            { source: 'nonsense', amount_nad: 1, condition: 'used' },
+          ],
+          confidence: 'medium',
+          note: '',
+        }),
+      ),
+    });
+
+    const estimates = await valuator.estimate(ITEM_IN);
+    assert.deepEqual(estimates.map((estimate) => estimate.amountCents), [900_000]);
+    assert.match(estimates[0]!.source, /medium confidence/);
+  });
+
+  test('an API failure means no figure, not a guess', async () => {
+    const errors: unknown[] = [];
+    const valuator = new OpenAiValuator('sk-test', rules, {
+      onError: (error) => errors.push(error),
+      fetch: (async () => new Response('model not found', { status: 404 })) as unknown as typeof fetch,
+    });
+
+    assert.deepEqual(await valuator.estimate(ITEM_IN), []);
+    assert.match(String(errors[0]), /404.*model not found/s, 'and the reason is not swallowed');
+  });
+
+  test('a refusal is treated as no answer', async () => {
+    const errors: unknown[] = [];
+    const valuator = new OpenAiValuator('sk-test', rules, {
+      onError: (error) => errors.push(error),
+      fetch: stubFetch({ choices: [{ message: { refusal: 'I cannot help with that' } }] }),
+    });
+
+    assert.deepEqual(await valuator.estimate(ITEM_IN), []);
+    assert.match(String(errors[0]), /refused/i);
+  });
+
+  test('an empty description is not sent anywhere', async () => {
+    const calls: { url: string; body: Record<string, unknown> }[] = [];
+    const valuator = new OpenAiValuator('sk-test', rules, { fetch: stubFetch(reply({ estimates: [], confidence: 'low', note: '' }), calls) });
+
+    assert.deepEqual(await valuator.estimate({ ...ITEM_IN, description: '   ' }), []);
+    assert.equal(calls.length, 0, 'no request, no cost');
   });
 });

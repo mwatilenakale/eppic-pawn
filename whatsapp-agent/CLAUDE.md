@@ -50,9 +50,12 @@ These are genuinely unanswered — don't guess at them, ask:
    Ledger workbook via an API, a simple database from the start, or
    another lightweight store. Don't default to the full schema before
    it's needed.
-4. **Claude API access** — this agent's conversation logic should call
-   the Claude API directly. Confirm API key/billing setup as part of
-   this step, not assumed to already exist.
+4. **LLM API access** — resolved. Market estimates come from either
+   OpenAI or Anthropic, chosen by which key is set; the deployment
+   choice is OpenAI. Both are asked the same question against the same
+   schema, and the playbook's arithmetic runs in code afterwards, so the
+   provider cannot change what the shop lends. Billing still has to
+   exist with whichever is chosen.
 
 ## Suggested first milestone
 
