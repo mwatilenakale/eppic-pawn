@@ -96,8 +96,19 @@ export interface Playbook {
   grace: { defaultDays: number; flexibleUpToDays: number };
   partialPaymentCompounds: boolean;
   collections: { marginThresholdPct: number };
-  /** Documents required on every loan (section 5). */
+  /** Documents the customer brings in (section 5). */
   requirements: string[];
+  /**
+   * Things they must be able to confirm but do not hand over (section 5).
+   * Kept apart from the documents because "bring this with you" and "this
+   * must be true of your item" are different instructions.
+   */
+  declarations: string[];
+  /**
+   * Above this market value a signed declaration is not enough — the
+   * original receipt or a settlement letter is required (section 5).
+   */
+  proofOfPurchaseAboveCents: number;
   /** Screening bullets per category slug (section 6). */
   screening: Map<string, ChecklistItem[]>;
 }
@@ -128,7 +139,7 @@ export function loadPlaybook(path: string): Playbook {
     rates: readRates(path, need(SECTIONS.rates, 'interest rates & terms')),
     ...readGraceAndPartials(path, need(SECTIONS.rates, 'interest rates & terms')),
     collections: readCollections(path, need(SECTIONS.collections, 'default & collections')),
-    requirements: bullets(need(SECTIONS.requirements, 'requirements')).map(plain),
+    ...readRequirements(path, need(SECTIONS.requirements, 'requirements')),
     screening,
   };
 }
@@ -146,6 +157,42 @@ function readBusinessNumber(path: string, markdown: string): string {
     throw new PlaybookError(path, 'the header does not give the business WhatsApp number (expected a line like "WhatsApp: 081-282-3046")');
   }
   return match[1]!.trim().replace(/[.,]$/, '');
+}
+
+/**
+ * Section 5 holds three different kinds of thing, and the document says which
+ * is which: documents to bring, statements to confirm, and the policy line.
+ * Mixing them put "proof of purchase required above N$5,000" on the website
+ * under "bring with you", which is neither true nor useful.
+ */
+function readRequirements(
+  path: string,
+  block: string,
+): Pick<Playbook, 'requirements' | 'declarations' | 'proofOfPurchaseAboveCents'> {
+  const [documentPart = '', confirmPart = ''] = block.split(/^.*must also be able to confirm.*$/im, 2);
+
+  const requirements = bullets(documentPart).map(plain);
+  if (requirements.length === 0) {
+    throw new PlaybookError(path, `section ${SECTIONS.requirements} lists no documents to bring`);
+  }
+
+  return {
+    requirements,
+    declarations: bullets(confirmPart).map(plain),
+    proofOfPurchaseAboveCents: readProofThreshold(path, block),
+  };
+}
+
+/**
+ * Where a declaration stops being enough. Below it the loss is bounded and
+ * the friction is not worth it; above it the shop wants the actual receipt.
+ */
+function readProofThreshold(path: string, block: string): number {
+  const match = /proof of purchase required above\s*N\$\s?([\d,]+(?:\.\d+)?)/i.exec(plain(block));
+  if (!match) {
+    throw new PlaybookError(path, `section ${SECTIONS.requirements} does not say above what value proof of purchase is required`);
+  }
+  return Math.round(Number(match[1]!.replace(/,/g, '')) * 100);
 }
 
 export class PlaybookError extends Error {

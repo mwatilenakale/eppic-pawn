@@ -92,8 +92,12 @@ system won't let an item pass without:
   replacement, IMEI blacklisted post-loan.
 - **Android:** Google/Samsung account removed, Factory Reset Protection
   cleared, model and storage verified inside settings (not just asked),
-  IMEI + dual-SIM IMEIs recorded; watch for fake-storage firmware,
-  FRP-locked devices, blacklisted IMEIs, aftermarket screens.
+  IMEI + dual-SIM IMEIs recorded; no device administrator active under
+  Settings; no Knox Guard enrolment; no "managed by your organisation"
+  notice; factory reset **and setup completed in front of staff**, since
+  an enrolled handset only asks for the financier's credentials on the
+  way back up; watch for fake-storage firmware, FRP-locked devices,
+  blacklisted IMEIs, aftermarket screens.
 - **Laptop:** exact model, BIOS serial, BIOS password and BitLocker
   status, Microsoft/organisation enrolment (flags a stolen work
   laptop), battery health, drive health, restart + battery-only test;

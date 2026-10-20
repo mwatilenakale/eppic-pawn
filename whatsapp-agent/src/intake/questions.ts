@@ -142,8 +142,25 @@ export function buildQuestionPlan(rules: Rules, categorySlug: string, variant: s
     });
   }
 
+  // Asked before anything is collected: a "no, it is still on an account"
+  // should end the conversation before the customer has been made to
+  // photograph their ID.
+  for (const declaration of rules.playbook.declarations) {
+    const id = `declaration-${slug(declaration)}`;
+    if (questions.some((question) => question.id === id)) continue;
+
+    questions.push({
+      id,
+      kind: 'confirm',
+      ask: `Can you confirm: ${stripLeadIn(declaration)}\n\nReply *yes*, *no*, or *not sure*.`,
+      source: 'documents',
+      optional: false,
+    });
+  }
+
   for (const requirement of rules.playbook.requirements) {
     if (NOT_COLLECTED_REMOTELY.test(requirement)) continue;
+
     const request = DOCUMENT_REQUESTS.find((entry) => entry.pattern.test(requirement));
     if (!request) continue;
     if (questions.some((question) => question.photoKind === request.photoKind)) continue;
@@ -161,6 +178,10 @@ export function buildQuestionPlan(rules: Rules, categorySlug: string, variant: s
   return { categorySlug, variant, questions, inPersonChecks };
 }
 
+function slug(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+}
+
 function isInPersonOnly(text: string): boolean {
   return IN_PERSON_ONLY.some((pattern) => pattern.test(text));
 }
@@ -173,7 +194,7 @@ function isInPersonOnly(text: string): boolean {
 const ENUMERATION_LEAD = /watch(ing)? for|fraud patterns|for dead pixels/i;
 
 /** Clauses that continue the previous sentence rather than starting a new check. */
-const CONTINUATION = /^(but|to|he|she|it|they|if|that|which|rather|so|though|although)\b/i;
+const CONTINUATION = /^(but|to|he|she|it|they|if|that|which|rather|so|though|although|since|because|as long as|unless)\b/i;
 
 /**
  * Splits a bullet into clauses and decides which side of the remote/in-person

@@ -120,10 +120,38 @@ stale correction is worse than a fresh estimate.
 
 ## 5. Requirements (every loan)
 
+Documents to bring:
+
 - Copy of ID
 - Proof of ownership / declaration
 - Signed agreement
 - Police declaration of ownership
+
+The customer must also be able to confirm:
+
+- Bought outright, not on an account or payment plan
+
+Policy: **proof of purchase required above N$5,000** market value — the
+original receipt, or a settlement letter where it was bought on credit.
+
+On that last pair: a credit agreement is proof of a **debt**, not proof of
+ownership. Until it is settled the financier has a better claim on the item
+than the person holding it — and, on a phone, a switch that turns it off.
+
+This is the Spectra lesson. A new S25 Ultra came in with its box and no
+receipt, still on a Spectra account. It passed every inspection, because
+nothing was wrong with it that day. The customer stopped paying, Spectra
+locked the handset remotely weeks later, and the shop was left holding a
+brick. No inspection can catch that — only the paperwork can, before the
+item is ever taken in.
+
+Section 2.3 of the architecture already said this for cars: *"a paid-off
+declaration from the customer is evidence against them if false, but
+doesn't override a bank's actual claim on a still-financed car."* The same
+is now true of everything above the threshold.
+
+Below N$5,000 a signed declaration remains enough — the loss is bounded and
+the friction is not worth it.
 
 ## 6. Item screening checklists
 
@@ -139,6 +167,8 @@ stale correction is worse than a fresh estimate.
 - Box present? iCloud/account signed out + bypassed, diagnostic mode to
   check all features, test call for speakers, Face ID check
 - Proof of ownership, ID, signed agreement
+- Not under finance — a handset still on an account can be switched off
+  remotely by whoever is owed the money
 
 **Watches (Apple / Android, newer models only)**
 - Same as phones. **[decide]** — use a minimum loan-value threshold

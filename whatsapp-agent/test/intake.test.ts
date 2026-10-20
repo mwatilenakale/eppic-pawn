@@ -222,3 +222,51 @@ describe('intake conversation', () => {
     assert.match(JSON.parse(inspection.outstanding).join(' | '), /IMEI|Activation Lock|fraud/i);
   });
 });
+
+describe('the finance check (the Spectra case)', () => {
+  test('every customer is asked whether the item is on an account', () => {
+    for (const category of rules.categories) {
+      const asks = buildQuestionPlan(rules, category.slug).questions.map((question) => question.ask).join('\n');
+      assert.match(asks, /bought outright, not on an account/i, `${category.slug} never asks about finance`);
+    }
+  });
+
+  test('it is asked before any document is collected', () => {
+    const questions = buildQuestionPlan(rules, 'phones', 'android').questions;
+    const finance = questions.findIndex((question) => /bought outright/i.test(question.ask));
+    const firstDocument = questions.findIndex((question) => question.source === 'documents' && question.kind === 'photo');
+
+    assert.ok(finance >= 0 && firstDocument >= 0);
+    assert.ok(
+      finance < firstDocument,
+      'a "no, it is still on an account" must end the conversation before anyone photographs their ID',
+    );
+  });
+
+  test('a requirement that is not a document is still asked, not dropped', () => {
+    // The loader used to silently skip any section 5 line that matched no
+    // photo pattern, which is how this check went missing in the first place.
+    const asks = buildQuestionPlan(rules, 'laptops').questions.map((question) => question.ask).join('\n');
+    assert.match(asks, /bought outright/i);
+  });
+
+  test('a policy line is not turned into a question', () => {
+    const asks = buildQuestionPlan(rules, 'phones', 'iphone').questions.map((question) => question.ask).join('\n');
+    assert.doesNotMatch(asks, /required above|^policy/im, 'a threshold is a rule, not something to confirm');
+  });
+
+  test('Android is asked about financing locks specifically', () => {
+    const asks = buildQuestionPlan(rules, 'phones', 'android').questions.map((question) => question.ask).join('\n');
+
+    assert.match(asks, /knox guard/i);
+    assert.match(asks, /device administrator/i);
+    assert.match(asks, /managed by your organisation/i);
+  });
+
+  test('an explanatory clause does not become its own question', () => {
+    // "…, since an enrolled handset only asks for the financier's credentials"
+    // is a reason, not a check. Splitting on it produced a nonsense question.
+    const asks = buildQuestionPlan(rules, 'phones', 'android').questions.map((question) => question.ask).join('\n');
+    assert.doesNotMatch(asks, /Can you confirm: (since|because)\b/i);
+  });
+});
