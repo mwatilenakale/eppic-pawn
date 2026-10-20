@@ -63,6 +63,12 @@ export interface ContractDocument {
 const GENERAL_DECLARATIONS = [
   'The item described above is mine. I own it outright and nobody else has a claim over it.',
   'The item is not stolen, and I have not reported it lost or stolen.',
+  // The Spectra case. Until a credit agreement is settled the financier has a
+  // better claim on the item than the person pledging it — and, on a phone, a
+  // switch. The clause does not unlock anything; it turns a total write-off
+  // into a debt that can be pursued.
+  'The item is not subject to any instalment, credit or financing agreement. Nothing is still owed on it to a shop, a bank or a network.',
+  'If the item is later blocked, locked or disabled remotely by anyone with a claim over it, I remain liable for the full amount owed under this agreement.',
   'Everything I have told Eppic Pawn Shop about the item is true, including its make, model and condition.',
 ];
 

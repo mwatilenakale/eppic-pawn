@@ -201,3 +201,22 @@ describe('the signing link', () => {
     assert.throws(() => later.openForSigning(issued.contract.token), /expired/i);
   });
 });
+
+describe('the finance warranty (the Spectra case)', () => {
+  test('every agreement says the item is not under finance', () => {
+    for (const slug of ['phones', 'laptops', 'tvs', 'consoles', 'cars']) {
+      const issued = contracts.issueForApproval(approvedApplication(375_000, slug).id, { actor: lukas.id });
+      const declarations = issued.contract.body_html;
+
+      assert.match(declarations, /not subject to any instalment, credit or financing agreement/i, slug);
+      assert.match(declarations, /remain liable for the full amount/i, `${slug} does not keep them liable`);
+      store.voidContract(issued.contract.id, 'test cleanup', lukas.id);
+    }
+  });
+
+  test('it reaches the signed document, not just the data', () => {
+    const issued = contracts.issueForApproval(approvedApplication().id, { actor: lukas.id });
+    assert.match(issued.contract.body_html, /not subject to any instalment, credit or financing/i);
+    assert.match(issued.contract.body_html, /blocked, locked or disabled remotely/i);
+  });
+});
