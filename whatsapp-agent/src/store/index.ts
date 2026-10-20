@@ -14,6 +14,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { MIGRATIONS } from './schema.ts';
 import { MediaStore } from './media.ts';
+import { generateStaffToken, hashStaffToken } from '../staff/access.ts';
 
 export { MediaStore, generateMediaKey, mediaKeyFromEnv, MediaKeyError } from './media.ts';
 
@@ -203,6 +204,49 @@ export class Store {
       .prepare('INSERT INTO users (id, name, phone, role, created_at) VALUES (?, ?, ?, ?, ?)')
       .run(row.id, row.name, row.phone, row.role, this.#now());
     return row;
+  }
+
+  // --- staff links --------------------------------------------------------
+
+  /**
+   * Issues a link for a member of staff. The token is returned once, here,
+   * and never again — only its digest is kept.
+   */
+  issueStaffToken(userId: string, label = ''): { token: string; id: string } {
+    const token = generateStaffToken();
+    const id = randomUUID();
+    this.db
+      .prepare('INSERT INTO staff_tokens (id, user_id, token_sha256, label, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(id, userId, hashStaffToken(token), label, this.#now());
+    this.audit({ actor: userId, action: 'staff.token.issued', entity: 'user', entityId: userId, details: { label } });
+    return { token, id };
+  }
+
+  /** Who is holding this link, or null. Revoked and unknown look the same. */
+  staffByToken(token: string): User | null {
+    const row = this.db
+      .prepare(
+        `SELECT u.* FROM staff_tokens t JOIN users u ON u.id = t.user_id
+         WHERE t.token_sha256 = ? AND t.revoked_at IS NULL`,
+      )
+      .get(hashStaffToken(token)) as unknown as User | undefined;
+    if (!row) return null;
+
+    this.db.prepare('UPDATE staff_tokens SET last_used_at = ? WHERE token_sha256 = ?').run(this.#now(), hashStaffToken(token));
+    return row;
+  }
+
+  /** Revoking is a timestamp: who had access and when stays on the record. */
+  revokeStaffToken(tokenId: string, revokedBy: string): void {
+    this.db.prepare('UPDATE staff_tokens SET revoked_at = ?, revoked_by = ? WHERE id = ? AND revoked_at IS NULL')
+      .run(this.#now(), revokedBy, tokenId);
+    this.audit({ actor: revokedBy, action: 'staff.token.revoked', entity: 'staff_token', entityId: tokenId });
+  }
+
+  staffTokens(): { id: string; user_id: string; label: string; created_at: string; last_used_at: string | null; revoked_at: string | null }[] {
+    return this.db
+      .prepare('SELECT id, user_id, label, created_at, last_used_at, revoked_at FROM staff_tokens ORDER BY created_at')
+      .all() as unknown as { id: string; user_id: string; label: string; created_at: string; last_used_at: string | null; revoked_at: string | null }[];
   }
 
   owner(): User | null {

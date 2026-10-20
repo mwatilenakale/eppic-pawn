@@ -15,6 +15,7 @@ import type { Approval, Store, User } from '../store/index.ts';
 import type { IntakeSubmission } from '../intake/agent.ts';
 import { loanTerms, schedule, suggestValuation, type MarketEstimate, type Valuation } from '../valuation.ts';
 import { PriceMemory } from '../valuator/memory.ts';
+import { can } from '../staff/access.ts';
 import { applyAdjustment, describeFigures, parseFigureEdits, type FigureEdits, type Figures } from '../valuator/adjust.ts';
 
 export interface ApprovalRequest {
@@ -106,6 +107,17 @@ export class ApprovalWorkflow {
 
   /** Applies a reply from Lukas. Anything it cannot read decides nothing. */
   handleOwnerReply(text: string, owner: User): DecisionResult {
+    // The project's oldest constraint, enforced here rather than only at the
+    // routing layer: pricing and accepting a loan is the owner's alone, and
+    // no second caller may reach this by holding a User of the wrong kind.
+    if (!can(owner, 'approvals.decide')) {
+      return {
+        ownerMessage:
+          'Only Lukas can approve, adjust or decline an application. ' +
+          'Everything else here is open to you — the queue, a customer, replying to someone.',
+      };
+    }
+
     const reply = parseOwnerReply(text);
     const pending = this.#store.pendingApprovals();
 

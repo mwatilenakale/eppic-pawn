@@ -338,4 +338,28 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE price_adjustments ADD COLUMN market_value_cents INTEGER;
   `,
+
+  // 8 — how a member of staff proves who they are on the web pages.
+  //
+  // A signed link each, bookmarked once, rather than passwords. For two
+  // people, a password is a thing to reset, forget and phish; a link is a
+  // thing to rotate. The token is the credential, so it is stored hashed —
+  // a copy of this database must not hand someone the keys.
+  //
+  // Revoking is a timestamp, not a delete: who had access and when is part
+  // of the audit trail, and an employee who leaves should stay on the record.
+  `
+  CREATE TABLE staff_tokens (
+    id           TEXT PRIMARY KEY,
+    user_id      TEXT NOT NULL REFERENCES users(id),
+    -- SHA-256 of the token. The token itself is shown once, at issue.
+    token_sha256 TEXT NOT NULL UNIQUE,
+    label        TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL,
+    last_used_at TEXT,
+    revoked_at   TEXT,
+    revoked_by   TEXT REFERENCES users(id)
+  );
+  CREATE INDEX staff_tokens_user ON staff_tokens(user_id, revoked_at);
+  `,
 ];

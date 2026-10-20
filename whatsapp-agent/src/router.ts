@@ -25,6 +25,7 @@ import {
   type BookCommand,
 } from './book/index.ts';
 import { samePhone, type InboundEvent } from './whatsapp/webhook.ts';
+import { can } from './staff/access.ts';
 import type { WhatsAppTransport } from './whatsapp/transport.ts';
 
 /**
@@ -147,7 +148,7 @@ export class AgentRouter {
     // without touching anything — these commands have no write path.
     const query = parseBookCommand(event.text ?? '');
     if (query) {
-      await this.#transport.sendText({ to: this.#ownerPhone, body: this.#answer(query) });
+      await this.#transport.sendText({ to: this.#ownerPhone, body: this.#answer(query, this.#owner) });
       return;
     }
 
@@ -187,12 +188,20 @@ export class AgentRouter {
    * what makes it safe for Lukas to poke at his book from his phone without
    * any chance of moving an application along by accident.
    */
-  #answer(query: BookCommand): string {
+  #answer(query: BookCommand, viewer: User): string {
     // From the book's own clock, not a second one — two clocks in one reply is
     // how "3 days past grace" and "due tomorrow" end up disagreeing.
     const today = this.#book.today();
 
-    if (query.kind === 'summary') return renderSummary(this.#book.summary(), today);
+    if (query.kind === 'summary') {
+      if (!can(viewer, 'book.totals')) {
+        return (
+          'The book total is Lukas\'s to see. You can still use *DUE*, *OVERDUE* ' +
+          'and *CUSTOMER <name or number>*.'
+        );
+      }
+      return renderSummary(this.#book.summary(), today);
+    }
     if (query.kind === 'due') return renderDue(this.#book.due(), today);
     if (query.kind === 'overdue') return renderOverdue(this.#book.overdue(), this.#book.inGrace());
 
@@ -200,6 +209,16 @@ export class AgentRouter {
 
     const matches = this.#book.findCustomers(query.query);
     if (matches.length !== 1) return renderCustomerChoices(matches, query.query);
+
+    // Audited with a name against it. Looking up one customer is ordinary
+    // work; looking up a hundred should be visible afterwards.
+    this.#store.audit({
+      actor: viewer.id,
+      action: 'customer.viewed',
+      entity: 'customer',
+      entityId: matches[0]!.id,
+      details: { query: query.query },
+    });
 
     const history = this.#book.history(matches[0]!.id);
     return history ? renderHistory(history) : renderCustomerChoices([], query.query);

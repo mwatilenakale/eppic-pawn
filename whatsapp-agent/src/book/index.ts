@@ -16,7 +16,8 @@
  * what the append-only ledger exists to prevent (architecture 2.7).
  */
 
-import type { Store, Loan, Customer } from '../store/index.ts';
+import type { Store, Loan, Customer, User } from '../store/index.ts';
+import { require as requireCapability } from '../staff/access.ts';
 import { formatAmount } from '../money.ts';
 import { addDays } from '../valuation.ts';
 import { normalizePhone } from '../whatsapp/webhook.ts';
@@ -75,7 +76,20 @@ export class Book {
 
   // --- the figures ---------------------------------------------------------
 
-  summary(): BookSummary {
+  /**
+   * The book-wide position. Owner only, and guarded here rather than in the
+   * template: a figure that is never computed on a staff code path cannot
+   * escape through a layout change or a debug panel.
+   *
+   * Staff still see what one customer owes — they need it to serve that
+   * customer — so this is the aggregate, not every amount.
+   */
+  summary(viewer?: Pick<User, 'role'>): BookSummary {
+    if (viewer !== undefined) requireCapability(viewer, 'book.totals', 'Only Lukas can see the book total.');
+    return this.#summary();
+  }
+
+  #summary(): BookSummary {
     const today = this.#today();
     const active = this.#activeLines();
     const month = today.slice(0, 7);
