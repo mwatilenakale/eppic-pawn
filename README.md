@@ -8,7 +8,8 @@ project — `CLAUDE.md` is read automatically on every session.
 
 ```
 eppic-pawn/
-├── CLAUDE.md              ← standing instructions, read every session
+├── CLAUDE.md              ← standing instructions for Claude Code
+├── AGENTS.md              ← the same constraints, for any other coding agent
 ├── docs/
 │   ├── playbook.md        ← every business rule: rates, terms, screening,
 │   │                         collections logic. The source of truth.
