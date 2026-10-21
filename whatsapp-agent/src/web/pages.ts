@@ -111,8 +111,24 @@ export function chooseCategoryPage(rules: Rules, error?: string): string {
     <header><h1>What do you have?</h1></header>
     ${error ? `<div class="verification-banner" role="alert"><strong>${escapeHtml(error)}</strong></div>` : ''}
     <div class="card"><ul class="category-grid stagger-children">${categories}</ul></div>
-    <p class="muted">We take these five only, on purpose — nothing that needs extra storage.</p>`,
+    <p class="muted">These five are what we take as standard. Got something else?
+    ${askAboutIt(rules.playbook.whatsapp)}</p>`,
     rules.playbook.whatsapp, 1);
+}
+
+/**
+ * Something outside the five categories — playbook section 2, "Something
+ * else".
+ *
+ * The website cannot ask Lukas itself: it has no name or number for whoever is
+ * reading it, and his answer has nowhere to go back to. What it can do is stop
+ * saying "we don't take that" — which is a decision the site has no business
+ * making — and point them at the number where the agent will ask him.
+ */
+function askAboutIt(whatsapp: string): string {
+  const number = whatsapp.replace(/[^\d+]/g, '');
+  return `<a href="https://wa.me/${encodeURIComponent(number.replace(/^\+/, ''))}">Message us on WhatsApp</a>
+    and we'll ask Lukas — he does take other things when they're worth it.`;
 }
 
 export function questionsPage(

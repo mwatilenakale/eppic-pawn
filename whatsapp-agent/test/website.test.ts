@@ -105,11 +105,22 @@ describe('the pre-check form', () => {
     }
   });
 
-  test('a category the playbook does not take is refused, kindly', async () => {
+  /**
+   * Playbook section 2, "Something else", from 21 October 2026. The page used
+   * to answer "We don't take fridge" on its own authority. Whether the shop
+   * takes something is Lukas's decision, and the site has no way to ask him —
+   * so it says what it honestly can and points at the number where he does
+   * get asked.
+   */
+  test('a category the playbook does not take is not refused outright', async () => {
     const { status, html } = await get('/apply?category=fridge');
-    assert.equal(status, 404);
-    assert.match(html, /We don(&#39;|')t take fridge/);
-    assert.match(html, /Consoles/);
+    assert.equal(status, 404, 'still not a page we can price');
+
+    assert.match(html, /don(&#39;|')t normally take fridge/);
+    assert.match(html, /isn(&#39;|')t an automatic no/);
+    assert.match(html, /ask Lukas/);
+    assert.match(html, /wa\.me/, 'with a way to actually ask him');
+    assert.match(html, /Consoles/, 'and the five it can price now');
   });
 });
 
@@ -178,3 +189,40 @@ describe('submitting the pre-check', () => {
 function escapeForHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+
+/**
+ * The staff dashboard route. An unknown token and a revoked one must be
+ * indistinguishable from outside, so the page cannot be found by guessing.
+ */
+describe('the staff link', () => {
+  test('a valid token gets the dashboard', async () => {
+    const user = store.ensureUser({ name: 'Petrus Haufiku', phone: '+264811112222', role: 'inspector' });
+    const { token } = store.issueStaffToken(user.id, 'counter phone');
+
+    const response = await fetch(`${base}/staff/${token}`);
+    assert.equal(response.status, 200);
+
+    const html = await response.text();
+    assert.match(html, /Waiting on Lukas/);
+    assert.match(html, /Petrus/, 'greeted by name');
+  });
+
+  test('an unknown token, a revoked one and nonsense all look the same', async () => {
+    const user = store.ensureUser({ name: 'Gone', phone: '+264811113333', role: 'inspector' });
+    const { token, id } = store.issueStaffToken(user.id, 'lost phone');
+    store.revokeStaffToken(id, store.owner()!.id);
+
+    const statuses = await Promise.all(
+      [token, 'x'.repeat(43), 'not-a-real-token-but-long-enough-here'].map(async (candidate) =>
+        (await fetch(`${base}/staff/${candidate}`)).status,
+      ),
+    );
+    assert.deepEqual(statuses, [404, 404, 404]);
+  });
+
+  test('the dashboard is not reachable without a token at all', async () => {
+    for (const path of ['/staff', '/staff/', '/staff/short']) {
+      assert.equal((await fetch(`${base}${path}`)).status, 404, `${path} should not resolve`);
+    }
+  });
+});

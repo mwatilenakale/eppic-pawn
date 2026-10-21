@@ -241,7 +241,7 @@ function trigger(handover: Handover): string {
     'existing-loan': 'This is about a loan they already have.',
     'asked-for-a-person': 'They asked to speak to a person.',
     ownership: 'Ownership or the police came up. I will not touch this one.',
-    lost: "Two messages in a row I couldn't make sense of.",
+    lost: 'I have stopped asking rather than ask a fourth time.',
   };
   return `*${handover.why}.* ${detail[handover.reason]}`;
 }

@@ -469,6 +469,36 @@ describe('a description worth pricing', () => {
     const { replies } = agent.handle(CUSTOMER, { text: 'yes please' });
 
     assert.match(replies.join('\n'), /photo/i, 'the conversation moves on');
-    assert.equal((store.db.prepare('SELECT * FROM items').all()).length, 1, 'Lukas sees it was thin, rather than nobody seeing it');
+  });
+
+  /**
+   * Giving up must not turn the junk into the description. It used to: Lukas
+   * received "*Item:* yes" with a suggested loan against it, because the
+   * valuer had been asked what the word "yes" is worth.
+   */
+  test('what it gave up on is reported outstanding, not filed as an answer', () => {
+    start();
+    for (const junk of ['yes', 'sure', 'yes please']) agent.handle(CUSTOMER, { text: junk });
+
+    // Photos still get collected, which creates the item with no description.
+    let submission: IntakeSubmission | undefined;
+    for (let turn = 0; turn < 40 && !submission; turn += 1) {
+      const conversation = store.activeConversation(store.customerByPhone(CUSTOMER)!.id)!;
+      const last = store.messages(conversation.id).filter((m) => m.direction === 'out').at(-1)!.body;
+      submission = (/photo/i.test(last)
+        ? agent.handle(CUSTOMER, { media: { content: photo() } })
+        : /how much are you hoping/i.test(last)
+          ? agent.handle(CUSTOMER, { text: 'not sure' })
+          : agent.handle(CUSTOMER, { text: 'yes' })
+      ).submission;
+    }
+
+    assert.ok(submission, 'intake still completes');
+    assert.equal(submission.item.description, '', 'nothing was invented to price');
+    assert.match(
+      submission.missing.map((question) => question.id).join(' '),
+      /item-description/,
+      'Lukas is told the description is still outstanding',
+    );
   });
 });

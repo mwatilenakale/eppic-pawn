@@ -277,6 +277,54 @@ footer { margin-top: var(--space-12); text-align: center; color: var(--text-mute
 }
 `;
 
+/**
+ * The staff dashboard, which is a different shape from the public site: dense
+ * lists read on a phone rather than one question at a time. Same tokens, so
+ * it cannot drift from the look Lukas chose, and loaded only on that page.
+ */
+export const DASHBOARD_CSS = `
+.dash-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-6); }
+.dash-head h1 { font-size: 22px; margin: 0; }
+
+.tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); margin-bottom: var(--space-6); }
+@media (min-width: 560px) { .tiles { grid-template-columns: repeat(4, 1fr); } }
+.tile { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 12px; padding: var(--space-4); }
+.tile-value { font-size: 26px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tile-label { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+.section { margin-bottom: var(--space-6); }
+.section > h2 {
+  font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-secondary); margin: 0 0 var(--space-3);
+  display: flex; align-items: center; gap: var(--space-2);
+}
+.count { background: var(--bg-tertiary); color: var(--text-primary); border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 700; }
+.count-urgent { background: var(--accent-gold); color: var(--bg-primary); }
+.count-bad { background: var(--danger); color: #fff; }
+
+.rows { display: flex; flex-direction: column; gap: var(--space-2); }
+.row {
+  background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border-subtle); border-radius: 10px; padding: var(--space-4);
+}
+.row-urgent { border-left-color: var(--accent-gold); }
+.row-good { border-left-color: var(--success); }
+.row-bad { border-left-color: var(--danger); }
+.row-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.row-who { font-weight: 600; }
+.row-when { font-size: 12px; color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.row-what { font-size: 14px; color: var(--text-secondary); margin-top: 2px; }
+.row-meta { font-size: 12px; color: var(--text-muted); margin-top: var(--space-2); }
+.ref { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent-gold); font-weight: 700; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: var(--space-2); }
+.chip { font-size: 11px; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--border-subtle); color: var(--text-secondary); }
+.chip-missing { border-color: var(--danger); color: var(--danger); }
+.chip-have { border-color: var(--success); color: var(--success); }
+
+.empty { color: var(--text-muted); font-size: 14px; padding: var(--space-4); border: 1px dashed var(--border-subtle); border-radius: 10px; }
+`;
+
 /** Emoji per playbook category. Inline, so no icon font is loaded. */
 export const CATEGORY_ICONS: Record<string, string> = {
   cars: '🚗',

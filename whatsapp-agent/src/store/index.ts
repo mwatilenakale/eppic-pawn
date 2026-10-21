@@ -87,6 +87,7 @@ export interface CategoryRequest {
   reason: string;
   decided_by: string | null;
   decided_at: string | null;
+  created_at: string;
 }
 
 export interface Approval {
@@ -799,13 +800,14 @@ export class Store {
       reason: '',
       decided_by: null,
       decided_at: null,
+      created_at: this.#now(),
     };
     this.db
       .prepare(
         'INSERT INTO category_requests (id, customer_id, conversation_id, description, status, reason, created_at)' +
           " VALUES (?, ?, ?, ?, 'pending', '', ?)",
       )
-      .run(row.id, row.customer_id, row.conversation_id, row.description, this.#now());
+      .run(row.id, row.customer_id, row.conversation_id, row.description, row.created_at);
     this.audit({
       actor: 'agent',
       action: 'category.asked',

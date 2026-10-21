@@ -154,6 +154,11 @@ export class AgentRouter {
       await this.#transport.sendText({ to: this.#ownerPhone, body: message });
     }
 
+    // Asked the same thing three times and getting nowhere. Hand it over
+    // rather than ask a fourth time — a conversation that cannot move is
+    // worth a person's minute, and until this existed it simply died quietly.
+    if (outcome.stuck) await this.#escalateStuck(event.from);
+
     if (outcome.submission) await this.#requestApproval(outcome.submission);
   }
 
@@ -224,6 +229,25 @@ export class AgentRouter {
       await this.#transport.sendText({ to: result.customerPhone, body: result.customerMessage });
     }
     return true;
+  }
+
+  /** The intake has stalled on one question. Put a person on it. */
+  async #escalateStuck(phone: string): Promise<void> {
+    const customer = this.#store.customerByPhone(phone);
+    const conversation = customer ? this.#store.activeConversation(customer.id) : null;
+    if (!conversation) return;
+
+    const handover = { reason: 'lost' as const, why: "Two messages in a row I couldn't make sense of" };
+    const message = this.#desk.escalate(conversation, handover, customer!.name, phone);
+    if (!message) return;
+
+    await this.#transport.sendText({ to: this.#ownerPhone, body: message });
+
+    const line =
+      "I'm not following you properly, sorry — rather than keep guessing I've asked Lukas to take this over himself. " +
+      "He'll reply here on this number.";
+    await this.#transport.sendText({ to: phone, body: line });
+    this.#store.recordOutbound({ conversationId: conversation.id, body: line });
   }
 
   /**

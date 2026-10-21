@@ -18,6 +18,9 @@ import { ContractError } from './store/index.ts';
 import { ContractService, contractErrorPage, signedPage, signingPage } from './contract/index.ts';
 import { CustomerDirectory } from './customers/directory.ts';
 import { chooseCategoryPage, landingPage, outcomePage, questionsPage } from './web/pages.ts';
+import { dashboardPage } from './web/dashboard.ts';
+import { DashboardQuery } from './dashboard/index.ts';
+import { can } from './staff/access.ts';
 import { evaluatePrecheck, precheckQuestions, type PrecheckQuote } from './web/precheck.ts';
 import { PriceMemory } from './valuator/memory.ts';
 import { suggestValuation } from './valuation.ts';
@@ -145,13 +148,35 @@ async function handleRequest(
     return respondHtml(response, 200, landingPage(rules));
   }
 
+  // --- the staff dashboard ------------------------------------------------
+  //
+  // Reached with a signed link, which is how a phone with no login identifies
+  // the person holding it. An unknown token and a revoked one are deliberately
+  // indistinguishable from outside: both get the same 404 as a URL that was
+  // never a route, so the page cannot be found by guessing.
+  const staffLink = /^\/staff\/([A-Za-z0-9_-]{20,64})\/?$/.exec(url.pathname);
+  if (request.method === 'GET' && staffLink) {
+    const user = store.staffByToken(staffLink[1]!);
+    if (!user || !can(user, 'book.chase')) return respond(response, 404, 'Not found');
+
+    const dashboard = new DashboardQuery(store, rules).read();
+    return respondHtml(response, 200, dashboardPage(dashboard, user.name, can(user, 'book.totals')));
+  }
+
   if (request.method === 'GET' && url.pathname === '/apply') {
     const wanted = url.searchParams.get('category');
     if (!wanted) return respondHtml(response, 200, chooseCategoryPage(rules));
 
     const category = rules.category(wanted);
     if (!category) {
-      return respondHtml(response, 404, chooseCategoryPage(rules, `We don't take ${wanted} — here is what we do take.`));
+      // Not "we don't take that" — whether the shop takes something is
+      // Lukas's call, not the website's (playbook section 2). The page offers
+      // the five it can price now and the number where he gets asked.
+      return respondHtml(
+        response,
+        404,
+        chooseCategoryPage(rules, `We don't normally take ${wanted}, but it isn't an automatic no.`),
+      );
     }
 
     const variant = url.searchParams.get('variant');

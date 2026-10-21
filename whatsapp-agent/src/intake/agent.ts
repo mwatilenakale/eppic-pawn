@@ -45,8 +45,16 @@ export interface IntakeState {
   pendingItemText?: string | null;
   /** True once we have said we cannot quote, so we don't say it twice running. */
   priceAnswered?: boolean;
-  /** Descriptions too thin to value. After three we take what we are given. */
+  /** Descriptions too thin to value. After three we stop asking. */
   vagueDescriptions?: number;
+  /**
+   * Questions we gave up on rather than loop. Answered, so the conversation
+   * moves past them; still outstanding, so Lukas is told.
+   */
+  unusableAnswers?: string[];
+  /** The last thing we asked, and how many times running we have asked it. */
+  lastAsk?: string;
+  repeatedAsk?: number;
   /**
    * Times we have failed to work out what the item is. The first time we ask
    * them to say it plainly; the second time we stop guessing and ask Lukas,
@@ -78,6 +86,12 @@ export interface IntakeSubmission {
 export interface IntakeOutcome {
   replies: string[];
   submission?: IntakeSubmission;
+  /**
+   * The agent has asked the same question three times running and is getting
+   * nowhere. The caller hands the conversation to a person rather than let it
+   * ask a fourth time — "two strikes, not five" (docs/tasks/003).
+   */
+  stuck?: boolean;
   /**
    * Something for Lukas, sent alongside the customer's reply — today only the
    * "can we take this at all?" question from playbook section 2. It is not an
@@ -217,6 +231,20 @@ export class IntakeAgent {
 
     const state = JSON.parse(conversation.state) as IntakeState;
     const outcome = this.#advance(customer, conversation.id, state, incoming);
+
+    // Is it getting anywhere?
+    //
+    // A customer who answers "Is it iPhone or Android?" with something that
+    // matches neither used to be asked it again, and again, forever — the
+    // conversation never reached Lukas and nobody knew. One counter here
+    // covers every question rather than each step guarding itself.
+    const asked = outcome.replies.at(-1) ?? '';
+    state.repeatedAsk = asked && asked === state.lastAsk ? (state.repeatedAsk ?? 0) + 1 : 0;
+    state.lastAsk = asked;
+    if ((state.repeatedAsk ?? 0) >= 2) {
+      outcome.stuck = true;
+      state.repeatedAsk = 0;
+    }
 
     this.#store.saveConversationState(conversation.id, state);
     for (const reply of outcome.replies) {
@@ -511,8 +539,16 @@ export class IntakeAgent {
       if (state.vagueDescriptions < 3) {
         return { replies: [copy.needMoreDetail(state.vagueDescriptions)] };
       }
-      // Three tries. Take what they gave and let Lukas see it was thin
-      // rather than trapping them on one question forever.
+
+      // Three tries is enough — trapping somebody on one question forever is
+      // worse. But what they gave is not a description of anything, so it does
+      // not get to become one: the answer is kept for the transcript, the item
+      // stays undescribed, and it is reported to Lukas as outstanding. Filing
+      // "yes" as the description is how he ended up with an application
+      // reading "*Item:* yes" and a figure against it.
+      this.#record(state, question, text, false);
+      state.unusableAnswers = [...(state.unusableAnswers ?? []), question.id];
+      return { replies: this.#nextPrompt(customer, conversationId, state) };
     }
 
     this.#record(state, question, text, null);
@@ -599,12 +635,24 @@ export class IntakeAgent {
 
   #submit(customer: Customer, conversationId: string, state: IntakeState): IntakeOutcome {
     const plan = this.#plan(state);
-    const created = this.#ensureItem(customer, conversationId, state, state.answers['item-description']?.response ?? '');
+    // An answer we gave up on is kept for the transcript but is not a
+    // description, so it must not become one here either — this is the last
+    // place "yes" could still have reached Lukas as "*Item:* yes".
+    const described = state.unusableAnswers?.includes('item-description')
+      ? ''
+      : state.answers['item-description']?.response ?? '';
+    const created = this.#ensureItem(customer, conversationId, state, described);
     const answers = Object.values(state.answers);
     const flagged = answers.filter((answer) => answer.confirmed === false || answer.confirmed === null).filter(
       (answer) => answer.kind === 'confirm' || answer.kind === 'photo',
     );
-    const missing = plan.questions.filter((question) => !question.optional && !(question.id in state.answers));
+    // Outstanding covers both the never-answered and the answered-uselessly:
+    // an item described as "yes" is exactly as unready as one not described
+    // at all, and hiding that from Lukas is the part that costs money.
+    const unusable = new Set(state.unusableAnswers ?? []);
+    const missing = plan.questions.filter(
+      (question) => !question.optional && (!(question.id in state.answers) || unusable.has(question.id)),
+    );
     const photoKinds = this.#store.photos(created.id).map((photo) => photo.kind);
 
     this.#store.updateItem(created.id, { declaredDetails: state.answers, status: 'awaiting-approval' });

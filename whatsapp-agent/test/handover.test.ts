@@ -229,3 +229,50 @@ describe('a person taking over', () => {
     assert.match(transport.to(OWNER).at(-1)!, /No open conversation/);
   });
 });
+
+/**
+ * The loop that used to swallow conversations whole.
+ *
+ * A customer who answered "Is it iPhone or Android?" with anything matching
+ * neither was asked it again, and again, with no limit. Nothing reached Lukas
+ * and nobody knew the conversation had died.
+ */
+describe('getting nowhere', () => {
+  test('three identical asks hand the thread to a person', async () => {
+    await router.handle(from(CUSTOMER, 'hi'));
+    await router.handle(from(CUSTOMER, 'Thomas Shilongo'));
+    await router.handle(from(CUSTOMER, 'Samsung Galaxy S25 Ultra, 512GB'));
+
+    const asked = transport.to(CUSTOMER).at(-1)!;
+    assert.match(asked, /iPhone or Android/i);
+
+    await router.handle(from(CUSTOMER, 'the blue one'));
+    await router.handle(from(CUSTOMER, 'the blue one'));
+
+    assert.match(transport.to(CUSTOMER).at(-1)!, /not following you properly/i);
+    assert.match(transport.to(OWNER).at(-1)!, /Someone needs you/);
+    assert.match(transport.to(OWNER).at(-1)!, /Thomas Shilongo/);
+  });
+
+  test('and then it stays quiet instead of asking a fourth time', async () => {
+    await router.handle(from(CUSTOMER, 'hi'));
+    await router.handle(from(CUSTOMER, 'Thomas Shilongo'));
+    await router.handle(from(CUSTOMER, 'Samsung Galaxy S25 Ultra, 512GB'));
+    await router.handle(from(CUSTOMER, 'the blue one'));
+    await router.handle(from(CUSTOMER, 'the blue one'));
+
+    const quietFrom = transport.to(CUSTOMER).length;
+    await router.handle(from(CUSTOMER, 'the blue one'));
+    assert.equal(transport.to(CUSTOMER).length, quietFrom);
+  });
+
+  test('a conversation that is moving is never escalated', async () => {
+    await router.handle(from(CUSTOMER, 'hi'));
+    await router.handle(from(CUSTOMER, 'Thomas Shilongo'));
+    await router.handle(from(CUSTOMER, 'Samsung Galaxy S25 Ultra, 512GB'));
+    await router.handle(from(CUSTOMER, 'Android'));
+    await router.handle(from(CUSTOMER, 'Samsung Galaxy S25 Ultra, 512GB, perfect condition'));
+
+    assert.equal(transport.to(OWNER).length, 0, 'answering the questions must not look like being stuck');
+  });
+});
