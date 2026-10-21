@@ -15,6 +15,8 @@ import { dirname } from 'node:path';
 import { MIGRATIONS } from './schema.ts';
 import { MediaStore } from './media.ts';
 import { generateStaffToken, hashStaffToken } from '../staff/access.ts';
+import type { MarketEstimate } from '../valuation.ts';
+import type { EstimateInput, MarketObservation } from '../valuator/prompt.ts';
 
 export { MediaStore, generateMediaKey, mediaKeyFromEnv, MediaKeyError } from './media.ts';
 
@@ -217,6 +219,26 @@ export class Store {
 
   close(): void {
     this.db.close();
+  }
+
+  /**
+   * Commit a synchronous operation as a unit, including its audit rows.
+   * Savepoints compose with callers' transactions. Never await network work
+   * inside this callback: a SQLite transaction must not span message delivery.
+   * Rollback of an uncommitted ledger insert does not edit a posted entry.
+   */
+  transaction<T>(work: () => T): T {
+    const name = `operation_${randomUUID().replace(/-/g, '')}`;
+    this.db.exec(`SAVEPOINT ${name}`);
+    try {
+      const result = work();
+      this.db.exec(`RELEASE SAVEPOINT ${name}`);
+      return result;
+    } catch (error) {
+      this.db.exec(`ROLLBACK TO SAVEPOINT ${name}`);
+      this.db.exec(`RELEASE SAVEPOINT ${name}`);
+      throw error;
+    }
   }
 
   // --- users -------------------------------------------------------------
@@ -689,6 +711,22 @@ export class Store {
 
   // --- valuations --------------------------------------------------------
 
+  recordMarketObservation(input: EstimateInput, estimates: MarketEstimate[]): void {
+    this.db.prepare(`INSERT INTO market_observations
+      (id, category_slug, variant, description, estimates, observed_at) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(randomUUID(), input.categorySlug, input.variant, input.description, JSON.stringify(estimates), this.#now());
+  }
+
+  recentMarketObservations(categorySlug: string, variant: string | null): MarketObservation[] {
+    // A context-size bound, not a valuation or lending threshold. Dates go to
+    // the estimator so old guesses cannot masquerade as current market data.
+    const rows = this.db.prepare(`SELECT description, estimates, observed_at FROM market_observations
+      WHERE category_slug = ? AND variant IS ? ORDER BY observed_at DESC, rowid DESC LIMIT 8`)
+      .all(categorySlug, variant) as { description: string; estimates: string; observed_at: string }[];
+    return rows.map((row) => ({ description: row.description, observedAt: row.observed_at,
+      estimates: JSON.parse(row.estimates) as MarketEstimate[] }));
+  }
+
   saveValuation(valuation: {
     itemId: string;
     estimates: unknown;
@@ -1103,6 +1141,9 @@ export class Store {
    * time, so back-dating an entry never hides when it was written.
    */
   postLedgerEntry(entry: { loanId: string; entryType: string; amountCents: number; memo?: string; actor: string; at?: string }): LedgerEntry {
+    // SQLite INTEGER affinity alone accepts fractional REAL values. Enforce
+    // integer cents before binding, including for future callers and imports.
+    if (!Number.isSafeInteger(entry.amountCents)) throw new LedgerError('Ledger amounts must be safe integer cents');
     const row: LedgerEntry = {
       id: randomUUID(),
       loan_id: entry.loanId,

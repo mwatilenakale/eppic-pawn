@@ -26,6 +26,7 @@ export interface AdjustmentKey {
 export interface RememberedPrice {
   id: string;
   fingerprint: string;
+  description: string;
   marketValueCents: number | null;
   loanCents: number;
   buyNowCents: number | null;
@@ -39,19 +40,20 @@ export interface RememberedPrice {
 /**
  * What makes two items "the same kind".
  *
- * Storage sizes and colours are dropped, model numbers kept: an iPhone 13 Pro
- * in black and one in silver fetch the same money, and treating them as
- * different items would mean his correction never gets reused. Deliberately
- * blunt — a fingerprint that is too precise remembers nothing.
+ * Ignore conversational wording and colour, but preserve storage, condition,
+ * box and battery details. A correction on a damaged 64GB phone must not become
+ * an exact price for a pristine 256GB one. Near matches remain model evidence.
  */
 export function fingerprint(key: AdjustmentKey): string {
   const words = (key.description ?? '')
     .toLowerCase()
+    .replace(/\b(?:no|without)\s+(?:original\s+)?box\b/g, 'withoutbox')
+    .replace(/\bno\s+(?:physical\s+)?damage\b/g, 'undamaged')
+    .replace(/\bnot\s+working\b/g, 'notworking')
+    .replace(/\b(\d+)\s+(gb|tb|mb)\b/g, '$1$2')
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter(Boolean)
-    // Capacity, colour and condition are noise for pricing this coarsely.
-    .filter((word) => !/^\d+(gb|tb|mb)$/.test(word))
     .filter((word) => !STOP_WORDS.has(word))
     .sort();
 
@@ -59,9 +61,11 @@ export function fingerprint(key: AdjustmentKey): string {
 }
 
 const STOP_WORDS = new Set([
-  'the', 'a', 'an', 'and', 'with', 'in', 'good', 'excellent', 'fair', 'poor', 'condition',
-  'used', 'second', 'hand', 'like', 'new', 'black', 'white', 'silver', 'gold', 'blue', 'red',
+  'the', 'a', 'an', 'and', 'with', 'in', 'condition',
+  'second', 'hand', 'black', 'white', 'silver', 'gold', 'blue', 'red',
   'green', 'grey', 'gray', 'space', 'pink', 'purple', 'my', 'is', 'it', 'for', 'of',
+  'what', 'how', 'much', 'value', 'worth', 'price', 'estimate', 'please', 'can',
+  'you', 'tell', 'me', 'about', 'normal', 'standard', 'base', 'model', 'present',
 ]);
 
 export class PriceMemory {
@@ -77,11 +81,16 @@ export class PriceMemory {
 
   /** The most recent unexpired adjustment for this kind of item, if any. */
   recall(key: AdjustmentKey): RememberedPrice | null {
-    const row = this.#store.db
+    const rows = this.#store.db
       .prepare(
-        'SELECT * FROM price_adjustments WHERE fingerprint = ? AND expires_at > ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
+        'SELECT * FROM price_adjustments WHERE category_slug = ? AND variant IS ? AND expires_at > ? ORDER BY created_at DESC, rowid DESC',
       )
-      .get(fingerprint(key), this.#now().toISOString()) as Record<string, unknown> | undefined;
+      .all(key.categorySlug, key.variant ?? null, this.#now().toISOString()) as Record<string, unknown>[];
+    // Recompute from the saved description so corrections written before the
+    // stricter key still work, without editing or promoting their old records.
+    const wanted = fingerprint(key);
+    const row = rows.find((entry) => fingerprint({ categorySlug: String(entry['category_slug']),
+      variant: entry['variant'] as string | null, description: String(entry['description']) }) === wanted);
 
     return row ? toRemembered(row) : null;
   }
@@ -163,6 +172,7 @@ function toRemembered(row: Record<string, unknown>): RememberedPrice {
   return {
     id: String(row['id']),
     fingerprint: String(row['fingerprint']),
+    description: String(row['description']),
     marketValueCents: row['market_value_cents'] === null ? null : Number(row['market_value_cents']),
     loanCents: Number(row['loan_cents']),
     buyNowCents: row['buy_now_cents'] === null ? null : Number(row['buy_now_cents']),

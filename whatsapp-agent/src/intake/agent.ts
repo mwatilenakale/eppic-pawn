@@ -227,6 +227,10 @@ export class IntakeAgent {
    * Duplicate deliveries (same provider message id) produce no replies.
    */
   handle(fromPhone: string, incoming: Incoming): IntakeOutcome {
+    return this.#store.transaction(() => this.#handleIncoming(fromPhone, incoming));
+  }
+
+  #handleIncoming(fromPhone: string, incoming: Incoming): IntakeOutcome {
     const customer = this.#store.upsertCustomer(fromPhone);
     const conversation =
       this.#store.activeConversation(customer.id) ??
@@ -413,6 +417,7 @@ export class IntakeAgent {
     // Already greeted when we asked for the name, so the list only.
     return { replies: [...replies, whichCategory(this.#categoryLabels())] };
   }
+
 
   #handleCategory(customer: Customer, conversationId: string, state: IntakeState, text: string): IntakeOutcome {
     const category = text ? this.#rules.category(text) : null;
@@ -756,11 +761,11 @@ function isAskingForAPrice(text: string, question: Question): boolean {
   return text.trim().endsWith('?') || question.kind !== 'text';
 }
 
-export /**
+/**
  * A conversation starts by asking who this is, unless we already know. A
  * returning customer should never have to introduce themselves twice.
  */
-function initialState(knownName?: string | null): IntakeState {
+export function initialState(knownName?: string | null): IntakeState {
   return {
     step: knownName ? 'category' : 'name',
     greeted: false,

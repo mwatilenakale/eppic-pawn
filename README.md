@@ -30,6 +30,13 @@ npm run import -- ~/Eppic_PawnWorkbook.xlsx   # dry run against the existing boo
 
 ## What is built (architecture Section 5, step 1)
 
+- **Estimates over WhatsApp and the website** — one shared quote service shows
+  market, pawn-loan and buy-outright estimates, labelled as not an offer. Unknown
+  WhatsApp customers give their name; returning customers are recognised. Missing
+  iPhone storage/condition is requested before research. Dated prior estimates
+  inform the next valuation; only owner corrections can directly set a remembered
+  price, and specification/condition differences prevent exact reuse. See
+  `docs/channel-scenarios.md` for the tested iPhone 15 scenario and limitations.
 - **Intake over WhatsApp** — one question at a time, only the five categories
   the playbook accepts, iPhone/Android asked before the phone checklist, photos
   and the Section 5 documents collected.

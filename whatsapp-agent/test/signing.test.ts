@@ -56,6 +56,33 @@ const issue = () => contracts.issueForApproval(approvedApplication().id, { actor
 const submission = { name: 'Test Customer', idNumber: '90010100123', signatureDataUrl: SIGNATURE };
 
 describe('signing starts the loan', () => {
+  test('a database failure after recording the signature rolls back the complete loan', () => {
+    const issued = issue();
+    store.db.exec("CREATE TRIGGER fail_pledge BEFORE UPDATE ON items BEGIN SELECT RAISE(ABORT, 'item write failed'); END");
+    assert.throws(() => contracts.sign(issued.contract.token, submission), /item write failed/);
+    assert.equal(store.contract(issued.contract.id)?.status, 'pending');
+    assert.equal((store.db.prepare('SELECT COUNT(*) AS n FROM loans').get() as { n: number }).n, 0);
+    assert.equal((store.db.prepare('SELECT COUNT(*) AS n FROM ledger_entries').get() as { n: number }).n, 0);
+    assert.deepEqual(store.auditTrail('contract', issued.contract.id).map((row) => row.action), ['contract.issued']);
+  });
+
+  test('a signature storage failure leaves no debt and signing can be retried', () => {
+    const issued = issue();
+    const originalPut = store.media!.put;
+    store.media!.put = () => { throw new Error('disk unavailable'); };
+
+    assert.throws(() => contracts.sign(issued.contract.token, submission), /disk unavailable/);
+    assert.equal((store.db.prepare('SELECT COUNT(*) AS n FROM loans').get() as { n: number }).n, 0);
+    assert.equal((store.db.prepare('SELECT COUNT(*) AS n FROM ledger_entries').get() as { n: number }).n, 0);
+    assert.equal(store.contract(issued.contract.id)?.status, 'pending');
+    assert.equal(store.auditTrail('contract', issued.contract.id).length, 1);
+
+    store.media!.put = originalPut;
+    const signed = contracts.sign(issued.contract.token, submission);
+    assert.equal(store.balance(signed.loanId), issued.contract.total_due_cents);
+    assert.equal((store.db.prepare('SELECT COUNT(*) AS n FROM loans').get() as { n: number }).n, 1);
+  });
+
   test('a signature opens the loan and the ledger, with the contract’s own figures', () => {
     const issued = issue();
     const signed = contracts.sign(issued.contract.token, submission);

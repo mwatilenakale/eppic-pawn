@@ -21,6 +21,7 @@ import { formatAmount } from '../src/money.ts';
 import type { Valuator } from '../src/router.ts';
 
 const rules = loadRules();
+const PHONE_DESCRIPTION = 'iPhone 13 Pro, 256GB, good condition';
 
 /** Fixed estimates, so the figures on screen are predictable. */
 const valuator: Valuator = {
@@ -76,7 +77,7 @@ const apply = async (fields: Record<string, string>) => {
 
 describe('the estimate the customer sees', () => {
   test('shows the playbook\'s own arithmetic, from the lowest estimate', async () => {
-    const { status, html } = await apply({ category: 'phones', variant: 'iphone', description: 'iPhone 13 Pro' });
+    const { status, html } = await apply({ category: 'phones', variant: 'iphone', description: PHONE_DESCRIPTION });
 
     assert.equal(status, 200);
     // lowest 10,440 -> x0.75 = 7,830 assessed -> /2 = 3,915 loan -> +25% = 4,893.75
@@ -87,7 +88,7 @@ describe('the estimate the customer sees', () => {
   });
 
   test('buying outright is the bigger number, and says why', async () => {
-    const { html } = await apply({ category: 'phones', variant: 'iphone', description: 'iPhone 13 Pro' });
+    const { html } = await apply({ category: 'phones', variant: 'iphone', description: PHONE_DESCRIPTION });
 
     const loan = html.indexOf(formatAmount(391_500));
     const buy = html.indexOf(formatAmount(489_375));
@@ -97,7 +98,7 @@ describe('the estimate the customer sees', () => {
   });
 
   test('it is never called an offer, and always carries the warning', async () => {
-    const { html } = await apply({ category: 'phones', variant: 'iphone', description: 'iPhone 13 Pro' });
+    const { html } = await apply({ category: 'phones', variant: 'iphone', description: PHONE_DESCRIPTION });
 
     assert.match(html, /This is an estimate, not an offer/);
     assert.match(html, /role="alert"/, 'the banner is announced to screen readers');
@@ -114,6 +115,19 @@ describe('the estimate the customer sees', () => {
 });
 
 describe('when Lukas has already corrected this kind of item', () => {
+  test('a remembered market correction remains distinct from assessed value', async () => {
+    new PriceMemory(store, rules).remember({
+      key: { categorySlug: 'laptops', description: 'Lenovo T14' },
+      marketValueCents: 800_000,
+      assessedValueCents: 600_000,
+      loanCents: 300_000,
+      adjustedBy: lukas,
+    });
+    const { html } = await apply({ category: 'laptops', description: 'Lenovo T14' });
+    assert.match(html, /Market value<\/span>\s*<strong[^>]*>N\$8,000\.00/);
+    assert.match(html, /Assessed value<\/span>\s*<strong[^>]*>N\$6,000\.00/);
+  });
+
   test('his number is used instead of a fresh estimate', async () => {
     new PriceMemory(store, rules).remember({
       key: { categorySlug: 'laptops', variant: null, description: 'Dell XPS 13' },
@@ -145,7 +159,7 @@ describe('when Lukas has already corrected this kind of item', () => {
 
 describe('the design system is actually applied', () => {
   test('the four steps are shown, with the right one active', async () => {
-    const { html } = await apply({ category: 'phones', variant: 'iphone', description: 'iPhone 13 Pro' });
+    const { html } = await apply({ category: 'phones', variant: 'iphone', description: PHONE_DESCRIPTION });
 
     for (const label of ['Item', 'Details', 'Research', 'Quote']) assert.match(html, new RegExp(label));
     assert.match(html, /step-number active">4</, 'the quote step is the active one');
@@ -153,7 +167,7 @@ describe('the design system is actually applied', () => {
   });
 
   test('colours come from tokens, not from hex in the markup', async () => {
-    const { html } = await apply({ category: 'phones', variant: 'iphone', description: 'iPhone 13 Pro' });
+    const { html } = await apply({ category: 'phones', variant: 'iphone', description: PHONE_DESCRIPTION });
 
     const body = html.slice(html.indexOf('</style>'));
     assert.doesNotMatch(body, /#[0-9a-f]{6}/i, 'no raw hex below the token block');
@@ -161,24 +175,24 @@ describe('the design system is actually applied', () => {
   });
 
   test('prices use tabular figures so columns line up', async () => {
-    const { html } = await apply({ category: 'phones', variant: 'iphone', description: 'iPhone 13 Pro' });
+    const { html } = await apply({ category: 'phones', variant: 'iphone', description: PHONE_DESCRIPTION });
     assert.match(html, /font-variant-numeric: tabular-nums/);
   });
 
   test('still loads nothing from anywhere else', async () => {
-    const { html } = await apply({ category: 'phones', variant: 'iphone', description: 'iPhone 13 Pro' });
+    const { html } = await apply({ category: 'phones', variant: 'iphone', description: PHONE_DESCRIPTION });
 
     assert.doesNotMatch(html, /<script/i, 'no scripts at all');
     assert.doesNotMatch(html, /https?:\/\/(?!wa\.me)/i, 'no fonts, no CDNs, no trackers');
   });
 
   test('motion is dropped for anyone who asked for that', async () => {
-    const { html } = await apply({ category: 'phones', variant: 'iphone', description: 'iPhone 13 Pro' });
+    const { html } = await apply({ category: 'phones', variant: 'iphone', description: PHONE_DESCRIPTION });
     assert.match(html, /prefers-reduced-motion: reduce/);
   });
 
   test('the page can still be zoomed', async () => {
-    const { html } = await apply({ category: 'phones', variant: 'iphone', description: 'iPhone 13 Pro' });
+    const { html } = await apply({ category: 'phones', variant: 'iphone', description: PHONE_DESCRIPTION });
     assert.doesNotMatch(html, /user-scalable=no|maximum-scale/, 'pinch-zoom is never disabled');
   });
 });

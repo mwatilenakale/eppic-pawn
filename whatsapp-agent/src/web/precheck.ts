@@ -6,7 +6,7 @@
  * conversation. It asks *the same questions* — the plan is built by the same
  * code the WhatsApp intake uses, so the two can never drift apart.
  *
- * What it must not do is decide anything. It never quotes a figure, and it
+ * What it must not do is decide anything. Figures are estimates only, and it
  * never tells anyone they are rejected: a "no" on a playbook must-have is
  * reported as what the playbook says, with the conversation still offered.
  * Acceptance is Lukas's call (root CLAUDE.md).

@@ -221,6 +221,7 @@ describe('routing', () => {
 
   test('an image is downloaded and stored encrypted against the item', async () => {
     await router.handle(event(CUSTOMER, 'hi', 'm1'));
+    await router.handle(event(CUSTOMER, 'Test Customer', 'm-name'));
     await router.handle(event(CUSTOMER, 'phone', 'm2'));
     await router.handle(event(CUSTOMER, 'iPhone', 'm3'));
     await router.handle(event(CUSTOMER, 'iPhone 13 Pro 256GB', 'm4'));

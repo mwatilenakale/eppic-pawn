@@ -73,11 +73,20 @@ describe('remembering an adjustment', () => {
 });
 
 describe('what counts as the same item', () => {
-  test('storage size, colour and condition do not make it a different phone', () => {
+  test('conversational wording and colour do not hide an otherwise identical item', () => {
     assert.equal(
-      fingerprint({ categorySlug: 'phones', variant: 'iphone', description: 'iPhone 13 Pro 256GB' }),
-      fingerprint({ categorySlug: 'phones', variant: 'iphone', description: 'iphone 13 pro, 128GB, black, good condition' }),
+      fingerprint({ categorySlug: 'phones', variant: 'iphone', description: 'iPhone 15 normal 128GB, box, 95% battery health' }),
+      fingerprint({ categorySlug: 'phones', variant: 'iphone', description: 'What is the value of my iphone 15, 128 GB, black, box present, about 95% battery health?' }),
     );
+  });
+
+  test('different storage, battery, damage or box details require fresh research', () => {
+    const key = { categorySlug: 'phones', variant: 'iphone', description: 'iPhone 15 128GB box 95% battery no damage' };
+    memory.remember({ key, loanCents: 400_000, adjustedBy: lukas });
+    for (const description of [key.description.replace('128GB', '256GB'), key.description.replace('95%', '75%'),
+      key.description.replace('no damage', 'cracked screen'), key.description.replace('box', 'no box')]) {
+      assert.equal(memory.recall({ ...key, description }), null);
+    }
   });
 
   test('a different model is a different item', () => {

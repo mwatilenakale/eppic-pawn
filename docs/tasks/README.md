@@ -25,7 +25,14 @@ Each spec states the behaviour wanted, the constraints that apply, and what
 the tests must prove. It does not dictate the implementation — if you see a
 better shape than the one sketched, take it and say why in the commit.
 
-What you must not change without asking:
+A spec now names the files you may touch. Anything outside that list, ask
+first — including when the change looks obviously right.
+
+What you must not change without asking, ever:
+
+- `AGENTS.md`, `CLAUDE.md`, `whatsapp-agent/CLAUDE.md`. Editing the rule that
+  constrains your work, so that your work passes, is the one failure review
+  cannot catch.
 
 - Anything in `docs/playbook.md` or `docs/architecture.md`. Those are
   Lukas's documents. If a task seems to need a new business rule, stop and

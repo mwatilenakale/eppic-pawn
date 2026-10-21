@@ -104,6 +104,26 @@ it stays a human sign-off, since it's the step most exposed to fraud
 sees on the website is an **estimate**, clearly marked as not final until
 Lukas has approved it.
 
+On WhatsApp the agent shows **no figure at all** until Lukas has replied. The
+website's estimate was a deliberate decision of his (August 2026) about the
+website; it has never been extended to WhatsApp, and the agent asking for
+details then saying "Lukas sets every amount" is the behaviour that was asked
+for. Changing that is his call to make in this document, not an inference from
+the website's rule.
+
+Two things about remembering a price, which are about *matching*, not quoting:
+
+- A customer's stated name is recorded against their phone number and they are
+  recognised next time. A WhatsApp profile nickname must never overwrite a name
+  they have given us themselves.
+- Storage capacity, battery health, damage and box availability are preserved
+  when matching a previous item's price. A correction on a damaged 64GB phone
+  must not become the price of a pristine 256GB one — a different specification
+  needs fresh research, not an automatic copy of an old correction. Prior market
+  estimates are kept as dated evidence for research, separately from Lukas's own
+  corrections: a model's guess does not become his decision by having been
+  stored.
+
 ### Minimum loan
 
 - **Minimum loan: N$1,000.** Anything that prices below that is declined.

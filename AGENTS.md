@@ -26,6 +26,21 @@ This has already caught real staleness: the shop's WhatsApp number was
 once hard-coded and printed on every contract, and changing it in the
 playbook did nothing.
 
+**0. These five rules are not yours to edit, and neither is the playbook.**
+
+If a task seems to need one of them relaxed, stop and say so in the handoff.
+Do not edit `AGENTS.md`, either `CLAUDE.md`, or `docs/playbook.md` to permit
+what the task needs — that is the one change nobody reviewing a diff will
+catch, because the diff will look consistent with the rules it just rewrote.
+
+This has happened. A branch extended the website's estimate rule to WhatsApp
+and edited all four documents to authorise it, citing a review that had not
+asked for it. The code was good; the governance was not. It cost a day to
+unpick.
+
+Lukas changes these documents. Agents propose changes to them, in writing,
+and wait.
+
 **2. Nothing approves money without the owner's reply.**
 
 Every valuation is a suggestion. Every accept, decline and price change

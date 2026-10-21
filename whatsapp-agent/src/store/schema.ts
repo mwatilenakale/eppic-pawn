@@ -477,4 +477,23 @@ export const MIGRATIONS: string[] = [
   CREATE UNIQUE INDEX waivers_once ON waivers(item_id, requirement);
   CREATE INDEX waivers_item ON waivers(item_id);
   `,
+
+  // 13 — dated price evidence (Codex). Kept separate from Lukas's own price
+  // corrections in `price_adjustments`: a model's guess does not become his
+  // decision by having been written down, which is the playbook's wording in
+  // section 3.
+  //
+  // Migrations are append-only in practice — never renumber one to tidy up,
+  // because the number is what a deployed database has already recorded.
+  `
+  CREATE TABLE market_observations (
+    id TEXT PRIMARY KEY,
+    category_slug TEXT NOT NULL,
+    variant TEXT,
+    description TEXT NOT NULL,
+    estimates TEXT NOT NULL,
+    observed_at TEXT NOT NULL
+  );
+  CREATE INDEX market_observations_recent ON market_observations(category_slug, variant, observed_at);
+  `,
 ];

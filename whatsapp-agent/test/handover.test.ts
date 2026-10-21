@@ -279,3 +279,79 @@ describe('getting nowhere', () => {
     assert.equal(transport.to(OWNER).length, 0, 'answering the questions must not look like being stuck');
   });
 });
+
+/**
+ * The oldest constraint in the project, asserted end to end.
+ *
+ * Root CLAUDE.md: the website shows an estimate because Lukas decided that
+ * about the website in August 2026. WhatsApp quotes nothing until he has
+ * replied. This test exists because that constraint was once relaxed in a
+ * branch — along with the three documents that state it — and the relaxation
+ * looked like perfectly ordinary code.
+ */
+describe('no figure reaches a customer on WhatsApp before Lukas replies', () => {
+  test('however hard they fish for one', async () => {
+    for (const probe of [
+      'How much can I get for an iPhone 15?',
+      'Aina Shipanga',
+      'What is the value of my iPhone 15, 128GB, 95% battery health, with box?',
+      'just give me a price',
+      'what would you pay me',
+      'iPhone 15, 128GB, box included, battery health 95%',
+    ]) {
+      await router.handle(from(CUSTOMER, probe));
+    }
+
+    const said = transport.to(CUSTOMER).join('\n');
+    assert.doesNotMatch(said, /N\$\s?\d/, 'the agent quoted a figure');
+    assert.match(said, /can't give you a figure/i, 'but it does say honestly why not');
+  });
+
+  test('and not once the whole application is in', async () => {
+    await router.handle(from(CUSTOMER, 'hi'));
+    await router.handle(from(CUSTOMER, 'Aina Shipanga'));
+    await router.handle(from(CUSTOMER, 'iPhone 15, 128GB, box included, battery health 95%'));
+
+    for (let turn = 0; turn < 45; turn += 1) {
+      const last = transport.to(CUSTOMER).at(-1) ?? '';
+      if (/sent your application to Lukas/i.test(last)) break;
+      if (/photo/i.test(last)) {
+        await router.handle({ from: CUSTOMER, messageId: `wamid.p${++counter}`, type: 'image', mediaId: `md${counter}` });
+      } else if (/how much are you hoping/i.test(last)) {
+        await router.handle(from(CUSTOMER, '3000'));
+      } else if (/exactly what you have/i.test(last)) {
+        await router.handle(from(CUSTOMER, 'iPhone 15, 128GB, box, battery 95%'));
+      } else {
+        await router.handle(from(CUSTOMER, 'yes'));
+      }
+    }
+
+    assert.match(transport.to(CUSTOMER).at(-1)!, /sent your application to Lukas/i, 'intake completed');
+    assert.doesNotMatch(transport.to(CUSTOMER).join('\n'), /N\$\s?\d/, 'and still no figure');
+
+    // Lukas is the one who gets the numbers.
+    assert.match(transport.to(OWNER).join('\n'), /N\$\s?\d/);
+  });
+
+  test('his reply is the only thing that puts a figure in front of them', async () => {
+    await router.handle(from(CUSTOMER, 'hi'));
+    await router.handle(from(CUSTOMER, 'Aina Shipanga'));
+    await router.handle(from(CUSTOMER, 'iPhone 15, 128GB, box included, battery health 95%'));
+    for (let turn = 0; turn < 45; turn += 1) {
+      const last = transport.to(CUSTOMER).at(-1) ?? '';
+      if (/sent your application to Lukas/i.test(last)) break;
+      if (/photo/i.test(last)) {
+        await router.handle({ from: CUSTOMER, messageId: `wamid.q${++counter}`, type: 'image', mediaId: `md${counter}` });
+      } else if (/how much are you hoping/i.test(last)) await router.handle(from(CUSTOMER, '3000'));
+      else if (/exactly what you have/i.test(last)) await router.handle(from(CUSTOMER, 'iPhone 15, 128GB, box, battery 95%'));
+      else await router.handle(from(CUSTOMER, 'yes'));
+    }
+
+    const beforeHisReply = transport.to(CUSTOMER).length;
+    await router.handle(from(OWNER, 'APPROVE'));
+
+    const after = transport.to(CUSTOMER).slice(beforeHisReply);
+    assert.equal(after.filter((message) => /N\$\s?\d/.test(message)).length, 1, 'exactly one, and it is his');
+    assert.match(after.join('\n'), /Lukas has reviewed your application/i);
+  });
+});

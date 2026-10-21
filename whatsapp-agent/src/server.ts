@@ -23,9 +23,7 @@ import { DashboardQuery } from './dashboard/index.ts';
 import { can } from './staff/access.ts';
 import { evaluatePrecheck, precheckQuestions, type PrecheckQuote } from './web/precheck.ts';
 import { PriceMemory } from './valuator/memory.ts';
-import { suggestValuation } from './valuation.ts';
-import { percentOf } from './money.ts';
-import type { Rules } from './playbook/index.ts';
+import { QuoteService, missingPhoneDetails } from './valuator/quotes.ts';
 
 export interface BuiltServer {
   server: Server;
@@ -60,6 +58,7 @@ export function buildServer(
 
   const contracts = new ContractService(store, rules, { baseUrl: config.publicBaseUrl });
   const directory = new CustomerDirectory(store);
+  const quotes = new QuoteService(store, rules, valuator, memory);
 
   const router = new AgentRouter({
     store,
@@ -70,6 +69,7 @@ export function buildServer(
     valuator: valuator ?? undefined,
     contracts,
     directory,
+    quotes,
   });
 
   /**
@@ -81,34 +81,8 @@ export function buildServer(
    * one, and is asked to send it to him.
    */
   const priceIt = async (categorySlug: string, variant: string | null, description: string): Promise<PrecheckQuote | null> => {
-    const remembered = memory.recall({ categorySlug, variant, description });
-    if (remembered) {
-      return {
-        marketValueCents: remembered.assessedValueCents ?? remembered.loanCents * 2,
-        assessedValueCents: remembered.assessedValueCents ?? remembered.loanCents * 2,
-        loanCents: remembered.loanCents,
-        buyNowCents: remembered.buyNowCents ?? buyNowFrom(remembered.loanCents, rules),
-        fromAdjustment: true,
-        belowMinimum: remembered.loanCents < rules.playbook.loanSizing.minimumLoanCents,
-        minimumLoanCents: rules.playbook.loanSizing.minimumLoanCents,
-      };
-    }
-
-    if (!valuator || !description.trim()) return null;
-
     try {
-      const estimates = await valuator.estimate({ description, categorySlug, variant });
-      if (estimates.length === 0) return null;
-      const valuation = suggestValuation(estimates, rules);
-      return {
-        marketValueCents: valuation.basis.amountCents,
-        assessedValueCents: valuation.assessedValueCents,
-        loanCents: valuation.suggestedLoanCents,
-        buyNowCents: valuation.buyNowCents,
-        fromAdjustment: false,
-        belowMinimum: valuation.belowMinimum,
-        minimumLoanCents: rules.playbook.loanSizing.minimumLoanCents,
-      };
+      return await quotes.quote({ categorySlug, variant, description });
     } catch (error) {
       // A failed estimate is not a failed application: the customer still gets
       // their screening result and the handoff, just without a figure.
@@ -193,6 +167,13 @@ async function handleRequest(
 
     const category = rules.category(form.get('category') ?? '');
     const description = form.get('description') ?? '';
+
+    const missing = missingPhoneDetails(description);
+    if (category && description.trim() && missing.length) {
+      return respondHtml(response, 200, questionsPage(rules, category, form.get('variant'),
+        precheckQuestions(rules, category.slug, form.get('variant')),
+        { description, error: `Before estimating this item, please add its ${missing.join(' and ')}.` }));
+    }
 
     // Step 3 of the design — the research the loader stands for. Lukas's own
     // recent adjustment for this kind of item wins over a fresh estimate
@@ -331,9 +312,4 @@ if (import.meta.filename === process.argv[1]) {
     console.log(`Rules: ${getRules().paths.playbook}`);
     console.log(`Owner: ${active.ownerName} ${active.ownerPhone}`);
   });
-}
-
-/** A remembered adjustment may predate the buy-now rule; derive it if so. */
-function buyNowFrom(loanCents: number, rules: Rules): number {
-  return loanCents + percentOf(loanCents, rules.playbook.loanSizing.buyNowMarkupPct);
 }

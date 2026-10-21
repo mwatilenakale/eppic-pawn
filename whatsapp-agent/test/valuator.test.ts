@@ -21,6 +21,20 @@ function stubClient(reply: unknown, calls: Record<string, unknown>[] = []): Mess
 }
 
 describe('claude valuator', () => {
+  test('historical prices reach the provider as dated unverified evidence with item details', async () => {
+    const calls: Record<string, unknown>[] = [];
+    const valuator = new ClaudeValuator(stubClient({ estimates: [], confidence: 'low', note: '' }, calls), rules);
+    await valuator.estimate({ ...ITEM, history: [{
+      description: 'iPhone 15 base 128GB box 95% battery', observedAt: '2026-10-21T10:00:00.000Z',
+      estimates: [{ source: 'test evidence', amountCents: 1_000_000 }],
+    }] });
+    const request = JSON.stringify(calls[0]!['messages']);
+    assert.match(request, /unverified historical evidence/);
+    assert.match(request, /2026-10-21T10:00:00/);
+    assert.match(request, /95% battery/);
+    assert.match(request, /10000 NAD/);
+  });
+
   test('asks for market prices in Namibian dollars, and never for a loan amount', async () => {
     const calls: Record<string, unknown>[] = [];
     const valuator = new ClaudeValuator(stubClient({ estimates: [], confidence: 'low', note: '' }, calls), rules);
