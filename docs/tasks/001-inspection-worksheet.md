@@ -1,6 +1,6 @@
 # 001 — The inspection worksheet page
 
-**Status:** OPEN
+**Status:** CLAIMED — Codex, 2026-10-21
 **Depends on:** nothing — `src/inspection/queue.ts` is built and tested.
 
 ## Why this exists
