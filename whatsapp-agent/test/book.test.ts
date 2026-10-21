@@ -314,3 +314,73 @@ describe('the summary message itself', () => {
     assert.match(reply, /\*CUSTOMER <name or number>\*/);
   });
 });
+
+/**
+ * Lukas lifted the staff restriction on the totals on 21 October 2026. The
+ * capability was only half the story: before this, a member of staff texting
+ * *BOOK* fell through to the customer intake flow and the agent started
+ * taking a pawn application from the hire.
+ */
+describe('the hire reading the book', () => {
+  const STAFF = '+264811112222';
+  const fromStaff = (text: string) => ({ from: STAFF, messageId: `wamid.${Math.random()}`, type: 'text' as const, text });
+
+  beforeEach(() => {
+    store.ensureUser({ name: 'Petrus Haufiku', phone: STAFF, role: 'inspector' });
+  });
+
+  test('is not mistaken for a customer', async () => {
+    await router.handle(fromStaff('BOOK'));
+    const reply = transport.to(STAFF).at(-1)!;
+
+    assert.doesNotMatch(reply, /Which one do you have/i, 'the agent started an application from the hire');
+    assert.match(reply, /The book/);
+  });
+
+  test('sees the same totals Lukas sees', async () => {
+    seed();
+    await router.handle(fromStaff('BOOK'));
+    await router.handle(fromLukas('BOOK'));
+
+    assert.equal(transport.to(STAFF).at(-1), transport.to(OWNER).at(-1));
+    assert.match(transport.to(STAFF).at(-1)!, /Out on loan: \*N\$9,750\.00\*/);
+  });
+
+  test('sees who is overdue, and what they owe', async () => {
+    seed();
+    await router.handle(fromStaff('OVERDUE'));
+    const reply = transport.to(STAFF).at(-1)!;
+
+    assert.match(reply, /N\$\d/, 'the amounts are not hidden any more');
+    assert.match(reply, /grace|Past grace|overdue/i);
+  });
+
+  test('can look a customer up', async () => {
+    seed();
+    await router.handle(fromStaff('CUSTOMER Aina'));
+    assert.doesNotMatch(transport.to(STAFF).at(-1)!, /Which one do you have/i);
+  });
+
+  test('still cannot approve from their own phone', async () => {
+    seed();
+    await router.handle(fromStaff('APPROVE'));
+    const reply = transport.to(STAFF).at(-1)!;
+
+    assert.match(reply, /Pricing and approvals are Lukas/i);
+    assert.doesNotMatch(reply, /approved/i);
+  });
+
+  test('an unrecognised message gets the list of what they can ask', async () => {
+    await router.handle(fromStaff('morning'));
+    const reply = transport.to(STAFF).at(-1)!;
+
+    assert.match(reply, /Petrus/, 'greeted by name, not asked who they are');
+    assert.match(reply, /\*BOOK\*/);
+    assert.match(reply, /\*OVERDUE\*/);
+  });
+
+  test('a customer is still a customer', async () => {
+    await router.handle({ from: '+264811234567', messageId: 'wamid.c1', type: 'text', text: 'hi' });
+    assert.match(transport.to('+264811234567').at(-1)!, /what is your name/i);
+  });
+});

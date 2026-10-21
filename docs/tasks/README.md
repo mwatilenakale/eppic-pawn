@@ -30,7 +30,10 @@ What you must not change without asking:
 - Anything in `docs/playbook.md` or `docs/architecture.md`. Those are
   Lukas's documents. If a task seems to need a new business rule, stop and
   say so — the rule has to come from him, not from code.
-- The two capability boundaries in `src/staff/access.ts`.
+- The capability boundary in `src/staff/access.ts` — `approvals.decide`.
+  Staff were also kept off `book.totals` until 21 October 2026, when Lukas
+  lifted it; staff now see the totals and the overdue list. Approving money
+  is the one thing that remains his alone.
 - The append-only ledger triggers.
 
 ## Current tasks

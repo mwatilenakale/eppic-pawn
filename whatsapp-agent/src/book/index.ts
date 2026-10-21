@@ -77,15 +77,16 @@ export class Book {
   // --- the figures ---------------------------------------------------------
 
   /**
-   * The book-wide position. Owner only, and guarded here rather than in the
-   * template: a figure that is never computed on a staff code path cannot
-   * escape through a layout change or a debug panel.
+   * The book-wide position.
    *
-   * Staff still see what one customer owes — they need it to serve that
-   * customer — so this is the aggregate, not every amount.
+   * Staff may see this too as of 21 October 2026 — the check stays, because
+   * the grant is what changed, not the shape of the guard. Guarded here rather
+   * than in the template so that if the restriction ever comes back, the
+   * figure is not computed on a staff code path at all and so cannot escape
+   * through a layout change or a debug panel.
    */
   summary(viewer?: Pick<User, 'role'>): BookSummary {
-    if (viewer !== undefined) requireCapability(viewer, 'book.totals', 'Only Lukas can see the book total.');
+    if (viewer !== undefined) requireCapability(viewer, 'book.totals', 'You cannot see the book total.');
     return this.#summary();
   }
 

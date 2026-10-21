@@ -206,6 +206,23 @@ export class Store {
     return row;
   }
 
+  /**
+   * The member of staff on this number, or null for everybody else.
+   *
+   * Matched on the last nine digits, the same way customer numbers are, so
+   * that 081 812 3456 and +264811823456 are one person. A number that is not
+   * in `users` is a customer — there is no third state.
+   */
+  userByPhone(phone: string): User | null {
+    const tail = phone.replace(/\D/g, '').slice(-9);
+    if (tail.length < 9) return null;
+    return (
+      (this.db
+        .prepare("SELECT * FROM users WHERE replace(replace(replace(phone, ' ', ''), '+', ''), '-', '') LIKE ?")
+        .get(`%${tail}`) as unknown as User | undefined) ?? null
+    );
+  }
+
   // --- staff links --------------------------------------------------------
 
   /**

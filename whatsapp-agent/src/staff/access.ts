@@ -6,23 +6,23 @@
  * does not exist is explicitly out of scope (root CLAUDE.md); what is in
  * scope is the one real boundary the shop needs.
  *
- * Two capabilities separate them:
+ * One capability separates them:
  *
  *   `approvals.decide` — pricing and accepting a loan is Lukas's alone. This
  *   is the project's oldest constraint and is not a preference: no path may
  *   exist for anyone else to move money, not behind a flag, not for testing.
  *
- *   `book.totals` — the aggregate position of the book. Staff can see what an
- *   individual customer owes, because they need it to serve that customer;
- *   they do not get the screen that adds the whole book up.
+ * `book.totals` used to be the second. Staff could look up one customer but
+ * not the screen that adds the whole book up. Lukas lifted that on 21 October
+ * 2026: staff see the totals and the overdue list like he does. His reasoning
+ * was that a person who can see per-loan amounts can add them up anyway, so
+ * the restriction was costing the hire more than it was protecting.
  *
- * On that second one, honestly: a determined person who can see per-loan
- * amounts can add them up. Lukas chose that trade-off knowingly. What this
- * does buy is that the aggregate is never *computed* on a staff code path —
- * so it cannot leak through a layout change, a debug panel or a view-source —
- * and that looking up a customer is written to the audit log with a name
- * against it. The control is "one at a time, and we know who looked", not
- * "impossible".
+ * The capability still exists, and the two places that check it still check
+ * it — `Book.summary()` and the WhatsApp *BOOK* command. Only the grant
+ * changed, so putting the restriction back is a one-line edit here rather
+ * than re-plumbing the guards. Every customer lookup is still written to the
+ * audit log with a name against it; that was never the part being relaxed.
  */
 
 import { createHash, randomBytes } from 'node:crypto';
@@ -31,7 +31,10 @@ import type { Role, User } from '../store/index.ts';
 export type Capability =
   /** Approve, adjust or decline a loan. Owner only, permanently. */
   | 'approvals.decide'
-  /** The book-wide position: out on loan, interest collected, profit. */
+  /**
+   * The book-wide position: out on loan, interest collected, profit.
+   * Granted to staff as well since 21 October 2026 — see the note above.
+   */
   | 'book.totals'
   /** Who is due and who is late, so someone can be chased. */
   | 'book.chase'
@@ -55,12 +58,12 @@ const ALL: Capability[] = [
 ];
 
 /**
- * Staff get everything except the two that separate them. Written as a
- * subtraction from the full list on purpose: a capability added later is
- * granted to staff unless someone decides otherwise, which is the right
- * default for a shop where the hire does most of the work.
+ * Staff get everything except approving money. Written as a subtraction from
+ * the full list on purpose: a capability added later is granted to staff
+ * unless someone decides otherwise, which is the right default for a shop
+ * where the hire does most of the work.
  */
-const WITHHELD_FROM_STAFF: Capability[] = ['approvals.decide', 'book.totals'];
+const WITHHELD_FROM_STAFF: Capability[] = ['approvals.decide'];
 
 const CAPABILITIES: Record<Role, Capability[]> = {
   owner: ALL,

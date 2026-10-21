@@ -35,26 +35,31 @@ beforeEach(() => {
 
 afterEach(() => store.close());
 
-describe('the two boundaries', () => {
+describe('the one boundary', () => {
   test('only the owner decides on money', () => {
     assert.equal(can(lukas, 'approvals.decide'), true);
     assert.equal(can(staff, 'approvals.decide'), false);
   });
 
-  test('only the owner sees the book total', () => {
-    assert.equal(can(lukas, 'book.totals'), true);
-    assert.equal(can(staff, 'book.totals'), false);
-  });
-
   test('and that is the whole of the difference', () => {
     const missing = capabilitiesOf(lukas).filter((capability) => !capabilitiesOf(staff).includes(capability));
-    assert.deepEqual(missing.sort(), ['approvals.decide', 'book.totals']);
+    assert.deepEqual(missing.sort(), ['approvals.decide'], 'deciding money is the only thing staff cannot do');
   });
 
   test('staff can do the day-to-day work without asking', () => {
     for (const capability of ['book.chase', 'customers.lookup', 'conversations.reply', 'inspections.work', 'customers.merge'] as const) {
       assert.equal(can(staff, capability), true, `staff cannot ${capability}`);
     }
+  });
+
+  /**
+   * Reversed by Lukas on 21 October 2026. It was a real restriction with real
+   * tests behind it, so it is recorded as a decision rather than quietly
+   * deleted: a person who can see per-loan amounts can add them up anyway.
+   */
+  test('staff see the book total as well, since October 2026', () => {
+    assert.equal(can(staff, 'book.totals'), true);
+    assert.equal(can(lukas, 'book.totals'), true);
   });
 
   test('nobody at all is somebody with no capabilities', () => {
@@ -88,18 +93,29 @@ describe('approvals', () => {
 });
 
 describe('the book total', () => {
-  test('is refused to staff rather than rendered and hidden', () => {
-    const book = new Book(store);
-
-    assert.throws(() => book.summary(staff), (error: Error) => {
-      assert.ok(error instanceof AccessError);
-      assert.match(error.message, /Only Lukas can see the book total/);
-      return true;
-    });
+  test('staff get it, as of October 2026', () => {
+    assert.equal(new Book(store).summary(staff).activeLoans, 0);
   });
 
   test('the owner gets it', () => {
     assert.equal(new Book(store).summary(lukas).activeLoans, 0);
+  });
+
+  /**
+   * The guard is still wired up even though nobody is currently denied by it,
+   * so restoring the restriction stays a one-line change in access.ts rather
+   * than re-plumbing Book and the router. Asserted against a role with no
+   * capabilities at all, which is the one case that still fails the check.
+   */
+  test('the guard is still live, not removed', () => {
+    const book = new Book(store);
+    const nobody = { role: 'stranger' as never };
+
+    assert.throws(() => book.summary(nobody), (error: Error) => {
+      assert.ok(error instanceof AccessError);
+      assert.equal(error.capability, 'book.totals');
+      return true;
+    });
   });
 
   test('an unguarded call still works, for the owner-only surfaces', () => {

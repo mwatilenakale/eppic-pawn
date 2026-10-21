@@ -102,9 +102,19 @@ export class AgentRouter {
     try {
       if (samePhone(event.from, this.#ownerPhone)) {
         await this.#handleOwner(event);
-      } else {
-        await this.#handleCustomer(event);
+        return;
       }
+
+      // A number in `users` is somebody who works here. Without this branch a
+      // member of staff texting *BOOK* was answered with "which one do you
+      // have?" — the agent started taking a pawn application from the hire.
+      const staff = this.#store.userByPhone(event.from);
+      if (staff) {
+        await this.#handleStaff(event, staff);
+        return;
+      }
+
+      await this.#handleCustomer(event);
     } catch (error) {
       this.#onError(error, event);
       await this.#safeSend(event.from, 'Sorry — something went wrong on our side. Please send that again in a moment.');
@@ -141,6 +151,34 @@ export class AgentRouter {
 
     const request = this.#approvals.request(submission, estimates);
     await this.#transport.sendText({ to: this.#ownerPhone, body: request.ownerMessage });
+  }
+
+  /**
+   * A member of staff asking about the book.
+   *
+   * Read-only by construction: the only thing reachable from here is
+   * `#answer`, every branch of which reads. Nothing a member of staff can
+   * send moves an application along or changes an amount — that stays with
+   * Lukas, and it is the one capability staff do not hold.
+   *
+   * What they do see, since 21 October 2026, is everything he sees: the
+   * totals, who is due, who is past grace, and one customer's history.
+   */
+  async #handleStaff(event: InboundEvent, staff: User): Promise<void> {
+    const query = parseBookCommand(event.text ?? '');
+    if (query) {
+      await this.#transport.sendText({ to: event.from, body: this.#answer(query, staff) });
+      return;
+    }
+
+    await this.#transport.sendText({
+      to: event.from,
+      body:
+        `Hello ${staff.name.split(' ')[0]}.\n\n` +
+        'Send *BOOK* for the totals, *DUE* for this week, *OVERDUE* for who is late, ' +
+        'or *CUSTOMER <name or number>* to look someone up.\n\n' +
+        'Pricing and approvals are Lukas\'s — those come from his phone.',
+    });
   }
 
   async #handleOwner(event: InboundEvent): Promise<void> {
@@ -194,11 +232,10 @@ export class AgentRouter {
     const today = this.#book.today();
 
     if (query.kind === 'summary') {
+      // Staff hold this capability too since 21 October 2026; the check stays
+      // so the restriction is one line in access.ts away if it comes back.
       if (!can(viewer, 'book.totals')) {
-        return (
-          'The book total is Lukas\'s to see. You can still use *DUE*, *OVERDUE* ' +
-          'and *CUSTOMER <name or number>*.'
-        );
+        return 'You can still use *DUE*, *OVERDUE* and *CUSTOMER <name or number>*.';
       }
       return renderSummary(this.#book.summary(), today);
     }
