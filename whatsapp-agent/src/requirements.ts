@@ -14,7 +14,7 @@
 
 import type { Rules } from './playbook/index.ts';
 import type { Store } from './store/index.ts';
-import { buildQuestionPlan } from './intake/questions.ts';
+import { buildQuestionPlan, liveQuestions } from './intake/questions.ts';
 
 export interface Outstanding {
   /** Photos and documents still missing — what somebody has to chase. */
@@ -42,7 +42,7 @@ export function outstandingFor(store: Store, rules: Rules, itemId: string): Outs
   const waived = new Set(store.waivedFor(itemId));
 
   const plan = buildQuestionPlan(rules, item.category_slug, item.variant);
-  const missing = plan.questions.filter((question) => !question.optional).filter((question) => {
+  const missing = liveQuestions(plan, photos).filter((question) => !question.optional).filter((question) => {
     if (question.kind === 'photo') return !photos.includes(question.photoKind ?? 'item');
     if (!(question.id in answered)) return true;
 
@@ -79,8 +79,8 @@ export function outstandingIds(store: Store, rules: Rules, itemId: string): stri
   const answered = answersFor(store, item);
   const described = item.description.trim().length > 0;
 
-  return buildQuestionPlan(rules, item.category_slug, item.variant)
-    .questions.filter((question) => !question.optional)
+  return liveQuestions(buildQuestionPlan(rules, item.category_slug, item.variant), photos)
+    .filter((question) => !question.optional)
     .filter((question) => {
       if (question.kind === 'photo') return !photos.includes(question.photoKind ?? 'item');
       if (question.id === 'item-description' && described) return false;

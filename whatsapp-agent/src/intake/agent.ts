@@ -13,7 +13,7 @@ import type { Rules } from '../playbook/index.ts';
 import type { Customer, Item, Store } from '../store/index.ts';
 import { parseAmount } from '../money.ts';
 import { CategoryGate } from './unknown.ts';
-import { buildQuestionPlan, readConfirmation, type Question, type QuestionPlan } from './questions.ts';
+import { buildQuestionPlan, liveQuestions, readConfirmation, type Question, type QuestionPlan } from './questions.ts';
 
 export interface Incoming {
   text?: string;
@@ -629,7 +629,14 @@ export class IntakeAgent {
 
   /** First question with no answer yet — so a playbook edit mid-chat still lands. */
   #nextQuestion(state: IntakeState): Question | null {
-    return this.#plan(state).questions.find((question) => !(question.id in state.answers)) ?? null;
+    return liveQuestions(this.#plan(state), this.#photoKinds(state)).find(
+      (question) => !(question.id in state.answers),
+    ) ?? null;
+  }
+
+  /** Photos already in, so a superseded fallback is not asked for. */
+  #photoKinds(state: IntakeState): string[] {
+    return state.itemId ? this.#store.photos(state.itemId).map((photo) => photo.kind) : [];
   }
 
   #record(state: IntakeState, question: Question, response: string, confirmed: boolean | null): void {
@@ -694,10 +701,10 @@ export class IntakeAgent {
     // an item described as "yes" is exactly as unready as one not described
     // at all, and hiding that from Lukas is the part that costs money.
     const unusable = new Set(state.unusableAnswers ?? []);
-    const missing = plan.questions.filter(
+    const photoKinds = this.#store.photos(created.id).map((photo) => photo.kind);
+    const missing = liveQuestions(plan, photoKinds).filter(
       (question) => !question.optional && (!(question.id in state.answers) || unusable.has(question.id)),
     );
-    const photoKinds = this.#store.photos(created.id).map((photo) => photo.kind);
 
     this.#store.updateItem(created.id, { declaredDetails: state.answers, status: 'awaiting-approval' });
     const item = this.#store.item(created.id)!;

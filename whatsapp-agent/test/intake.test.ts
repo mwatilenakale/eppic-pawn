@@ -548,3 +548,124 @@ describe('a description worth pricing', () => {
     );
   });
 });
+
+/**
+ * The police declaration is a fallback — playbook section 5, 21 October 2026.
+ *
+ * It is only asked for where the customer cannot prove they own the item.
+ * Sending somebody holding the original receipt to a police station is
+ * friction for nothing, and it was being asked of everybody.
+ */
+describe('proof of ownership, and the declaration behind it', () => {
+  const upToDocuments = () => {
+    agent.handle(CUSTOMER, { text: 'hi' });
+    introduce();
+    agent.handle(CUSTOMER, { text: 'phone' });
+    agent.handle(CUSTOMER, { text: 'iPhone' });
+
+    // Everything up to the proof-of-ownership request.
+    for (let turn = 0; turn < 40; turn += 1) {
+      const conversation = store.activeConversation(store.customerByPhone(CUSTOMER)!.id)!;
+      const last = store.messages(conversation.id).filter((m) => m.direction === 'out').at(-1)!.body;
+      if (/proof of ownership/i.test(last)) return;
+      if (/photo/i.test(last)) agent.handle(CUSTOMER, { media: { content: photo() } });
+      else if (/exactly what you have/i.test(last)) agent.handle(CUSTOMER, { text: 'iPhone 15, 128GB, good condition' });
+      else agent.handle(CUSTOMER, { text: 'yes' });
+    }
+    assert.fail('never reached the proof-of-ownership request');
+  };
+
+  const everythingSaid = () => {
+    const conversation = store.activeConversation(store.customerByPhone(CUSTOMER)!.id)!;
+    return store.messages(conversation.id).filter((m) => m.direction === 'out').map((m) => m.body).join('\n');
+  };
+
+  test('a receipt means the declaration is never asked for', () => {
+    upToDocuments();
+    agent.handle(CUSTOMER, { media: { content: photo() } });
+
+    // The ownership question itself mentions the declaration as the fallback,
+    // so this asserts on the request rather than the word.
+    assert.doesNotMatch(
+      everythingSaid(),
+      /Please send a photo of the police declaration/i,
+      'somebody with the receipt was sent to a police station',
+    );
+  });
+
+  test('no receipt means the declaration is the fallback', () => {
+    upToDocuments();
+    agent.handle(CUSTOMER, { text: "I don't have a receipt for it" });
+
+    assert.match(everythingSaid(), /Please send a photo of the police declaration/i);
+  });
+
+  test('it is asked second, not first', () => {
+    upToDocuments();
+    const said = everythingSaid();
+    const ownership = said.search(/photo of your proof of ownership/i);
+    const declaration = said.search(/Please send a photo of the police declaration/i);
+
+    assert.ok(ownership >= 0, 'proof of ownership is asked');
+    assert.ok(declaration === -1 || declaration > ownership, 'the fallback never comes first');
+  });
+
+  test('the question says what counts, and what to do without it', () => {
+    upToDocuments();
+    const asked = everythingSaid()
+      .split('\n')
+      .filter((line) => /proof of ownership|if you do not have any of those/i.test(line))
+      .join('\n');
+
+    assert.match(asked, /receipt/i);
+    assert.match(asked, /proof of payment/i);
+    assert.match(asked, /if you do not have any of those/i);
+  });
+
+  test('a complete application needs only one of the two', () => {
+    upToDocuments();
+    agent.handle(CUSTOMER, { media: { content: photo() } });
+
+    let submission: IntakeSubmission | undefined;
+    for (let turn = 0; turn < 20 && !submission; turn += 1) {
+      const conversation = store.activeConversation(store.customerByPhone(CUSTOMER)!.id)!;
+      const last = store.messages(conversation.id).filter((m) => m.direction === 'out').at(-1)!.body;
+      submission = (/photo/i.test(last)
+        ? agent.handle(CUSTOMER, { media: { content: photo() } })
+        : /how much are you hoping/i.test(last)
+          ? agent.handle(CUSTOMER, { text: 'not sure' })
+          : agent.handle(CUSTOMER, { text: 'yes' })
+      ).submission;
+    }
+
+    assert.ok(submission, 'intake completes without a police declaration');
+    assert.deepEqual(submission.missing, [], 'and nothing is reported outstanding');
+    assert.ok(submission.photoKinds.includes('ownership'));
+    assert.ok(!submission.photoKinds.includes('police-declaration'));
+  });
+});
+
+/**
+ * My own prose, asked of a customer.
+ *
+ * Writing an explanation into section 5 as bullets put two of its lines in
+ * front of real customers as "Can you confirm: Lukas's end: he can approve
+ * around it, once, on the record?". A `###` subsection is commentary.
+ */
+describe('commentary in the playbook is not a rule', () => {
+  test('nothing from a subsection reaches the customer', () => {
+    const asked = buildQuestionPlan(rules, 'phones', 'iphone').questions.map((question) => question.ask).join(' | ');
+
+    assert.doesNotMatch(asked, /requirement stands/i);
+    assert.doesNotMatch(asked, /approve around it/i);
+    assert.doesNotMatch(asked, /\[decide\]/i);
+    assert.doesNotMatch(asked, /Spectra lesson/i);
+  });
+
+  test('the real rules still come through', () => {
+    assert.ok(rules.playbook.requirements.some((entry) => /copy of id/i.test(entry)));
+    assert.ok(rules.playbook.requirements.some((entry) => /proof of ownership/i.test(entry)));
+    assert.ok(rules.playbook.declarations.some((entry) => /bought outright/i.test(entry)));
+    assert.equal(rules.playbook.declarations.length, 1, 'one confirmation, not three paragraphs of prose');
+  });
+});

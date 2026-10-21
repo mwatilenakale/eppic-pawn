@@ -44,4 +44,4 @@ What you must not change without asking:
 | [002 — the second approval gate](002-second-gate.md) | BLOCKED on 001 |
 | [003 — WhatsApp handover](003-whatsapp-handover.md) | DONE |
 | [004 — 24-hour message templates](004-message-templates.md) | OPEN |
-| [005 — extending a loan by a month](005-extend-a-loan.md) | OPEN |
+| [005 — extending a loan by a month](005-extend-a-loan.md) | DONE |

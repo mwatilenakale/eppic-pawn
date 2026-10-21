@@ -809,6 +809,63 @@ export class Store {
     });
   }
 
+  /**
+   * Another month on a loan — playbook section 8 step 3.
+   *
+   * The new interest is a **new ledger entry**, not an edit of the old one.
+   * The triggers would abort an UPDATE anyway, but the reason is the point:
+   * what a customer owed at each stage stays readable afterwards, and an
+   * extension is something that happened rather than a correction of
+   * something that did not.
+   */
+  extendLoan(extension: {
+    loanId: string;
+    dueDate: string;
+    graceEndsDate: string;
+    interestCents: number;
+    actor: string;
+    note?: string;
+    marketValueCents?: number | null;
+  }): Loan {
+    const loan = this.loan(extension.loanId);
+    if (!loan) throw new Error(`No such loan: ${extension.loanId}`);
+    if (loan.status !== 'active') throw new Error(`Loan ${extension.loanId} is ${loan.status}, not active`);
+
+    const at = this.#now();
+    this.db
+      .prepare(
+        'UPDATE loans SET due_date = ?, grace_ends_date = ?, interest_cents = interest_cents + ?, updated_at = ?' +
+          ' WHERE id = ?',
+      )
+      .run(extension.dueDate, extension.graceEndsDate, extension.interestCents, at, extension.loanId);
+
+    this.postLedgerEntry({
+      loanId: extension.loanId,
+      entryType: 'interest.extension',
+      amountCents: extension.interestCents,
+      memo: `extended to ${extension.dueDate}${extension.note ? ` — ${extension.note}` : ''}`,
+      actor: extension.actor,
+      at,
+    });
+
+    this.audit({
+      actor: extension.actor,
+      action: 'loan.extended',
+      entity: 'loan',
+      entityId: extension.loanId,
+      details: {
+        dueDate: extension.dueDate,
+        interestCents: extension.interestCents,
+        // The market value the 70% test was run against, so the decision can
+        // be checked later against what was known at the time.
+        marketValueCents: extension.marketValueCents ?? null,
+        note: extension.note ?? '',
+      },
+    });
+
+    return this.loan(extension.loanId)!;
+  }
+
   /** Back on the book — the item has not been sold, so this is not a correction. */
   unforfeitLoan(loanId: string, actor: string): void {
     const at = this.#now();

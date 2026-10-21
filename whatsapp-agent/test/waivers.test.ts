@@ -57,7 +57,10 @@ async function intakeWithoutTheDeclaration(): Promise<void> {
   for (let turn = 0; turn < 45; turn += 1) {
     const last = transport.to(CUSTOMER).at(-1) ?? '';
     if (/sent your application to Lukas/i.test(last)) return;
-    if (/police declaration/i.test(last)) await say(CUSTOMER, 'I have not been to the police station yet');
+    // No receipt, so the police declaration becomes the fallback (section 5)
+    // — and they have not been to the station either. Both gaps reach Lukas.
+    if (/proof of ownership/i.test(last)) await say(CUSTOMER, "I don't have a receipt for it");
+    else if (/police declaration/i.test(last)) await say(CUSTOMER, 'I have not been to the police station yet');
     else if (/photo/i.test(last)) await say(CUSTOMER, undefined, `md${++counter}`);
     else if (/how much are you hoping/i.test(last)) await say(CUSTOMER, 'not sure');
     else if (/exactly what you have/i.test(last)) await say(CUSTOMER, 'iPhone 15, 128GB, box, battery 95%');
@@ -103,7 +106,11 @@ describe('his end', () => {
 
     assert.match(sent, /Still missing:/);
     assert.match(sent, /police declaration/i);
-    assert.deepEqual(outstandingFor(store, rules, itemId()).documents, ['police declaration']);
+    assert.deepEqual(
+      outstandingFor(store, rules, itemId()).documents.sort(),
+      ['police declaration', 'proof of ownership'],
+      'no receipt and no declaration is two gaps, not one',
+    );
   });
 
   test('approving records what he approved around, with his name on it', async () => {
@@ -111,8 +118,10 @@ describe('his end', () => {
     await say(OWNER, 'APPROVE');
 
     const waivers = store.waivers(itemId());
-    assert.equal(waivers.length, 1);
-    assert.equal(waivers[0]!.label, 'police declaration');
+    assert.deepEqual(
+      waivers.map((waiver) => waiver.label).sort(),
+      ['police declaration', 'proof of ownership'],
+    );
 
     const trail = store.auditTrail('item', itemId()).map((entry) => entry.action);
     assert.ok(trail.includes('requirements.waived'), `audited: ${trail.join(', ')}`);
@@ -168,7 +177,7 @@ describe('the dashboard stops chasing it', () => {
 
     const before = dash.read();
     assert.equal(before.awaitingDecision.length, 1);
-    assert.deepEqual(before.awaitingDecision[0]!.missingDocuments, ['police declaration']);
+    assert.deepEqual(before.awaitingDecision[0]!.missingDocuments.sort(), ['police declaration', 'proof of ownership']);
 
     await say(OWNER, 'APPROVE');
 
@@ -182,7 +191,11 @@ describe('the dashboard stops chasing it', () => {
     await say(OWNER, 'APPROVE');
 
     const ready = dash.read().readyForTheOffice[0]!;
-    assert.deepEqual(ready.waived, ['police declaration'], 'the gap stays visible with his name on it');
+    assert.deepEqual(
+      ready.waived.sort(),
+      ['police declaration', 'proof of ownership'],
+      'the gaps stay visible with his name on them',
+    );
     assert.deepEqual(ready.missingDocuments, []);
   });
 

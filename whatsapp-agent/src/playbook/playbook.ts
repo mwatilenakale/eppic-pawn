@@ -104,7 +104,15 @@ export interface Playbook {
   rates: RateRule[];
   grace: { defaultDays: number; flexibleUpToDays: number };
   partialPaymentCompounds: boolean;
-  collections: { marginThresholdPct: number };
+  collections: {
+    marginThresholdPct: number;
+    /**
+     * Section 8 step 3: what is owed, plus the next month's interest, must be
+     * at or below this percentage of the item's current market value for an
+     * extension to be allowed at all.
+     */
+    extensionCeilingPct: number;
+  };
   /** Documents the customer brings in (section 5). */
   requirements: string[];
   /**
@@ -169,6 +177,12 @@ function readBusinessNumber(path: string, markdown: string): string {
   return match[1]!.trim().replace(/[.,]$/, '');
 }
 
+/** Everything up to the first `###` heading — the rules, without the commentary. */
+function untilSubsection(block: string): string {
+  const heading = /^###\s/m.exec(block);
+  return heading ? block.slice(0, heading.index) : block;
+}
+
 /**
  * Section 5 holds three different kinds of thing, and the document says which
  * is which: documents to bring, statements to confirm, and the policy line.
@@ -181,14 +195,21 @@ function readRequirements(
 ): Pick<Playbook, 'requirements' | 'declarations' | 'proofOfPurchaseAboveCents'> {
   const [documentPart = '', confirmPart = ''] = block.split(/^.*must also be able to confirm.*$/im, 2);
 
-  const requirements = bullets(documentPart).map(plain);
+  // Both lists stop at the first `###` subsection.
+  //
+  // Everything under one is commentary — why the rule is what it is, what
+  // Lukas may waive, a worked example — and it is written as prose with
+  // bullets like anything else. Without this cut, an explanatory bullet
+  // becomes a rule: two lines explaining the waiver policy were asked of real
+  // customers as "Can you confirm: Lukas's end: he can approve around it?".
+  const requirements = bullets(untilSubsection(documentPart)).map(plain);
   if (requirements.length === 0) {
     throw new PlaybookError(path, `section ${SECTIONS.requirements} lists no documents to bring`);
   }
 
   return {
     requirements,
-    declarations: bullets(confirmPart).map(plain),
+    declarations: bullets(untilSubsection(confirmPart)).map(plain),
     proofOfPurchaseAboveCents: readProofThreshold(path, block),
   };
 }
@@ -382,7 +403,22 @@ function readCollections(path: string, block: string): Playbook['collections'] {
   if (marginThresholdPct === null) {
     throw new PlaybookError(path, `section ${SECTIONS.collections} does not state the margin threshold`);
   }
-  return { marginThresholdPct };
+  // Section 8 step 3, the 70% line. Deliberately a separate read from the
+  // margin threshold: the two tests measure against different bases and can
+  // disagree, and the document says so.
+  const ceilingLine = block
+    .split('\n')
+    .map(plain)
+    .find((line) => /at or below/i.test(line) && /%/.test(line) && /market value/i.test(line));
+  const extensionCeilingPct = ceilingLine ? percent(ceilingLine) : null;
+  if (extensionCeilingPct === null) {
+    throw new PlaybookError(
+      path,
+      `section ${SECTIONS.collections} does not state the extension ceiling (expected a line like "at or below 70% of current market value")`,
+    );
+  }
+
+  return { marginThresholdPct, extensionCeilingPct };
 }
 
 function readScreening(block: string): Map<string, ChecklistItem[]> {

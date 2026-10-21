@@ -167,9 +167,9 @@ stale correction is worse than a fresh estimate.
 Documents to bring:
 
 - Copy of ID
-- Proof of ownership / declaration
+- Proof of ownership
 - Signed agreement
-- Police declaration of ownership
+- Police declaration of ownership — only if there is no proof of ownership
 
 The customer must also be able to confirm:
 
@@ -196,6 +196,28 @@ is now true of everything above the threshold.
 
 Below N$5,000 a signed declaration remains enough — the loss is bounded and
 the friction is not worth it.
+
+### The declaration is a fallback, not a second document
+
+A police declaration is only asked for where the customer **cannot** prove
+they own the thing. Where they can, that is what we want and the declaration
+never comes up. Sending somebody holding the original receipt to a police
+station is friction for nothing.
+
+What counts as proof of ownership: the original receipt, an invoice or till
+slip, proof of payment such as a bank statement or EFT confirmation, a
+warranty card, the box where the serial or IMEI matches the item, an insurance
+schedule listing it, or a previous Eppic pawn ticket for the same item.
+
+**[decide]** That list is a first draft and Lukas has not confirmed it. The
+receipt and the invoice are certain; the rest are reasonable guesses at "other
+forms that prove they are the owner" and need his word before they are relied
+on. Taking one off the list just makes the police declaration the fallback
+again, which is the safe direction to be wrong in.
+
+Above the N$5,000 threshold, the proof has to be a **receipt or settlement
+letter** specifically. A box with a matching serial is evidence of possession,
+not of a debt being settled — which is the whole Spectra lesson.
 
 ### Waiving a document
 
@@ -276,7 +298,27 @@ in, so in-person time is minimal.
      market is Lukas's decision on that item, the same as every other
      decision about money here. A loan going quiet does not forfeit on a
      timer.
-3. **Margin check before selling:** original assessed value + interest
+3. **Extension test (the 70% line).** A customer who has not settled within
+   the repayment period and asks for another month: add the next month's
+   interest to what is already owed — the principal plus every month of
+   interest so far — and compare that total against the item's **current
+   market value**.
+   - **Total at or below 70% of current market value → the extension may be
+     granted.**
+   - **Above 70% → no extension. The item goes to market instead.**
+   - The point of the line is that the shop must still be able to recover
+     everything owed from a quick sale, priced to move rather than for the
+     best price (step 5 below). At 70% there is room for that; past it, each
+     further month makes the position worse, not better.
+   - Granting it is still Lukas's decision. Passing the test permits an
+     extension; it does not grant one.
+
+   *Worked through, on the example below: a N$10,000 item, N$3,750 loan,
+   N$1,087.50 interest a month. After two months N$5,925 is owed, and 70% of
+   N$10,000 is N$7,000 — inside the line, so another month may be granted.
+   After four months it is N$8,100, past the line, and it goes to market.*
+
+4. **Margin check before selling:** original assessed value + interest
    now owed (defaulted month + another month if extended) vs. current
    market value. Roughly **10%+** margin remaining → extend a month.
    Margin gone → sell.
@@ -284,11 +326,27 @@ in, so in-person time is minimal.
      interest = N$1,087.50/month. Two missed months: 3,750 + 1,087.50 +
      1,087.50 = N$5,925, still ~21% under the N$7,500 sale price — safe
      to extend.*
-4. **Sale pricing:** intentionally below market value so it sells within
+5. **Sale pricing:** intentionally below market value so it sells within
    a day or two — speed over maximum price; can't compete with buy/sell
    shops on holding time.
-5. **Why the urgency:** month-to-month cash business — capital needs to
+6. **Why the urgency:** month-to-month cash business — capital needs to
    come back quickly to fund new loans and cover expenses.
+
+### Two tests, and which one governs
+
+**[decide]** Steps 3 and 4 are both tests of the same moment and they do not
+always agree. Step 3 measures what is owed against **70% of current market
+value**; step 4 measures it against the **assessed value** with a 10% margin
+left over. On the worked example they agree. They part company in the middle:
+owed N$7,000 on a N$10,000 item assessed at N$7,500 passes step 3 exactly and
+fails step 4.
+
+Until Lukas says otherwise, the code treats **step 3 as the extension test**,
+because it is the one he stated in those terms and it is the stricter of the
+two — it stops lending against an item roughly a month earlier. Step 4 stays
+as written and is shown alongside, so a disagreement is visible rather than
+silently resolved. Neither grants anything: both are checks on a decision that
+remains his.
 
 ## 9. Records
 

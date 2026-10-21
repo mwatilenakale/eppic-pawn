@@ -29,6 +29,15 @@ export interface Question {
   source: 'item' | 'playbook' | 'fraud' | 'documents';
   /** Intake continues without it, but it is listed as missing to Lukas. */
   optional: boolean;
+  /**
+   * Not needed if this photo has already arrived.
+   *
+   * Playbook section 5: the police declaration is the *fallback* for somebody
+   * who cannot prove they own the thing, not a second document on top of the
+   * receipt. Asking a customer holding the original invoice to also go to a
+   * police station is friction for nothing.
+   */
+  unlessPhoto?: string;
 }
 
 export interface QuestionPlan {
@@ -68,10 +77,23 @@ const PHOTO_CHECKS: { pattern: RegExp; photoKind: string; ask: string }[] = [
  * Order matters: "police declaration of ownership" must be recognised as the
  * police document, not as ordinary proof of ownership.
  */
-const DOCUMENT_REQUESTS: { pattern: RegExp; photoKind: string; ask: string }[] = [
-  { pattern: /police declaration/i, photoKind: 'police-declaration', ask: 'Please send a photo of the police declaration of ownership.' },
+const DOCUMENT_REQUESTS: { pattern: RegExp; photoKind: string; ask: string; unlessPhoto?: string }[] = [
+  {
+    pattern: /police declaration/i,
+    photoKind: 'police-declaration',
+    ask: 'Please send a photo of the police declaration of ownership.',
+    // The fallback, not a second document: skipped entirely once proof of
+    // ownership is in (playbook section 5).
+    unlessPhoto: 'ownership',
+  },
   { pattern: /copy of id|^id\b/i, photoKind: 'id', ask: 'Please send a photo of your ID.' },
-  { pattern: /proof of ownership|declaration of ownership/i, photoKind: 'ownership', ask: 'Please send a photo of your proof of ownership (receipt, invoice, or a written declaration).' },
+  {
+    pattern: /proof of ownership|declaration of ownership/i,
+    photoKind: 'ownership',
+    ask:
+      'Please send a photo of your proof of ownership — the receipt, invoice, proof of payment, ' +
+      'or the box if the serial matches.\n\nIf you do not have any of those, say so and I will ask for a police declaration instead.',
+  },
 ];
 
 /** Collected at handover, not during chat — the contract is generated later. */
@@ -195,8 +217,15 @@ export function buildQuestionPlan(
       ask: request.ask,
       source: 'documents',
       optional: false,
+      ...(request.unlessPhoto ? { unlessPhoto: request.unlessPhoto } : {}),
     });
   }
+
+  // The fallback comes after what it stands in for, whatever order the
+  // document list happens to be in. A customer asked for the police
+  // declaration before being asked for a receipt has been sent to a police
+  // station for nothing.
+  questions.sort((a, b) => Number(Boolean(a.unlessPhoto)) - Number(Boolean(b.unlessPhoto)));
 
   return { categorySlug, variant, questions, inPersonChecks };
 }
@@ -318,4 +347,20 @@ export function readConfirmation(text: string): Confirmation | null {
   if (/^(y|yes|yep|yeah|yebo|ja|correct|confirmed|affirmative|sure|ok|okay)\b/.test(answer)) return 'yes';
   if (/^(n|no|nope|nee|negative|not really)\b/.test(answer)) return 'no';
   return null;
+}
+
+/**
+ * Is this question still needed, given the photos already in?
+ *
+ * Only `unlessPhoto` is considered — whether the question has been *answered*
+ * is the caller's business. Playbook section 5: a customer who has shown proof
+ * of ownership is never asked for the police declaration as well.
+ */
+export function stillNeeded(question: Question, photos: string[]): boolean {
+  return !question.unlessPhoto || !photos.includes(question.unlessPhoto);
+}
+
+/** The plan with superseded fallbacks dropped. */
+export function liveQuestions(plan: QuestionPlan, photos: string[]): Question[] {
+  return plan.questions.filter((question) => stillNeeded(question, photos));
 }

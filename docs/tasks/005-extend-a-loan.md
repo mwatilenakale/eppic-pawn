@@ -1,6 +1,9 @@
 # 005 — Extending a loan by a month
 
-**Status:** OPEN
+**Status:** DONE — Claude, 21 October 2026. `src/book/extend.ts`,
+`test/extend.test.ts`. Built against Lukas's 70% rule (playbook section 8
+step 3), which he gave after this spec was written; the spec's reference to
+the 10% margin check is superseded — see "Two tests, and which one governs".
 **Depends on:** nothing. `SELL` / `KEEP` are built (`src/book/forfeit.ts`).
 
 ## Why this exists
