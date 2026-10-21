@@ -35,12 +35,18 @@ export type HandoverReason =
  * what was asked. Escalating that would punish the honest ones and bury Lukas
  * in messages about paperwork that is going fine.
  */
-const EXEMPT = /\b(police\s+(declaration|affidavit|clearance)|declaration of ownership)\b/i;
+const EXEMPT = /\b(police\s+(declaration|affidavit|clearance|station)|declaration of ownership)\b/i;
 
 const TRIGGERS: { reason: HandoverReason; pattern: RegExp; why: string }[] = [
   {
     reason: 'ownership',
-    pattern: /\b(stolen|stole|steal|i took it|not mine|belongs to|police|reported it|robbed|snatch)\b/i,
+    // The bare word "police" is deliberately not here. The checklist sends
+    // every customer to a police station for the declaration of ownership, so
+    // "I have not been to the police station yet" is somebody doing what was
+    // asked — and it was being escalated to Lukas as a possible theft. Only
+    // the alarming combinations count.
+    pattern:
+      /\b(stolen|stole|steal|i took it|not mine|belongs to|robbed|snatch|reported it|police\s+(case|report against|are looking|investigation)|case\s+open|opened a case)\b/i,
     why: 'Something about ownership or the police',
   },
   {

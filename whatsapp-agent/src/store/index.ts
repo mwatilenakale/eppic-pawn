@@ -776,6 +776,55 @@ export class Store {
     return this.db.prepare("SELECT * FROM approvals WHERE status = 'pending' ORDER BY created_at").all() as unknown as Approval[];
   }
 
+  // --- documents Lukas approved around (playbook section 5) ---------------
+
+  /**
+   * Records that he approved an application with these requirements still
+   * outstanding. Only ever called with his own id: waiving is a decision about
+   * money and the capability check sits with the caller.
+   */
+  waive(waiver: {
+    itemId: string;
+    approvalId?: string | null;
+    requirements: { requirement: string; label: string }[];
+    waivedBy: string;
+  }): void {
+    if (waiver.requirements.length === 0) return;
+
+    const insert = this.db.prepare(
+      'INSERT OR IGNORE INTO waivers (id, item_id, approval_id, requirement, label, waived_by, created_at)' +
+        ' VALUES (?, ?, ?, ?, ?, ?, ?)',
+    );
+    const at = this.#now();
+    for (const { requirement, label } of waiver.requirements) {
+      insert.run(randomUUID(), waiver.itemId, waiver.approvalId ?? null, requirement, label, waiver.waivedBy, at);
+    }
+
+    this.audit({
+      actor: waiver.waivedBy,
+      action: 'requirements.waived',
+      entity: 'item',
+      entityId: waiver.itemId,
+      details: { waived: waiver.requirements.map((entry) => entry.label) },
+    });
+  }
+
+  /** Requirement ids he has approved around on this item. */
+  waivedFor(itemId: string): string[] {
+    return (
+      this.db.prepare('SELECT requirement FROM waivers WHERE item_id = ?').all(itemId) as unknown as {
+        requirement: string;
+      }[]
+    ).map((row) => row.requirement);
+  }
+
+  /** With their labels, for showing what he decided and when. */
+  waivers(itemId: string): { requirement: string; label: string; created_at: string }[] {
+    return this.db
+      .prepare('SELECT requirement, label, created_at FROM waivers WHERE item_id = ? ORDER BY created_at')
+      .all(itemId) as unknown as { requirement: string; label: string; created_at: string }[];
+  }
+
   // --- "can we take this at all?" (playbook section 2) --------------------
 
   /**

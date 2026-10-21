@@ -197,6 +197,25 @@ is now true of everything above the threshold.
 Below N$5,000 a signed declaration remains enough — the loss is bounded and
 the friction is not worth it.
 
+### Waiving a document
+
+Every document above is **always** asked for. The agent never drops one, the
+website never stops listing it, and no customer is ever told they don't need
+it — whatever the system knows about them. That is not negotiable and is not
+a setting.
+
+What Lukas can do is approve an application anyway. Where he knows the person
+well, he may take a declaration on trust and decide the file is good enough
+without it. That is his call on that one item, made with the gap in front of
+him, and it is recorded against the application as his: who waived what, and
+when. It is not a rule about that customer and it does not carry to their
+next loan.
+
+So the two ends are deliberately different, and that is the point:
+
+- **Customer's end:** the requirement stands, always, unchanged.
+- **Lukas's end:** he can approve around it, once, on the record.
+
 ## 6. Item screening checklists
 
 **Cars**
@@ -252,6 +271,11 @@ in, so in-person time is minimal.
 
 1. Grace period runs out (4 days, flexible extension as above).
 2. Direct outreach — item will need to be sold if unpaid.
+   - **Nothing is ever sold automatically.** Once grace has run out the
+     system says so and shows the margin check below; sending an item to
+     market is Lukas's decision on that item, the same as every other
+     decision about money here. A loan going quiet does not forfeit on a
+     timer.
 3. **Margin check before selling:** original assessed value + interest
    now owed (defaulted month + another month if extended) vs. current
    market value. Roughly **10%+** margin remaining → extend a month.

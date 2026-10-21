@@ -18,7 +18,7 @@
 import type { Rules } from '../playbook/index.ts';
 import type { Store } from '../store/index.ts';
 import { Book, type BookSummary, type LoanLine } from '../book/index.ts';
-import { buildQuestionPlan } from '../intake/questions.ts';
+import { outstandingFor } from '../requirements.ts';
 import { referenceFor } from '../reference.ts';
 
 /** An application somewhere between "hello" and money changing hands. */
@@ -40,6 +40,11 @@ export interface DealLine {
   missingDocuments: string[];
   /** Screening questions with no usable answer yet, counted not listed. */
   unansweredQuestions: number;
+  /**
+   * Gaps Lukas approved around — playbook section 5, "Waiving a document".
+   * Shown so the record is visible, not chased.
+   */
+  waived: string[];
   photos: string[];
 }
 
@@ -276,70 +281,27 @@ export class DashboardQuery {
       description: item.description || '(not described yet)',
       category: category?.label ?? 'Something else',
       waitingHours: this.#hoursSince(item.created_at),
-      ...this.#outstandingFor(item, photos),
+      ...this.#outstanding(item.id),
       photos,
     };
   }
 
   /**
-   * What is still outstanding, in the documents' own words.
+   * What is still outstanding, from the shared module.
    *
-   * Taken from the same question plan the conversation itself works through,
-   * so this list cannot drift from what the customer is actually being asked —
-   * which it would within a week if it were its own hard-coded checklist.
+   * Not worked out here: the approval message, the "ready for the office"
+   * list and this one have to agree, and when the dashboard computed it for
+   * itself the two disagreed within a day. `src/requirements.ts` also knows
+   * which gaps Lukas has already approved around, so a waived document is not
+   * chased forever (playbook section 5).
    */
-  #outstandingFor(
-    item: ItemRow,
-    photos: string[],
-  ): { missingDocuments: string[]; unansweredQuestions: number } {
-    const answered = this.#answersFor(item);
-    const plan = buildQuestionPlan(this.#rules, item.category_slug, item.variant);
-    const outstanding = plan.questions.filter((question) => !question.optional).filter((question) => {
-      if (question.kind === 'photo') return !photos.includes(question.photoKind ?? 'item');
-      if (!(question.id in answered)) return true;
-
-      // An answer the agent gave up on is recorded so the conversation can
-      // move past it, with `confirmed: false`. For a written answer that means
-      // it was unusable — an item described as "yes" is exactly as outstanding
-      // as one not described at all.
-      const answer = answered[question.id] as { confirmed?: boolean | null } | undefined;
-      return question.kind === 'text' && answer?.confirmed === false;
-    });
-
-    // The item row carries the description even before submission, so a
-    // described item is described whatever the answer map says.
-    const described = item.description.trim().length > 0;
-
+  #outstanding(itemId: string): { missingDocuments: string[]; unansweredQuestions: number; waived: string[] } {
+    const outstanding = outstandingFor(this.#store, this.#rules, itemId);
     return {
-      missingDocuments: outstanding
-        .filter((question) => !(described && question.id === 'item-description'))
-        .filter((question) => question.kind === 'photo' || question.id === 'item-description')
-        .map((question) =>
-          question.kind === 'photo' ? documentLabel(question.photoKind ?? 'item') : 'a description',
-        ),
-      unansweredQuestions: outstanding.filter(
-        (question) => question.kind !== 'photo' && question.id !== 'item-description',
-      ).length,
+      missingDocuments: outstanding.documents,
+      unansweredQuestions: outstanding.questions.length,
+      waived: outstanding.waived,
     };
-  }
-
-  /**
-   * What has been answered so far.
-   *
-   * `items.declared_details` is only written when intake completes, so for an
-   * application still in progress the live answers are in the conversation's
-   * own state. Reading only the column reported ten unanswered questions for a
-   * customer who had answered most of them.
-   */
-  #answersFor(item: ItemRow): Record<string, unknown> {
-    const declared = parseObject(item.declared_details);
-    if (Object.keys(declared).length > 0) return declared;
-    if (!item.conversation_id) return {};
-
-    const conversation = this.#store.conversationById(item.conversation_id);
-    if (!conversation) return {};
-    const state = parseObject(conversation.state) as { answers?: Record<string, unknown> };
-    return state.answers ?? {};
   }
 
   #hoursSince(timestamp: string | null): number {
@@ -347,16 +309,6 @@ export class DashboardQuery {
     const then = Date.parse(timestamp.includes('T') ? timestamp : `${timestamp}T00:00:00Z`);
     if (Number.isNaN(then)) return 0;
     return Math.max(0, Math.floor((this.#now().getTime() - then) / 3_600_000));
-  }
-}
-
-/** JSON that came out of a database column, which may be anything. */
-function parseObject(text: string): Record<string, unknown> {
-  try {
-    const value = JSON.parse(text) as unknown;
-    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-  } catch {
-    return {};
   }
 }
 
@@ -371,14 +323,4 @@ function isComplete(line: DealLine): boolean {
   return line.missingDocuments.length === 0 && line.unansweredQuestions === 0;
 }
 
-/** `police-declaration` reads better as "police declaration" on a screen. */
-function documentLabel(photoKind: string): string {
-  const labels: Record<string, string> = {
-    item: 'photo of the item',
-    box: 'photo of the box',
-    id: 'copy of ID',
-    ownership: 'proof of ownership',
-    'police-declaration': 'police declaration',
-  };
-  return labels[photoKind] ?? photoKind.replace(/-/g, ' ');
-}
+

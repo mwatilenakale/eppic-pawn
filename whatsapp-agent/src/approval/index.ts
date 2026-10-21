@@ -10,6 +10,7 @@
 
 import { formatAmount, parseAmount } from '../money.ts';
 import { referenceFor } from '../reference.ts';
+import { describeRequirements, outstandingIds } from '../requirements.ts';
 import type { Rules } from '../playbook/index.ts';
 import type { Approval, Store, User } from '../store/index.ts';
 import type { IntakeSubmission } from '../intake/agent.ts';
@@ -176,18 +177,41 @@ export class ApprovalWorkflow {
     });
     this.#store.updateItem(approval.item_id, { status: 'approved' });
 
+    // Playbook section 5, "Waiving a document". Approving with a document
+    // still outstanding is allowed — where he knows the person he may take a
+    // declaration on trust — and it is recorded as his decision on this item.
+    // Without this the dashboard chased him forever for a gap he had already
+    // decided about, and nothing said who had decided it.
+    const gaps = outstandingIds(this.#store, this.#rules, approval.item_id);
+    const waived = describeRequirements(this.#store, this.#rules, approval.item_id, gaps);
+    this.#store.waive({
+      itemId: approval.item_id,
+      approvalId: approval.id,
+      requirements: waived,
+      waivedBy: owner.id,
+    });
+
     const terms = loanTerms({ principalCents: amountCents }, this.#rules);
     const item = this.#store.item(approval.item_id)!;
     const customer = this.#store.db
       .prepare('SELECT phone FROM customers WHERE id = ?')
       .get(item.customer_id) as { phone: string };
 
+    // Said back to him plainly. Approving around a document is his to do, but
+    // it should never be something he did without noticing.
+    const waivedNote =
+      waived.length > 0
+        ? `\n\n*You approved this without:*\n${waived.map((entry) => `  • ${entry.label}`).join('\n')}\n` +
+          'Recorded against the item as your call. The customer is still being asked for all of it.'
+        : '';
+
     return {
       approval: decided,
       ownerMessage:
         `Approved ${referenceFor(approval.id)} at ${formatAmount(amountCents)}.\n` +
         `Terms from the playbook: ${terms.ratePct}% over ${terms.termDays} days — ${formatAmount(terms.totalDueCents)} due, ${terms.graceDays}-day grace.\n` +
-        'The customer has been told. The loan itself starts at handover, once the in-person checks pass.',
+        'The customer has been told. The loan itself starts at handover, once the in-person checks pass.' +
+        waivedNote,
       customerPhone: customer.phone,
       customerMessage:
         `Good news — Lukas has reviewed your application and can offer ${formatAmount(amountCents)} on your ${item.description || 'item'}.\n\n` +

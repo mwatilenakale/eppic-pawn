@@ -125,6 +125,12 @@ function dealRow(deal: DealLine, modifier: string): string {
       ? `<span class="chip chip-missing">${deal.unansweredQuestions} question${deal.unansweredQuestions === 1 ? '' : 's'} unanswered</span>`
       : '';
 
+  // What Lukas approved around (playbook section 5). Shown, not chased: the
+  // point of the record is that the gap is visible and has his name on it.
+  const waived = deal.waived
+    .map((what: string) => `<span class="chip" title="waived by Lukas">waived: ${escapeHtml(what)}</span>`)
+    .join('');
+
   return `<div class="row ${modifier}">
     <div class="row-top">
       <span class="row-who">${escapeHtml(deal.customerName)}</span>
@@ -132,7 +138,7 @@ function dealRow(deal: DealLine, modifier: string): string {
     </div>
     <div class="row-what">${escapeHtml(deal.description)}</div>
     <div class="row-meta">${reference}${escapeHtml(deal.category)} · ${escapeHtml(deal.customerPhone)}</div>
-    ${have || missing || questions ? `<div class="chips">${missing}${questions}${have}</div>` : ''}
+    ${have || missing || questions || waived ? `<div class="chips">${missing}${questions}${waived}${have}</div>` : ''}
   </div>`;
 }
 

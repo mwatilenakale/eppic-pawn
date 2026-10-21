@@ -52,6 +52,8 @@ export interface IntakeState {
    * moves past them; still outstanding, so Lukas is told.
    */
   unusableAnswers?: string[];
+  /** Times each document has been asked for, so we ask twice and move on. */
+  photoAsks?: Record<string, number>;
   /** The last thing we asked, and how many times running we have asked it. */
   lastAsk?: string;
   repeatedAsk?: number;
@@ -145,6 +147,18 @@ const copy = {
     attempt === 1
       ? "I need a bit more than that to put in front of Lukas — what make and model is it?\n\nFor example: *iPhone 13 Pro, 256GB, small scratch on the back* or *Toyota Hilux 2016, 180,000km*."
       : 'Still not quite enough, sorry. Just the make and the model is fine — even *Dell laptop 2021* or *55 inch Samsung* gives him something to work with.',
+
+  /**
+   * A required document they don't have yet.
+   *
+   * Careful wording: it is still required. The customer is not told they can
+   * skip it — they are told to bring it in. Whether the file is good enough
+   * without it is Lukas's decision, and the customer never hears that the
+   * question was even asked (playbook section 5, "Waiving a document").
+   */
+  bringItLater: (question: Question) =>
+    `No problem — bring it with you when you come in. It is still needed before anything is handed over.\n\n` +
+    `I'll note that ${documentName(question)} is still to come and carry on with the rest.`,
 
   /** They messaged again while Lukas has the question. */
   stillWaiting:
@@ -511,6 +525,32 @@ export class IntakeAgent {
         this.#record(state, question, text, readConfirmation(text) === 'yes' ? true : null);
         return { replies: this.#nextPrompt(customer, conversationId, state) };
       }
+
+      // A required document they do not have yet.
+      //
+      // The requirement stands — it was asked, and it is asked again — but a
+      // customer who genuinely has not been to the police station cannot
+      // produce one by being asked a fifth time. Blocking here meant no
+      // application could ever reach Lukas with a document missing, which
+      // meant the waiver in playbook section 5 could never happen: his whole
+      // point is that he decides these one by one, and he cannot decide about
+      // a file he never sees.
+      //
+      // So: ask twice, then carry the gap to him and say so. The customer is
+      // still told to bring it, and the contract still requires it.
+      if (text) {
+        const asks = (state.photoAsks ??= {});
+        asks[question.id] = (asks[question.id] ?? 0) + 1;
+
+        if (haventGotIt(text) || asks[question.id]! >= 2) {
+          this.#record(state, question, text, false);
+          state.unusableAnswers = [...(state.unusableAnswers ?? []), question.id];
+          return {
+            replies: [copy.bringItLater(question), ...this.#nextPrompt(customer, conversationId, state)],
+          };
+        }
+      }
+
       return { replies: [copy.photoExpected(question.ask)] };
     }
 
@@ -763,6 +803,26 @@ const DESCRIPTION_FILLER = new Set([
   'not', 'any', 'some', 'very', 'really', 'today', 'now', 'cash', 'money',
   'papers', 'receipt', 'thanks', 'thank', 'hello', 'okay', 'sure',
 ]);
+
+/** "I don't have it", "not yet", "I'll bring it" — an honest answer, not a dodge. */
+const HAVENT_GOT_IT =
+  /\b(don'?t have|do not have|haven'?t got|have not got|haven'?t been|have not been|not yet|no receipt|no papers|lost it|can'?t find|cannot find|i'?ll bring|will bring|bring it|later|tomorrow|next week)\b/i;
+
+function haventGotIt(text: string): boolean {
+  return HAVENT_GOT_IT.test(text);
+}
+
+/** "the police declaration", for a sentence about what is still to come. */
+function documentName(question: Question): string {
+  const names: Record<string, string> = {
+    item: 'a photo of the item',
+    box: 'a photo of the box',
+    id: 'a copy of your ID',
+    ownership: 'your proof of ownership',
+    'police-declaration': 'the police declaration',
+  };
+  return names[question.photoKind ?? 'item'] ?? 'that document';
+}
 
 /** They are telling us a name on purpose, not just happening to start with "I". */
 const NAME_LEAD_IN = /\b(my name is|name'?s|i'?m|i am|it'?s|this is|call me)\b/i;

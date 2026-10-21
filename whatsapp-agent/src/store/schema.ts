@@ -449,4 +449,32 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE conversations ADD COLUMN taken_at TEXT;
   CREATE INDEX conversations_held ON conversations(held_by) WHERE held_by IS NOT NULL;
   `,
+
+  // 12 — a document Lukas approved around (playbook section 5, "Waiving a
+  // document").
+  //
+  // The requirement itself never moves. The agent always asks, the website
+  // always lists it, and no customer is ever told they do not need it. What
+  // this records is Lukas deciding, on one item, with the gap in front of him,
+  // that the file is good enough without it — because he knows the person.
+  //
+  // A row per requirement rather than a flag on the approval, so the answer to
+  // "what exactly did he wave through, and when?" is a query and not an
+  // inference. It is deliberately scoped to the item: it is not a rule about
+  // that customer and must not carry to their next loan.
+  `
+  CREATE TABLE waivers (
+    id           TEXT PRIMARY KEY,
+    item_id      TEXT NOT NULL REFERENCES items(id),
+    approval_id  TEXT REFERENCES approvals(id),
+    -- The question id from the plan, e.g. photo-id or phones-4.2.
+    requirement  TEXT NOT NULL,
+    -- As it read to him at the time, so the record survives a reworded plan.
+    label        TEXT NOT NULL DEFAULT '',
+    waived_by    TEXT NOT NULL REFERENCES users(id),
+    created_at   TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX waivers_once ON waivers(item_id, requirement);
+  CREATE INDEX waivers_item ON waivers(item_id);
+  `,
 ];

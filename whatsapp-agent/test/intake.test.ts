@@ -26,7 +26,7 @@ beforeEach(() => {
 afterEach(() => store.close());
 
 /** Drives the conversation to completion, answering everything positively. */
-function runFullIntake(opts: { category?: string; variant?: string } = {}): {
+function runFullIntake(opts: { category?: string; variant?: string; withoutDocument?: boolean } = {}): {
   transcript: { from: 'customer' | 'agent'; text: string }[];
   submission: IntakeSubmission;
 } {
@@ -46,7 +46,9 @@ function runFullIntake(opts: { category?: string; variant?: string } = {}): {
   let submission: IntakeSubmission | undefined;
   for (let turn = 0; turn < 40 && !submission; turn += 1) {
     const last = transcript.filter((line) => line.from === 'agent').at(-1)!.text;
-    const outcome = /send (me )?a (clear )?photo|photo of/i.test(last)
+    const outcome = /police declaration/i.test(last) && opts.withoutDocument
+      ? say("I haven't been to the police station yet")
+      : /send (me )?a (clear )?photo|photo of/i.test(last)
       ? say(undefined, photo())
       : /how much are you hoping/i.test(last)
         ? say('3000')
@@ -205,8 +207,52 @@ describe('intake conversation', () => {
     introduce();
     agent.handle(CUSTOMER, { text: 'laptop' });
     agent.handle(CUSTOMER, { text: 'Dell XPS 13, 2021, 16GB RAM' });
-    const { replies } = agent.handle(CUSTOMER, { text: 'I will bring it in' });
+    const { replies } = agent.handle(CUSTOMER, { text: 'here it is' });
     assert.match(replies[0]!, /still need that as a photo/i);
+  });
+
+  /**
+   * Playbook section 5, "Waiving a document".
+   *
+   * A required document used to block intake outright, which meant no
+   * application could ever reach Lukas with one missing — and so his waiver
+   * could never happen at all. He decides these one by one and cannot decide
+   * about a file he never sees.
+   */
+  test('a document they genuinely do not have is carried to Lukas, not blocked', () => {
+    agent.handle(CUSTOMER, { text: 'hi' });
+    introduce();
+    agent.handle(CUSTOMER, { text: 'laptop' });
+    agent.handle(CUSTOMER, { text: 'Dell XPS 13, 2021, 16GB RAM' });
+
+    const { replies } = agent.handle(CUSTOMER, { text: "I don't have it yet" });
+
+    assert.match(replies.join('\n'), /bring it with you/i);
+    assert.match(replies.join('\n'), /still needed/i, 'the requirement does not move');
+    assert.doesNotMatch(replies.join('\n'), /still need that as a photo/i, 'it moved on');
+  });
+
+  test('but it asks twice before accepting that', () => {
+    agent.handle(CUSTOMER, { text: 'hi' });
+    introduce();
+    agent.handle(CUSTOMER, { text: 'laptop' });
+    agent.handle(CUSTOMER, { text: 'Dell XPS 13, 2021, 16GB RAM' });
+
+    const first = agent.handle(CUSTOMER, { text: 'here it is' });
+    assert.match(first.replies[0]!, /still need that as a photo/i);
+
+    const second = agent.handle(CUSTOMER, { text: 'here it is' });
+    assert.match(second.replies.join('\n'), /bring it with you/i, 'asking a fifth time produces nothing');
+  });
+
+  test('the gap reaches Lukas as outstanding', () => {
+    const { submission } = runFullIntake({ category: 'phone', variant: 'iPhone', withoutDocument: true });
+
+    assert.match(
+      submission.missing.map((question) => question.photoKind ?? '').join(' '),
+      /police-declaration/,
+      'he is told which document is missing, so he can decide about it',
+    );
   });
 
   test('a redelivered webhook message changes nothing', () => {
