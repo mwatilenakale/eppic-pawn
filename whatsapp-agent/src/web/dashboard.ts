@@ -19,7 +19,7 @@ import { DASHBOARD_CSS, THEME } from './theme.ts';
 import type { CategoryQuestion, Dashboard, DealLine, WaitingOnAPerson } from '../dashboard/index.ts';
 import type { LoanLine } from '../book/index.ts';
 
-export function dashboardPage(dashboard: Dashboard, staffName: string, canSeeTotals: boolean): string {
+export function dashboardPage(dashboard: Dashboard, staffName: string, canSeeTotals: boolean, inspectionsUrl?: string): string {
   const needsLukas =
     dashboard.awaitingDecision.length +
     dashboard.awaitingCategoryAnswer.length +
@@ -82,6 +82,7 @@ ${section(
 
 <div class="section">
   <h2>In the shop</h2>
+  ${inspectionsUrl ? `<p><a href="${escapeHtml(inspectionsUrl)}">Open inspection queue</a></p>` : ''}
   <div class="rows">
     <div class="row">
       <div class="row-top"><span class="row-who">Inspections to do</span><span class="row-when">${dashboard.inspections.waiting}</span></div>
@@ -233,3 +234,4 @@ Approvals and prices are Lukas's, and are made over WhatsApp.</footer>
 </div></body>
 </html>`;
 }
+

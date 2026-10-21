@@ -8,6 +8,23 @@ import { Store, generateMediaKey } from '../src/store/index.ts';
 import { IntakeAgent, type IntakeSubmission } from '../src/intake/agent.ts';
 import { buildQuestionPlan, readConfirmation } from '../src/intake/questions.ts';
 
+test('mechanic context is one check rather than dependent sentence fragments', () => {
+  const plan = buildQuestionPlan(loadRules(), 'cars');
+  const mechanic = plan.inPersonChecks.filter((check) => /mechanic/i.test(check.text));
+  assert.equal(mechanic.length, 1);
+  assert.match(mechanic[0]!.text, /customer covers.*but he keeps.*to avoid.*he bears/s);
+  assert.ok(!plan.inPersonChecks.some((check) => /^(but|to avoid|he bears)/i.test(check.text)));
+});
+
+test('fraud examples and load-test observations remain attached to their check', () => {
+  const rules = loadRules();
+  const phone = buildQuestionPlan(rules, 'phones', 'iphone');
+  assert.equal(phone.inPersonChecks.filter((check) => /fraud patterns|cloned box|blacklisted post-loan/i.test(check.text)).length, 1);
+  const consolePlan = buildQuestionPlan(rules, 'consoles');
+  assert.ok(!consolePlan.inPersonChecks.some((check) => /^watching for/i.test(check.text)));
+  assert.ok(consolePlan.inPersonChecks.some((check) => /stress test.*watching for.*disc-read/s.test(check.text)));
+});
+
 const rules = loadRules();
 const CUSTOMER = '+264811234567';
 const photo = () => Buffer.from('fake-jpeg-bytes');
@@ -669,3 +686,4 @@ describe('commentary in the playbook is not a rule', () => {
     assert.equal(rules.playbook.declarations.length, 1, 'one confirmation, not three paragraphs of prose');
   });
 });
+

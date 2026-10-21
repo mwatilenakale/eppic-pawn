@@ -150,12 +150,12 @@ describe('submitting', () => {
     const job = queue.open({ itemId, actor: lukas.id });
     queue.claim(job.id, staff);
 
-    const partial = answerAll(job.id).slice(0, 3);
+    const partial = answerAll(job.id).slice(0, -1);
     assert.throws(
       () => queue.submit({ jobId: job.id, user: staff, results: partial, findings: 'looks fine' }),
       (error: Error) => {
         assert.ok(error instanceof InspectionError);
-        assert.match(error.message, /checks are still unanswered/);
+        assert.match(error.message, /checks? (?:is|are) still unanswered/);
         return true;
       },
     );
@@ -289,3 +289,4 @@ describe('the inspector is never shown the money', () => {
     assert.doesNotMatch(everything, /\+264811234567/);
   });
 });
+

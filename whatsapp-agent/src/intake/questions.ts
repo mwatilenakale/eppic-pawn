@@ -246,7 +246,7 @@ function isInPersonOnly(text: string): boolean {
 const ENUMERATION_LEAD = /watch(ing)? for|fraud patterns|for dead pixels/i;
 
 /** Clauses that continue the previous sentence rather than starting a new check. */
-const CONTINUATION = /^(but|to|he|she|it|they|if|that|which|rather|so|though|although|since|because|as long as|unless)\b/i;
+const CONTINUATION = /^(but|to|he|she|it|they|if|that|which|rather|so|though|although|since|because|as long as|unless|watching for)\b/i;
 
 /**
  * Splits a bullet into clauses and decides which side of the remote/in-person
@@ -262,16 +262,26 @@ function classifyClauses(check: ChecklistItem): { check: ChecklistItem; inPerson
   let enumerating = false;
   let previousWasInPerson = false;
 
-  return splitIntoClauses(check).map((clause) => {
-    const inPerson =
+  const classified: { check: ChecklistItem; inPerson: boolean }[] = [];
+  for (const clause of splitIntoClauses(check)) {
+    const previous = classified.at(-1);
+    // Examples and dependent clauses are context for the preceding check,
+    // not independently answerable tick boxes. Keep its id stable.
+    if (previous && (enumerating || CONTINUATION.test(clause.text))) {
+      previous.check = { ...previous.check, text: `${previous.check.text}, ${clause.text}` };
+      enumerating ||= ENUMERATION_LEAD.test(clause.text);
+      continue;
+    }
+    const inPerson: boolean =
       enumerating ||
       isInPersonOnly(clause.text) ||
       (previousWasInPerson && CONTINUATION.test(clause.text));
 
     enumerating = enumerating || ENUMERATION_LEAD.test(clause.text);
     previousWasInPerson = inPerson;
-    return { check: clause, inPerson };
-  });
+    classified.push({ check: clause, inPerson });
+  }
+  return classified;
 }
 
 /** Words that carry no meaning when comparing two checks for overlap. */
@@ -364,3 +374,4 @@ export function stillNeeded(question: Question, photos: string[]): boolean {
 export function liveQuestions(plan: QuestionPlan, photos: string[]): Question[] {
   return plan.questions.filter((question) => stillNeeded(question, photos));
 }
+

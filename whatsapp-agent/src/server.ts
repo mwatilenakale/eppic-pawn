@@ -26,6 +26,7 @@ import { PriceMemory } from './valuator/memory.ts';
 import { suggestValuation } from './valuation.ts';
 import { percentOf } from './money.ts';
 import type { Rules } from './playbook/index.ts';
+import { inspectionRequest } from './inspection/http.ts';
 
 export interface BuiltServer {
   server: Server;
@@ -139,6 +140,8 @@ async function handleRequest(
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
   const rules = getRules();
 
+  if (await inspectionRequest(request, response, url, store, rules, readBody, respondHtml)) return;
+
   if (request.method === 'GET' && url.pathname === '/health') {
     return respond(response, 200, 'ok');
   }
@@ -160,7 +163,7 @@ async function handleRequest(
     if (!user || !can(user, 'book.chase')) return respond(response, 404, 'Not found');
 
     const dashboard = new DashboardQuery(store, rules).read();
-    return respondHtml(response, 200, dashboardPage(dashboard, user.name, can(user, 'book.totals')));
+    return respondHtml(response, 200, dashboardPage(dashboard, user.name, can(user, 'book.totals'), can(user, 'inspections.work') ? `/staff/${staffLink[1]!}/inspections` : undefined));
   }
 
   if (request.method === 'GET' && url.pathname === '/apply') {
@@ -337,3 +340,4 @@ if (import.meta.filename === process.argv[1]) {
 function buyNowFrom(loanCents: number, rules: Rules): number {
   return loanCents + percentOf(loanCents, rules.playbook.loanSizing.buyNowMarkupPct);
 }
+

@@ -182,9 +182,9 @@ export class InspectionQueue {
   }
 
   /** Saves progress without finishing. A long inspection survives a dropped phone. */
-  record(jobId: string, user: User, results: CheckResult[]): void {
+  record(jobId: string, user: User, results: CheckResult[], findings?: string): void {
     const job = this.#claimedBy(jobId, user);
-    this.#store.db.prepare('UPDATE inspection_jobs SET results = ? WHERE id = ?').run(JSON.stringify(results), job.id);
+    this.#store.db.prepare('UPDATE inspection_jobs SET results = ?, findings = ? WHERE id = ?').run(JSON.stringify(results), findings ?? job.findings, job.id);
   }
 
   /**
@@ -333,3 +333,4 @@ function readDeclared(json: string | null | undefined): { question: string; answ
     return [];
   }
 }
+

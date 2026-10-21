@@ -1,7 +1,62 @@
 # 001 — The inspection worksheet page
 
-**Status:** CLAIMED — Codex, 2026-10-21
+**Status:** READY FOR REVIEW — Codex, 2026-10-21
 **Depends on:** nothing — `src/inspection/queue.ts` is built and tested.
+
+## Implementation scope and handoff — Codex
+
+Lukas authorised defining the necessary file scope on 21 October 2026.
+Only these files are changed on `codex/inspection-worksheet`:
+
+- This spec (claim, scope and review notes).
+- `whatsapp-agent/src/inspection/http.ts` — new queue-backed routes.
+- `whatsapp-agent/src/inspection/queue.ts` — optional findings on a progress save;
+  existing callers retain their previous findings when that argument is absent.
+- `whatsapp-agent/src/web/inspections.ts` — money-blind HTML using the theme.
+- `whatsapp-agent/src/web/dashboard.ts` — optional inspection queue link.
+- `whatsapp-agent/src/server.ts` — route wiring and dashboard link.
+- `whatsapp-agent/src/intake/questions.ts` — attach dependent clauses and
+  enumeration examples to the preceding check, retaining its ID.
+- `whatsapp-agent/test/inspection-page.test.ts` — isolated localhost HTTP tests.
+- `whatsapp-agent/test/inspection.test.ts` — partial-sheet assertion independent
+  of the previous fragment count; accepts singular and plural errors.
+- `whatsapp-agent/test/intake.test.ts` — mechanic and enumeration regressions.
+
+Plan checked against the playbook and architecture: preserve the dashboard;
+add `/staff/<token>/inspections`, `/claim`, and `/job/<id>` below it; use only
+InspectionQueue for job operations; submit an inspection report, never an
+approval. No dependency, migration, playbook, architecture, capability or ledger
+trigger changes.
+
+### Reviewer notes for Claude
+
+- Queue, claim, save, release, submit and read-only submitted views are wired.
+  Missing checks/findings and invalid answer values are refused. A refused
+  submission retains form input in its response rather than throwing it away.
+- The forms require the bearer token in the POST body as well as the URL;
+  cross-origin browser posts are refused. Existing no-store, no-referrer,
+  anti-framing and CSP headers cover all rendered inspection pages.
+- Document text and customer-entered descriptions/notes can contain amounts
+  even though the queue has no valuation fields. Currency-tagged amounts are
+  withheld in rendered copies. Unchanged saves preserve the underlying evidence.
+  This is display redaction, not a promise to infer every price written in prose.
+- Printed and read all generated plans: cars, iPhone, Android, laptops, TVs and
+  consoles. Mechanic explanations, fraud examples and console-test observations
+  now remain part of their check rather than separate fragments. No policy was
+  edited. Existing remote-vs-in-person classification still puts some hardware
+  checks in remote confirmations; reconsider that separately if desired.
+- Changing clause grouping changes the set of required clause IDs on existing
+  unfinished worksheets. Staff must answer the new combined lines; do not
+  silently promote an old partial answer to a complete combined check.
+- The existing queue stores the report and inspection outcome. The WhatsApp
+  second-gate/signing workflow remains task 002; this change does not bypass it
+  or invent an automatic decision or customer notification.
+- Verification: `npm test` and `npm run typecheck` on Node 24.19.0. All 505
+  tests pass. HTTP tests use synthetic customers and an in-memory database;
+  no live customer messages, Meta sends or real ledger writes were performed.
+
+Review and merge this branch only if the implementation fits the intended
+inspection workflow; task 002 stays separate.
 
 ## Why this exists
 
@@ -110,3 +165,4 @@ assertion.
 
 Do not fix it by editing `docs/playbook.md`. The document is Lukas's; the
 parser is ours.
+
