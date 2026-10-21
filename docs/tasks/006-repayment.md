@@ -1,6 +1,6 @@
 # 006 — Taking the money back
 
-**Status:** OPEN
+**Status:** CLAIMED — Codex, 2026-10-21
 **Depends on:** nothing.
 **You may change:** `src/book/`, `src/store/` (a migration and store methods),
 `src/router.ts` (the command), and the tests for those. Nothing else without
