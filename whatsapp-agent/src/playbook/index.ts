@@ -100,21 +100,45 @@ function matchesLoosely(category: Category, input: string): boolean {
   });
 }
 
-let cached: { rules: Rules; paths: RulesPaths; stamps: string } | null = null;
+const liveRules = new Map<string, Rules>();
 
-/** Cached rules, reloaded automatically when either document changes. */
+/**
+ * A live view for long-lived services. loadRules() remains a fixed snapshot
+ * for callers that need one. Do not pass a snapshot into a running server:
+ * replacing the cache alone cannot update a service holding the old object.
+ */
 export function getRules(paths: RulesPaths = defaultRulesPaths()): Rules {
-  const stamps = [paths.playbook, paths.architecture]
-    .map((path) => {
-      const stat = statSync(path);
-      return `${path}:${stat.mtimeMs}:${stat.size}`;
-    })
-    .join('|');
+  const watched = { ...paths };
+  const key = JSON.stringify(watched);
+  const existing = liveRules.get(key);
+  if (existing) return existing;
 
-  if (cached && cached.stamps === stamps && cached.paths.playbook === paths.playbook) {
-    return cached.rules;
-  }
-  const rules = loadRules(paths);
-  cached = { rules, paths, stamps };
-  return rules;
+  let snapshot: Rules;
+  let stamps = '';
+  const current = (): Rules => {
+    const next = [watched.playbook, watched.architecture].map((path) => {
+      const stat = statSync(path);
+      return `${path}:${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}`;
+    }).join('|');
+    if (next !== stamps) {
+      // Assign only after successful parsing. A malformed edit throws on every
+      // access until repaired; it never silently falls back to the old rules.
+      snapshot = loadRules(watched);
+      stamps = next;
+    }
+    return snapshot;
+  };
+
+  const view = new Proxy(current(), {
+    get(_target, property) {
+      const value = Reflect.get(current(), property);
+      // Even a retained method (const lookup = rules.rate) must stay current;
+      // the original functions close over the playbook that created them.
+      return typeof value === 'function'
+        ? (...args: unknown[]) => Reflect.apply(Reflect.get(current(), property), current(), args)
+        : value;
+    },
+  });
+  liveRules.set(key, view);
+  return view;
 }

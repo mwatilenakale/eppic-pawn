@@ -116,6 +116,15 @@ describe('encrypted media', () => {
 });
 
 describe('ledger', () => {
+  test('fractional, non-finite and unsafe cents never enter the ledger', () => {
+    const { loan } = loanFixture();
+    for (const amountCents of [0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+      assert.throws(() => store.postLedgerEntry({ loanId: loan.id, entryType: 'principal', amountCents, actor: 'lukas' }), LedgerError);
+    }
+    assert.equal(store.balance(loan.id), 0);
+    assert.deepEqual(store.ledger(loan.id), []);
+  });
+
   test('entries cannot be edited or deleted, only reversed', () => {
     const { loan } = loanFixture();
     const entry = store.postLedgerEntry({ loanId: loan.id, entryType: 'principal', amountCents: 375_000, actor: 'lukas' });

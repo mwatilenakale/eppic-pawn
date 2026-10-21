@@ -87,7 +87,7 @@ export function userPrompt(rules: Rules, input: EstimateInput, memory: PriceMemo
   return [
     `Category: ${category?.label ?? input.categorySlug}${input.variant ? ` (${input.variant})` : ''}`,
     `Customer's description: ${input.description}`,
-    recentCorrections(input.categorySlug, memory),
+    recentCorrections(input.categorySlug, memory, rules),
     '',
     'What would this sell for second-hand in Namibia?',
   ]
@@ -106,7 +106,7 @@ export function userPrompt(rules: Rules, input: EstimateInput, memory: PriceMemo
  * Context, not instruction. A correction on a different phone does not settle
  * what this one is worth.
  */
-function recentCorrections(categorySlug: string, memory: PriceMemory | null): string {
+function recentCorrections(categorySlug: string, memory: PriceMemory | null, rules: Rules): string {
   if (!memory) return '';
 
   const recent = memory
@@ -117,7 +117,9 @@ function recentCorrections(categorySlug: string, memory: PriceMemory | null): st
   if (recent.length === 0) return '';
 
   const lines = recent.map((price) => {
-    const market = price.marketValueCents ?? (price.assessedValueCents !== null ? price.assessedValueCents / 0.75 : null);
+    const market = price.marketValueCents ?? (price.assessedValueCents !== null
+      ? round(price.assessedValueCents / rules.playbook.loanSizing.discountFactor)
+      : null);
     const described = price.fingerprint.split('|')[2] || 'similar item';
     return market !== null
       ? `- ${described}: the owner valued at N$${Math.round(market / 100).toLocaleString('en-US')}`

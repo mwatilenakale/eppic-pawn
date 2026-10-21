@@ -132,6 +132,38 @@ describe('reading Lukas’s reply', () => {
 });
 
 describe('decisions', () => {
+  test('a failed item update leaves no partial approval or price override', () => {
+    const submission = completeIntake();
+    const { reference, approval } = approvals.request(submission, ESTIMATES);
+    store.db.exec("CREATE TRIGGER fail_item BEFORE UPDATE ON items BEGIN SELECT RAISE(ABORT, 'item write failed'); END");
+    assert.throws(() => approvals.handleOwnerReply(`APPROVE ${reference} 3000`, lukas), /item write failed/);
+    assert.equal(store.approval(approval.id)?.status, 'pending');
+    assert.equal(store.valuation(approval.valuation_id!)?.override_cents, null);
+    assert.deepEqual(store.auditTrail('approval', approval.id).map((row) => row.action), ['approval.requested']);
+  });
+
+  test('zero and below-floor approval amounts leave the application pending', () => {
+    const submission = completeIntake();
+    const { reference, approval } = approvals.request(submission, ESTIMATES);
+    for (const amount of ['0', '999']) {
+      const result = approvals.handleOwnerReply(`APPROVE ${reference} ${amount}`, lukas);
+      assert.equal(result.customerMessage, undefined);
+      assert.equal(store.approval(approval.id)?.status, 'pending');
+      assert.equal(store.valuation(approval.valuation_id!)?.override_cents, null);
+      assert.equal(store.item(submission.item.id)?.status, 'awaiting-approval');
+    }
+  });
+
+  test('an invalid explicit amount never silently approves the suggested amount', () => {
+    const submission = completeIntake();
+    const { reference, approval } = approvals.request(submission, ESTIMATES);
+    for (const amount of ['-3000', '3000.999', '999999999999999999999999999']) {
+      const result = approvals.handleOwnerReply(`APPROVE ${reference} ${amount}`, lukas);
+      assert.equal(result.customerMessage, undefined);
+      assert.equal(store.approval(approval.id)?.status, 'pending');
+    }
+  });
+
   test('approving at the suggested amount tells the customer the figure — for the first time', () => {
     const submission = completeIntake();
     const { reference } = approvals.request(submission, ESTIMATES);

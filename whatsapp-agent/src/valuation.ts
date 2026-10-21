@@ -53,8 +53,8 @@ export class ValuationError extends Error {}
 /** Applies playbook section 3 to a set of market estimates. */
 export function suggestValuation(estimates: MarketEstimate[], rules: Rules): Valuation {
   if (estimates.length === 0) throw new ValuationError('At least one market estimate is required');
-  if (estimates.some((estimate) => estimate.amountCents <= 0)) {
-    throw new ValuationError('Market estimates must be positive amounts');
+  if (estimates.some((estimate) => !Number.isSafeInteger(estimate.amountCents) || estimate.amountCents <= 0)) {
+    throw new ValuationError('Market estimates must be positive amounts in safe integer cents');
   }
 
   const { basis: basisRule, discountFactor, divisor, formula, buyNowMarkupPct, minimumLoanCents } =
@@ -118,7 +118,9 @@ export interface LoanTerms {
  * wins on amount, the referral row applies below that threshold.
  */
 export function loanTerms({ principalCents, referral = false }: LoanTermsInput, rules: Rules): LoanTerms {
-  if (principalCents <= 0) throw new ValuationError('Principal must be a positive amount');
+  if (!Number.isSafeInteger(principalCents) || principalCents <= 0) {
+    throw new ValuationError('Principal must be a positive amount in safe integer cents');
+  }
 
   const large = rules.rate(RATE_LARGE_LOAN);
   const standard = rules.rate(RATE_STANDARD);

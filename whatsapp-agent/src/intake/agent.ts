@@ -103,6 +103,12 @@ export class IntakeAgent {
    * Duplicate deliveries (same provider message id) produce no replies.
    */
   handle(fromPhone: string, incoming: Incoming): IntakeOutcome {
+    // Persist the deduplication marker only with the state it advances. If a
+    // photo write fails, Meta's retry must still be allowed to process it.
+    return this.#store.transaction(() => this.#handleIncoming(fromPhone, incoming));
+  }
+
+  #handleIncoming(fromPhone: string, incoming: Incoming): IntakeOutcome {
     const customer = this.#store.upsertCustomer(fromPhone);
     const conversation =
       this.#store.activeConversation(customer.id) ?? this.#store.openConversation(customer.id, initialState());

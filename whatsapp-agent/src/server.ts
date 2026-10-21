@@ -21,7 +21,7 @@ import { chooseCategoryPage, landingPage, outcomePage, questionsPage } from './w
 import { evaluatePrecheck, precheckQuestions, type PrecheckQuote } from './web/precheck.ts';
 import { PriceMemory } from './valuator/memory.ts';
 import { suggestValuation } from './valuation.ts';
-import { percentOf } from './money.ts';
+import { percentOf, round } from './money.ts';
 import type { Rules } from './playbook/index.ts';
 
 export interface BuiltServer {
@@ -80,9 +80,13 @@ export function buildServer(
   const priceIt = async (categorySlug: string, variant: string | null, description: string): Promise<PrecheckQuote | null> => {
     const remembered = memory.recall({ categorySlug, variant, description });
     if (remembered) {
+      const { divisor, discountFactor } = rules.playbook.loanSizing;
+      const assessed = remembered.assessedValueCents ?? round(remembered.loanCents * divisor);
       return {
-        marketValueCents: remembered.assessedValueCents ?? remembered.loanCents * 2,
-        assessedValueCents: remembered.assessedValueCents ?? remembered.loanCents * 2,
+        // Preserve the owner's market correction. Older rows lack that field;
+        // only those rows need the inverse of the current playbook formula.
+        marketValueCents: remembered.marketValueCents ?? round(assessed / discountFactor),
+        assessedValueCents: assessed,
         loanCents: remembered.loanCents,
         buyNowCents: remembered.buyNowCents ?? buyNowFrom(remembered.loanCents, rules),
         fromAdjustment: true,

@@ -107,6 +107,12 @@ export class ApprovalWorkflow {
 
   /** Applies a reply from Lukas. Anything it cannot read decides nothing. */
   handleOwnerReply(text: string, owner: User): DecisionResult {
+    // Keep the decision, item status, overrides and audit in one commit. The
+    // router sends WhatsApp messages only after this synchronous work returns.
+    return this.#store.transaction(() => this.#applyOwnerReply(text, owner));
+  }
+
+  #applyOwnerReply(text: string, owner: User): DecisionResult {
     // The project's oldest constraint, enforced here rather than only at the
     // routing layer: pricing and accepting a loan is the owner's alone, and
     // no second caller may reach this by holding a User of the wrong kind.
@@ -158,6 +164,14 @@ export class ApprovalWorkflow {
       };
     }
 
+    // Validate before writing the decision or override. A bad amount used to
+    // approve the row first and only then fail while calculating its terms.
+    const minimum = this.#rules.playbook.loanSizing.minimumLoanCents;
+    if (!Number.isSafeInteger(amountCents) || amountCents <= 0 || amountCents < minimum) {
+      return { ownerMessage: `The loan must be at least ${formatAmount(minimum)} under the playbook. Nothing was approved.` };
+    }
+    const terms = loanTerms({ principalCents: amountCents }, this.#rules);
+
     if (approval.valuation_id && reply.amountCents !== null && reply.amountCents !== approval.suggested_loan_cents) {
       this.#store.recordValuationOverride(
         approval.valuation_id,
@@ -176,7 +190,6 @@ export class ApprovalWorkflow {
     });
     this.#store.updateItem(approval.item_id, { status: 'approved' });
 
-    const terms = loanTerms({ principalCents: amountCents }, this.#rules);
     const item = this.#store.item(approval.item_id)!;
     const customer = this.#store.db
       .prepare('SELECT phone FROM customers WHERE id = ?')
@@ -210,6 +223,10 @@ export class ApprovalWorkflow {
           `Tell me what to change, e.g. *ADJUST ${reference} 3500* for the loan, ` +
           `or *ADJUST ${reference} market 8000 buy 4500*.`,
       };
+    }
+
+    if (Object.values(reply.edits).some((amount) => !Number.isSafeInteger(amount) || amount <= 0)) {
+      return { ownerMessage: 'Every adjusted figure must be a positive amount. Nothing was changed.' };
     }
 
     const item = this.#store.item(approval.item_id)!;
@@ -343,10 +360,13 @@ export function parseOwnerReply(text: string): OwnerReply {
   }
 
   let amountCents: number | null = null;
-  const amountMatch = /^(n\$\s?)?[\d][\d\s,.]*/i.exec(rest);
+  const amountMatch = /^(n\$\s?)?-?[\d][\d\s,.]*/i.exec(rest);
   if (amountMatch) {
     amountCents = parseAmount(amountMatch[0]);
-    if (amountCents !== null) rest = rest.slice(amountMatch[0].length).trim();
+    // An explicit but unreadable figure is not permission to use the suggested
+    // one. Ask again instead of converting a typo into a different offer.
+    if (amountCents === null) return { action: 'help', reference, amountCents: null, note: null, edits: {} };
+    rest = rest.slice(amountMatch[0].length).trim();
   }
 
   return { action, reference, amountCents, note: rest.replace(/^[-—:]\s*/, '').trim() || null, edits: {} };

@@ -114,6 +114,19 @@ describe('the estimate the customer sees', () => {
 });
 
 describe('when Lukas has already corrected this kind of item', () => {
+  test('a remembered market correction remains distinct from assessed value', async () => {
+    new PriceMemory(store, rules).remember({
+      key: { categorySlug: 'laptops', description: 'Lenovo T14' },
+      marketValueCents: 800_000,
+      assessedValueCents: 600_000,
+      loanCents: 300_000,
+      adjustedBy: lukas,
+    });
+    const { html } = await apply({ category: 'laptops', description: 'Lenovo T14' });
+    assert.match(html, /Market value<\/span>\s*<strong[^>]*>N\$8,000\.00/);
+    assert.match(html, /Assessed value<\/span>\s*<strong[^>]*>N\$6,000\.00/);
+  });
+
   test('his number is used instead of a fresh estimate', async () => {
     new PriceMemory(store, rules).remember({
       key: { categorySlug: 'laptops', variant: null, description: 'Dell XPS 13' },

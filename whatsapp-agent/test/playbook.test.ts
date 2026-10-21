@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   defaultRulesPaths,
+  getRules,
   loadRules,
   PlaybookError,
   RATE_FAVOR,
@@ -136,6 +137,25 @@ describe('category matching', () => {
 });
 
 describe('failure behaviour', () => {
+  test('an existing service sees edited rules without being rebuilt', () => {
+    const paths = defaultRulesPaths();
+    const dir = mkdtempSync(join(tmpdir(), 'eppic-live-rules-'));
+    const playbook = join(dir, 'playbook.md');
+    const architecture = join(dir, 'architecture.md');
+    const original = readFileSync(paths.playbook, 'utf8');
+    writeFileSync(playbook, original);
+    copyFileSync(paths.architecture, architecture);
+    const held = getRules({ playbook, architecture });
+    const heldRateLookup = held.rate;
+
+    writeFileSync(playbook, original.replace('29%', '31.5%').replace('N$1,000.**', 'N$1,200.**'));
+    assert.equal(heldRateLookup(RATE_STANDARD)?.ratePct, 31.5);
+    assert.equal(held.playbook.loanSizing.minimumLoanCents, 120_000);
+
+    writeFileSync(playbook, '# Invalid rules');
+    assert.throws(() => held.playbook, PlaybookError, 'invalid edits must not keep old prices alive');
+  });
+
   test('a playbook whose rate table is gone throws instead of defaulting', () => {
     const paths = defaultRulesPaths();
     const dir = mkdtempSync(join(tmpdir(), 'eppic-rules-'));

@@ -193,6 +193,26 @@ export class Store {
     this.db.close();
   }
 
+  /**
+   * Commit a synchronous operation as a unit, including its audit rows.
+   * Savepoints compose with callers' transactions. Never await network work
+   * inside this callback: a SQLite transaction must not span message delivery.
+   * Rollback of an uncommitted ledger insert does not edit a posted entry.
+   */
+  transaction<T>(work: () => T): T {
+    const name = `operation_${randomUUID().replace(/-/g, '')}`;
+    this.db.exec(`SAVEPOINT ${name}`);
+    try {
+      const result = work();
+      this.db.exec(`RELEASE SAVEPOINT ${name}`);
+      return result;
+    } catch (error) {
+      this.db.exec(`ROLLBACK TO SAVEPOINT ${name}`);
+      this.db.exec(`RELEASE SAVEPOINT ${name}`);
+      throw error;
+    }
+  }
+
   // --- users -------------------------------------------------------------
 
   ensureUser(user: { name: string; phone: string; role: Role }): User {
@@ -752,6 +772,9 @@ export class Store {
    * time, so back-dating an entry never hides when it was written.
    */
   postLedgerEntry(entry: { loanId: string; entryType: string; amountCents: number; memo?: string; actor: string; at?: string }): LedgerEntry {
+    // SQLite INTEGER affinity alone accepts fractional REAL values. Enforce
+    // integer cents before binding, including for future callers and imports.
+    if (!Number.isSafeInteger(entry.amountCents)) throw new LedgerError('Ledger amounts must be safe integer cents');
     const row: LedgerEntry = {
       id: randomUUID(),
       loan_id: entry.loanId,
