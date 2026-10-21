@@ -398,4 +398,36 @@ export const MIGRATIONS: string[] = [
   CREATE UNIQUE INDEX inspection_jobs_one_live ON inspection_jobs(item_id)
     WHERE status IN ('open', 'claimed');
   `,
+
+  // 10 — items outside the five categories.
+  //
+  // Playbook section 2, "Something else": a smartwatch or a camera is not
+  // refused by the agent. The customer is told we don't usually take it, Lukas
+  // is asked, and the conversation waits for his answer. This table is that
+  // wait made durable — a question asked at 20:00 is still asked at 08:00 the
+  // next morning, and the customer is not silently dropped.
+  //
+  // The decision is kept after it is made, so the second person asking about a
+  // smartwatch can be answered from what Lukas already said about the first.
+  `
+  CREATE TABLE category_requests (
+    id              TEXT PRIMARY KEY,
+    customer_id     TEXT NOT NULL REFERENCES customers(id),
+    conversation_id TEXT REFERENCES conversations(id),
+    -- What the customer said they have, verbatim. Not a slug: there is no
+    -- category for it, which is the whole reason this row exists.
+    description     TEXT NOT NULL,
+    status          TEXT NOT NULL CHECK (status IN ('pending', 'accepted', 'refused')),
+    -- Lukas's word of reason, shown to nobody but kept for the next time.
+    reason          TEXT NOT NULL DEFAULT '',
+    decided_by      TEXT REFERENCES users(id),
+    decided_at      TEXT,
+    created_at      TEXT NOT NULL
+  );
+  CREATE INDEX category_requests_status ON category_requests(status, created_at);
+  -- One open question per customer: asking Lukas twice about the same person's
+  -- item is how he starts ignoring the messages.
+  CREATE UNIQUE INDEX category_requests_one_pending ON category_requests(customer_id)
+    WHERE status = 'pending';
+  `,
 ];

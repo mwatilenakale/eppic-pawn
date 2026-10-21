@@ -32,17 +32,53 @@ edit this file, not any code. Still-open items are marked **[decide]**.
 
 ## 2. What we accept
 
-Five categories only, on purpose — no beds/furniture, nothing that needs
-extra storage:
+Five categories as standard, on purpose — no beds/furniture, nothing that
+needs extra storage. Anything else is a question for Lukas, not an automatic
+no (see "Something else" below).
 
-- Cars
-- Phones (iPhone and Android)
-- Laptops
-- TVs
-- Consoles
+The `recognise:` list after each category is what a customer might actually
+type. It exists because a customer writes "Samsung Galaxy S25 Ultra", not
+"phone", and being told "we don't take that" is how a good item walks away.
+Add to these lists freely — they are not exhaustive and never will be.
+
+- Cars — recognise: Toyota, VW, Volkswagen, Polo, Golf, Hilux, Corolla,
+  Nissan, Mazda, BMW, Mercedes, Benz, Audi, Ford, Ranger, Hyundai, Kia,
+  Isuzu, bakkie, sedan, hatchback, vehicle, motor
+- Phones (iPhone and Android) — recognise: Samsung Galaxy, Galaxy, Nokia,
+  Huawei, Xiaomi, Redmi, Oppo, Vivo, Tecno, Infinix, Itel, Pixel, OnePlus,
+  Motorola, cellphone, cell phone, smartphone, handset
+- Laptops — recognise: MacBook, Mac Book, Dell, XPS, Latitude, HP, Pavilion,
+  Lenovo, ThinkPad, IdeaPad, Asus, Acer, Chromebook, notebook, ultrabook
+- TVs — recognise: television, smart TV, QLED, OLED, plasma, LG, Hisense,
+  Bravia, Skyworth, Samsung TV, inch TV
+- Consoles — recognise: PlayStation, PS3, PS4, PS5, Xbox, Series X, Series S,
+  Nintendo, Nintendo Switch, Wii
+
+Deliberately absent from every list: **Apple** and bare **Samsung**. Both make
+phones, laptops, TVs and watches, so the brand alone says nothing — "Apple
+Watch" must not be taken in as a phone. Where the brand is all we have, the
+agent asks rather than guesses.
 
 **Storage:** a friend's garage (N$500/month) for bulkier items, plus his
 storage container for delicate ones (smaller separate fee).
+
+### Something else
+
+An item outside the five categories is **not refused by the agent**. A
+smartwatch, a camera, power tools, a generator, jewellery — these come up, and
+some of them are worth taking.
+
+What the agent does:
+
+1. Tells the customer honestly: we don't usually take that.
+2. Says it is asking Lukas, and that it will come back to them.
+3. Sends Lukas the item and the customer's name, and **waits**.
+4. Lukas replies *ACCEPT* or *REFUSE* with a word of reason.
+
+Nothing proceeds while it waits, and the agent never guesses the answer. An
+accepted one-off is screened on the general checks in section 6 — there is no
+category checklist for an item we have not taken before, and Lukas inspects it
+in person like everything else.
 
 ## 3. Loan sizing
 

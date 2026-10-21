@@ -116,11 +116,22 @@ describe('intake conversation', () => {
     }
   });
 
-  test('turns away a category the playbook does not take', () => {
+  /**
+   * Playbook section 2, "Something else", from 21 October 2026. The agent used
+   * to answer "we don't take a double bed" on its own authority. It no longer
+   * refuses anything: it asks once more in case it misheard, then puts the
+   * question to Lukas. Deciding what the shop will take is his.
+   */
+  test('does not turn anything away on its own authority', () => {
     agent.handle(CUSTOMER, { text: 'hello' });
     introduce();
-    const { replies } = agent.handle(CUSTOMER, { text: 'a double bed' });
-    assert.match(replies[0]!, /don't take/i);
+
+    const first = agent.handle(CUSTOMER, { text: 'a double bed' });
+    assert.doesNotMatch(first.replies.join('\n'), /we don't take/i);
+    assert.match(first.replies.join('\n'), /not quite sure what that is/i);
+
+    const second = agent.handle(CUSTOMER, { text: 'a double bed' });
+    assert.match(second.replies.join('\n'), /ask Lukas|sent it to him/i);
     assert.equal(store.item(''), null);
   });
 

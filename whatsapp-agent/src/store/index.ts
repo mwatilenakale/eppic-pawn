@@ -64,6 +64,22 @@ export interface Valuation {
   override_cents: number | null;
   override_note: string | null;
 }
+/**
+ * A question to Lukas about an item outside the five categories — playbook
+ * section 2, "Something else". Not an approval: this asks whether the shop
+ * will look at the thing at all, before any money is discussed.
+ */
+export interface CategoryRequest {
+  id: string;
+  customer_id: string;
+  conversation_id: string | null;
+  description: string;
+  status: 'pending' | 'accepted' | 'refused';
+  reason: string;
+  decided_by: string | null;
+  decided_at: string | null;
+}
+
 export interface Approval {
   id: string;
   item_id: string;
@@ -439,6 +455,14 @@ export class Store {
 
   // --- conversations & messages -----------------------------------------
 
+  /** One conversation by id, open or closed. */
+  conversationById(conversationId: string): Conversation | null {
+    return (
+      (this.db.prepare('SELECT * FROM conversations WHERE id = ?').get(conversationId) as unknown as Conversation) ??
+      null
+    );
+  }
+
   activeConversation(customerId: string): Conversation | null {
     return (
       (this.db
@@ -683,6 +707,92 @@ export class Store {
 
   pendingApprovals(): Approval[] {
     return this.db.prepare("SELECT * FROM approvals WHERE status = 'pending' ORDER BY created_at").all() as unknown as Approval[];
+  }
+
+  // --- "can we take this at all?" (playbook section 2) --------------------
+
+  /**
+   * Records that Lukas has been asked about an item outside the five
+   * categories. One open question per customer; asking him twice about the
+   * same person is how he starts ignoring the messages.
+   */
+  askAboutCategory(request: {
+    customerId: string;
+    conversationId?: string | null;
+    description: string;
+  }): CategoryRequest {
+    const existing = this.pendingCategoryRequestFor(request.customerId);
+    if (existing) return existing;
+
+    const row: CategoryRequest = {
+      id: randomUUID(),
+      customer_id: request.customerId,
+      conversation_id: request.conversationId ?? null,
+      description: request.description,
+      status: 'pending',
+      reason: '',
+      decided_by: null,
+      decided_at: null,
+    };
+    this.db
+      .prepare(
+        'INSERT INTO category_requests (id, customer_id, conversation_id, description, status, reason, created_at)' +
+          " VALUES (?, ?, ?, ?, 'pending', '', ?)",
+      )
+      .run(row.id, row.customer_id, row.conversation_id, row.description, this.#now());
+    this.audit({
+      actor: 'agent',
+      action: 'category.asked',
+      entity: 'category_request',
+      entityId: row.id,
+      details: { description: request.description },
+    });
+    return row;
+  }
+
+  categoryRequest(id: string): CategoryRequest | null {
+    return (
+      (this.db.prepare('SELECT * FROM category_requests WHERE id = ?').get(id) as unknown as CategoryRequest) ?? null
+    );
+  }
+
+  pendingCategoryRequests(): CategoryRequest[] {
+    return this.db
+      .prepare("SELECT * FROM category_requests WHERE status = 'pending' ORDER BY created_at")
+      .all() as unknown as CategoryRequest[];
+  }
+
+  pendingCategoryRequestFor(customerId: string): CategoryRequest | null {
+    return (
+      (this.db
+        .prepare("SELECT * FROM category_requests WHERE customer_id = ? AND status = 'pending'")
+        .get(customerId) as unknown as CategoryRequest) ?? null
+    );
+  }
+
+  /** Lukas's answer. The agent never writes anything but 'pending' here. */
+  decideCategoryRequest(decision: {
+    id: string;
+    status: 'accepted' | 'refused';
+    reason?: string;
+    decidedBy: string;
+  }): CategoryRequest {
+    const current = this.categoryRequest(decision.id);
+    if (!current) throw new Error(`No such category request: ${decision.id}`);
+    if (current.status !== 'pending') throw new Error(`Already ${current.status}`);
+
+    const at = this.#now();
+    this.db
+      .prepare('UPDATE category_requests SET status = ?, reason = ?, decided_by = ?, decided_at = ? WHERE id = ?')
+      .run(decision.status, decision.reason ?? '', decision.decidedBy, at, decision.id);
+    this.audit({
+      actor: decision.decidedBy,
+      action: `category.${decision.status}`,
+      entity: 'category_request',
+      entityId: decision.id,
+      details: { description: current.description, reason: decision.reason ?? '' },
+    });
+    return this.categoryRequest(decision.id)!;
   }
 
   /** The decision is always a person's; the agent only records it. */

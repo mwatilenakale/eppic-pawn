@@ -9,7 +9,9 @@
 
 import type { Rules } from './playbook/index.ts';
 import type { Store, User } from './store/index.ts';
-import { IntakeAgent, type IntakeSubmission } from './intake/agent.ts';
+import { IntakeAgent, type IntakeState, type IntakeSubmission } from './intake/agent.ts';
+import { CategoryGate, parseCategoryReply, type CategoryDecisionResult } from './intake/unknown.ts';
+import { OTHER } from './intake/questions.ts';
 import { ApprovalWorkflow } from './approval/index.ts';
 import type { MarketEstimate } from './valuation.ts';
 import type { ContractService, SignedContract } from './contract/index.ts';
@@ -65,6 +67,7 @@ export class AgentRouter {
   readonly #contracts: ContractService | null;
   readonly #directory: CustomerDirectory | null;
   readonly #book: Book;
+  readonly #gate: CategoryGate;
   readonly #onError: (error: unknown, event: InboundEvent) => void;
 
   constructor(options: RouterOptions) {
@@ -95,6 +98,7 @@ export class AgentRouter {
     }
 
     this.#book = new Book(options.store, { clock: options.clock });
+    this.#gate = new CategoryGate(options.store, options.rules);
     this.#onError = options.onError ?? ((error) => console.error('[agent]', error));
   }
 
@@ -132,6 +136,12 @@ export class AgentRouter {
 
     if (event.profileName) this.#store.upsertCustomer(event.from, event.profileName);
     for (const reply of outcome.replies) await this.#transport.sendText({ to: event.from, body: reply });
+
+    // "Can we take a smartwatch?" — a question, not an approval request.
+    for (const message of outcome.ownerMessages ?? []) {
+      await this.#transport.sendText({ to: this.#ownerPhone, body: message });
+    }
+
     if (outcome.submission) await this.#requestApproval(outcome.submission);
   }
 
@@ -181,12 +191,58 @@ export class AgentRouter {
     });
   }
 
+  /**
+   * Puts the customer's conversation back where it belongs once Lukas has
+   * answered. Accepted means the details are taken next, so the conversation
+   * goes to the item-description step; refused closes it, and their next
+   * message starts fresh rather than landing back in the wait.
+   */
+  async #resumeAfterCategoryDecision(decision: CategoryDecisionResult): Promise<void> {
+    const conversationId = decision.request?.conversation_id;
+    if (!conversationId) return;
+
+    this.#store.recordOutbound({ conversationId, body: decision.customerMessage! });
+
+    if (decision.request!.status === 'refused') {
+      this.#store.closeConversation(conversationId);
+      return;
+    }
+
+    // Accepted: the description is the next thing we need, and there is no
+    // category checklist for an item the shop has not taken before — the
+    // playbook sends it to the general checks and Lukas's own inspection.
+    const conversation = this.#store.conversationById(conversationId);
+    if (!conversation) return;
+    const state = JSON.parse(conversation.state) as IntakeState;
+    state.step = 'questions';
+    state.unclearAttempts = 0;
+    state.categorySlug = OTHER;
+    state.variant = null;
+    this.#store.saveConversationState(conversationId, state);
+  }
+
   async #handleOwner(event: InboundEvent): Promise<void> {
     // Asking to see the book is not a decision. Checked first, and answered
     // without touching anything — these commands have no write path.
     const query = parseBookCommand(event.text ?? '');
     if (query) {
       await this.#transport.sendText({ to: this.#ownerPhone, body: this.#answer(query, this.#owner) });
+      return;
+    }
+
+    // ACCEPT / REFUSE answers "can we take this at all?" about an item outside
+    // the five categories. Checked before the approval parser and kept to
+    // different words on purpose: replying APPROVE to a question about a
+    // smartwatch must never approve a loan on somebody's car.
+    const categoryReply = parseCategoryReply(event.text ?? '');
+    if (categoryReply && this.#store.pendingCategoryRequests().length > 0) {
+      const decision = this.#gate.decide(categoryReply, this.#owner);
+      await this.#transport.sendText({ to: this.#ownerPhone, body: decision.ownerMessage });
+
+      if (decision.customerMessage && decision.customerPhone) {
+        await this.#transport.sendText({ to: decision.customerPhone, body: decision.customerMessage });
+        await this.#resumeAfterCategoryDecision(decision);
+      }
       return;
     }
 

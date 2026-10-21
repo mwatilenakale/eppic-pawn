@@ -44,6 +44,13 @@ export interface Category {
   slug: string;
   /** Label as written in the playbook, e.g. `Phones (iPhone and Android)`. */
   label: string;
+  /**
+   * What a customer might actually type for this category, from the
+   * `recognise:` list in section 2 — "Samsung Galaxy", "bakkie", "PS5".
+   *
+   * Empty is legal: a category with no list is matched on its own name only.
+   */
+  recognise: string[];
 }
 
 export interface RateRule {
@@ -216,7 +223,18 @@ function readCategories(path: string, block: string): Category[] {
   const categories = bullets(block)
     .map(plain)
     .filter((line) => !/^storage\b/i.test(line))
-    .map((label) => ({ slug: slugify(label), label }));
+    .map((line) => {
+      // `Phones (iPhone and Android) — recognise: Samsung Galaxy, Nokia, …`
+      const split = /^(.*?)\s+[—-]\s*recognise:\s*(.*)$/is.exec(line);
+      const label = (split ? split[1]! : line).trim();
+      const recognise = split
+        ? split[2]!
+            .split(',')
+            .map((term) => term.replace(/\s+/g, ' ').trim())
+            .filter(Boolean)
+        : [];
+      return { slug: slugify(label), label, recognise };
+    });
 
   if (categories.length === 0) {
     throw new PlaybookError(path, `section ${SECTIONS.categories} lists no accepted categories`);

@@ -32,7 +32,8 @@ export interface Question {
 }
 
 export interface QuestionPlan {
-  categorySlug: string;
+  /** Null for a one-off Lukas accepted outside the five categories. */
+  categorySlug: string | null;
   variant: string | null;
   questions: Question[];
   /** Checks deferred to the in-person visit, with their source text. */
@@ -76,15 +77,36 @@ const DOCUMENT_REQUESTS: { pattern: RegExp; photoKind: string; ask: string }[] =
 /** Collected at handover, not during chat — the contract is generated later. */
 const NOT_COLLECTED_REMOTELY = /signed agreement/i;
 
-export function buildQuestionPlan(rules: Rules, categorySlug: string, variant: string | null = null): QuestionPlan {
-  const category = rules.categories.find((entry) => entry.slug === categorySlug);
-  if (!category) throw new Error(`Not an accepted category: ${categorySlug}`);
+/**
+ * The slug for an item outside the five categories that Lukas accepted as a
+ * one-off — a smartwatch, a camera (playbook section 2, "Something else").
+ *
+ * A reserved value rather than null, so `items.category_slug` stays NOT NULL
+ * and a one-off is something you can search the book for later.
+ */
+export const OTHER = 'other';
+
+export function buildQuestionPlan(
+  rules: Rules,
+  categorySlug: string | null,
+  variant: string | null = null,
+): QuestionPlan {
+  const oneOff = !categorySlug || categorySlug === OTHER;
+  const category = oneOff ? null : rules.categories.find((entry) => entry.slug === categorySlug);
+
+  // There is no category checklist for something the shop has not taken
+  // before, so a one-off gets the documents every loan needs and Lukas
+  // inspects it himself. A slug that was given but is not a category is still
+  // a programming error.
+  if (!oneOff && !category) throw new Error(`Not an accepted category: ${categorySlug}`);
 
   const questions: Question[] = [
     {
       id: 'item-description',
       kind: 'text',
-      ask: `Tell me exactly what you have — make, model, storage/size, and its condition. (${category.label})`,
+      ask: category
+        ? `Tell me exactly what you have — make, model, storage/size, and its condition. (${category.label})`
+        : 'Tell me exactly what you have — make, model, and its condition.',
       source: 'item',
       optional: false,
     },
@@ -102,7 +124,8 @@ export function buildQuestionPlan(rules: Rules, categorySlug: string, variant: s
 
   const asked: string[] = [];
 
-  for (const { check, inPerson } of rules.checklistFor(categorySlug, variant).flatMap(classifyClauses)) {
+  const checklist = category ? rules.checklistFor(category.slug, variant) : [];
+  for (const { check, inPerson } of checklist.flatMap(classifyClauses)) {
     if (inPerson) {
       inPersonChecks.push(check);
       continue;

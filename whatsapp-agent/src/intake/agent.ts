@@ -12,6 +12,7 @@
 import type { Rules } from '../playbook/index.ts';
 import type { Customer, Item, Store } from '../store/index.ts';
 import { parseAmount } from '../money.ts';
+import { CategoryGate } from './unknown.ts';
 import { buildQuestionPlan, readConfirmation, type Question, type QuestionPlan } from './questions.ts';
 
 export interface Incoming {
@@ -31,7 +32,7 @@ export interface Answer {
 }
 
 export interface IntakeState {
-  step: 'name' | 'category' | 'variant' | 'questions' | 'amount' | 'submitted';
+  step: 'name' | 'category' | 'variant' | 'questions' | 'amount' | 'submitted' | 'asking-lukas';
   /** False until the customer has been greeted, so "hi" isn't read as an item. */
   greeted: boolean;
   /** Set when we already know this number, so they are greeted by name. */
@@ -44,6 +45,12 @@ export interface IntakeState {
   pendingItemText?: string | null;
   /** True once we have said we cannot quote, so we don't say it twice running. */
   priceAnswered?: boolean;
+  /**
+   * Times we have failed to work out what the item is. The first time we ask
+   * them to say it plainly; the second time we stop guessing and ask Lukas,
+   * because by then it is probably a real item we simply do not take.
+   */
+  unclearAttempts?: number;
   itemId: string | null;
   categorySlug: string | null;
   variant: string | null;
@@ -69,6 +76,12 @@ export interface IntakeSubmission {
 export interface IntakeOutcome {
   replies: string[];
   submission?: IntakeSubmission;
+  /**
+   * Something for Lukas, sent alongside the customer's reply — today only the
+   * "can we take this at all?" question from playbook section 2. It is not an
+   * approval request; `submission` is still the only thing that asks for money.
+   */
+  ownerMessages?: string[];
 }
 
 /**
@@ -90,6 +103,27 @@ const copy = {
   greeting: GREETING,
   whichCategory,
   welcome: (categories: string[]) => `${GREETING}\n\n${whichCategory(categories)}`,
+  /**
+   * First time we cannot tell what the item is. Deliberately not a refusal:
+   * the matcher is not perfect and the shop does take things off the list, so
+   * the customer is invited to say it plainly rather than shown the door.
+   */
+  unclear: (categories: string[]) =>
+    `I'm not quite sure what that is. We normally take:\n${categories
+      .map((label) => `• ${label}`)
+      .join('\n')}\n\nIf it's one of those, tell me which. If it's something else, say what it is and I'll ask Lukas whether we can take it.`,
+  /**
+   * Lukas has already said no to something like this. Reusing his answer
+   * rather than asking him the same question every time somebody walks in
+   * with a camera — but said as his decision, not the agent's.
+   */
+  refusedBefore: (reason: string, categories: string[]) =>
+    `Lukas has looked at one of those before and we don't take them${reason ? ` — ${reason}` : ''}.\n\n` +
+    `What we do take:\n${categories.map((label) => `• ${label}`).join('\n')}\n\nHave you got any of those?`,
+  /** They messaged again while Lukas has the question. */
+  stillWaiting:
+    "I'm still waiting on Lukas for that one — he gets back to me as soon as he sees it, and I'll message you straight away.\n\n" +
+    'If you have a phone, laptop, TV, console or a car as well, I can get started on that in the meantime.',
   notAccepted: (input: string, categories: string[]) =>
     `Sorry — we don't take ${input.trim()} at the moment. We only take:\n${categories
       .map((label) => `• ${label}`)
@@ -179,6 +213,30 @@ export class IntakeAgent {
     return outcome;
   }
 
+  /**
+   * An item we do not normally take. Playbook section 2, "Something else":
+   * the customer is told honestly, Lukas is asked, and the conversation waits.
+   *
+   * If Lukas has already answered about something like this, that answer is
+   * reused rather than asking him the same question twice.
+   */
+  #askLukas(customer: Customer, conversationId: string, state: IntakeState, description: string): IntakeOutcome {
+    const gate = new CategoryGate(this.#store, this.#rules);
+
+    const previous = gate.previousAnswer(description);
+    if (previous?.status === 'refused') {
+      state.unclearAttempts = 0;
+      return { replies: [copy.refusedBefore(previous.reason, this.#categoryLabels())] };
+    }
+
+    const asked = gate.ask(customer, conversationId, description);
+    state.step = 'asking-lukas';
+    return {
+      replies: [asked.customerMessage],
+      ownerMessages: asked.ownerMessage ? [asked.ownerMessage] : [],
+    };
+  }
+
   #advance(customer: Customer, conversationId: string, state: IntakeState, incoming: Incoming): IntakeOutcome {
     const text = (incoming.text ?? '').trim();
 
@@ -200,8 +258,20 @@ export class IntakeAgent {
       return { replies: [copy.alreadySubmitted] };
     }
 
-    if (state.step === 'name') return this.#handleName(customer, state, text);
-    if (state.step === 'category') return this.#handleCategory(state, text);
+    // Waiting on Lukas's yes or no about an item we don't normally take. Not a
+    // dead end: the customer can change their mind and offer something we do
+    // take, and the question to Lukas stays open either way.
+    if (state.step === 'asking-lukas') {
+      const offered = text ? this.#rules.category(text) : null;
+      if (offered) {
+        state.step = 'category';
+        return this.#handleCategory(customer, conversationId, state, text);
+      }
+      return { replies: [copy.stillWaiting] };
+    }
+
+    if (state.step === 'name') return this.#handleName(customer, conversationId, state, text);
+    if (state.step === 'category') return this.#handleCategory(customer, conversationId, state, text);
     if (state.step === 'variant') return this.#handleVariant(state, text);
     if (state.step === 'amount') return this.#handleAmount(customer, conversationId, state, text);
     return this.#handleQuestion(customer, conversationId, state, incoming, text);
@@ -228,7 +298,7 @@ export class IntakeAgent {
    * The name here is for the conversation and the record. The legal name on
    * the agreement is captured separately at signing, against an ID.
    */
-  #handleName(customer: Customer, state: IntakeState, text: string): IntakeOutcome {
+  #handleName(customer: Customer, conversationId: string, state: IntakeState, text: string): IntakeOutcome {
     if (!state.greeted) {
       state.greeted = true;
 
@@ -264,7 +334,7 @@ export class IntakeAgent {
       if (state.nameAttempts >= 2) {
         state.step = 'category';
         const carried = state.pendingItemText ?? text;
-        if (this.#rules.category(carried)) return this.#handleCategory(state, carried);
+        if (this.#rules.category(carried)) return this.#handleCategory(customer, conversationId, state, carried);
         return { replies: [whichCategory(this.#categoryLabels())] };
       }
       return { replies: [copy.askNameAgain] };
@@ -277,14 +347,14 @@ export class IntakeAgent {
     const replies = [`Thank you ${name}.`];
     const carried = item ?? state.pendingItemText ?? null;
     if (carried) {
-      const onwards = this.#handleCategory(state, carried);
+      const onwards = this.#handleCategory(customer, conversationId, state, carried);
       return { replies: [...replies, ...onwards.replies] };
     }
     // Already greeted when we asked for the name, so the list only.
     return { replies: [...replies, whichCategory(this.#categoryLabels())] };
   }
 
-  #handleCategory(state: IntakeState, text: string): IntakeOutcome {
+  #handleCategory(customer: Customer, conversationId: string, state: IntakeState, text: string): IntakeOutcome {
     const category = text ? this.#rules.category(text) : null;
 
     // An opening "hi" is a greeting, not an item — greet back and ask, rather
@@ -321,8 +391,19 @@ export class IntakeAgent {
       if (!text || ASKING_PRICE.test(text)) {
         return { replies: [...openers, whichCategory(this.#categoryLabels())] };
       }
-      return { replies: [...openers, copy.notAccepted(text, this.#categoryLabels())] };
+
+      // Once to be sure we heard them; after that, stop guessing and ask
+      // Lukas. Telling somebody with a perfectly good smartwatch "we don't
+      // take that" is a decision the agent is not allowed to make.
+      state.unclearAttempts = (state.unclearAttempts ?? 0) + 1;
+      if (state.unclearAttempts < 2) {
+        return { replies: [...openers, copy.unclear(this.#categoryLabels())] };
+      }
+      const asked = this.#askLukas(customer, conversationId, state, text);
+      return { ...asked, replies: [...openers, ...asked.replies] };
     }
+
+    state.unclearAttempts = 0;
 
     state.categorySlug = category.slug;
     const variants = this.#rules.variantsFor(category.slug);

@@ -66,8 +66,7 @@ export function loadRules(paths: RulesPaths = defaultRulesPaths()): Rules {
       return (
         playbook.categories.find((category) => category.slug === wanted) ??
         playbook.categories.find((category) => category.label.toLowerCase() === wanted) ??
-        playbook.categories.find((category) => matchesLoosely(category, wanted)) ??
-        null
+        matchCategory(playbook.categories, wanted)
       );
     },
 
@@ -89,15 +88,75 @@ export function loadRules(paths: RulesPaths = defaultRulesPaths()): Rules {
   };
 }
 
-/** Matches `iphone`, `phone`, `my phone` against `Phones (iPhone and Android)`. */
-function matchesLoosely(category: Category, input: string): boolean {
-  const haystack = `${category.slug} ${category.label}`.toLowerCase();
+/**
+ * Noise words that must never identify a category.
+ *
+ * This list is the fix for a real and expensive bug. The matcher used to test
+ * whether any word of two letters or more appeared *as a substring* of the
+ * category's name, which meant:
+ *
+ *   "I have an Apple Watch"        → "an" is inside "iPhone and Android" → phones
+ *   "PlayStation 5 ... and FIFA"   → "and"                               → phones
+ *   "let me talk to a real person" → "to" is inside "laptops"            → laptops
+ *
+ * while "Samsung Galaxy S25 Ultra" and "Nokia 3310" matched nothing at all and
+ * were told "we don't take that". Matching is whole-word now, so most of these
+ * cannot recur, but the stop list keeps the short connecting words out of the
+ * terms derived from a category's own label.
+ */
+const NOISE = new Set([
+  'and', 'or', 'the', 'a', 'an', 'of', 'with', 'in', 'on', 'to', 'for', 'my',
+  'is', 'it', 'at', 'be', 'by', 'as', 'we', 'me', 'do', 'if', 'so', 'up',
+]);
+
+/**
+ * Everything that identifies this category: its slug, its singular, the words
+ * of its label, and the `recognise:` list from the playbook.
+ *
+ * Longest first, so the most specific term decides. "Samsung TV" beats "TV",
+ * and a message naming both a brand and a product type lands on the type.
+ */
+function termsFor(category: Category): string[] {
   const singular = category.slug.replace(/s$/, '');
-  const words = input.split(/[^a-z0-9]+/).filter(Boolean);
-  return words.some((word) => {
-    const stem = word.replace(/s$/, '');
-    return stem.length >= 2 && (stem === singular || haystack.includes(stem));
-  });
+  const fromLabel = category.label
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length >= 3 && !NOISE.has(word));
+
+  const terms = new Set<string>([
+    category.slug.replace(/-/g, ' '),
+    singular.replace(/-/g, ' '),
+    ...fromLabel,
+    ...category.recognise.map((term) => term.toLowerCase()),
+  ]);
+
+  return [...terms].filter(Boolean).sort((a, b) => b.length - a.length);
+}
+
+/** True when `term` appears in `text` as a whole word (or whole phrase). */
+function mentions(text: string, term: string): boolean {
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  // Plural tolerated on the term: "laptop" matches "laptops", "PS5" matches "PS5s".
+  return new RegExp(`(?<![a-z0-9])${escaped}s?(?![a-z0-9])`, 'i').test(text);
+}
+
+/**
+ * Which category this message is about, by the most specific term that
+ * appears in it. Null means "we could not tell" — which is a question for
+ * Lukas (playbook section 2, "Something else"), never a refusal.
+ */
+function matchCategory(categories: Category[], input: string): Category | null {
+  let best: { category: Category; length: number } | null = null;
+
+  for (const category of categories) {
+    for (const term of termsFor(category)) {
+      if (!mentions(input, term)) continue;
+      if (!best || term.length > best.length) best = { category, length: term.length };
+      break; // terms are longest-first, so the first hit is this category's best
+    }
+  }
+
+  return best?.category ?? null;
 }
 
 let cached: { rules: Rules; paths: RulesPaths; stamps: string } | null = null;
