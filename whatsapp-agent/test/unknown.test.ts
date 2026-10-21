@@ -18,6 +18,7 @@ import { AgentRouter } from '../src/router.ts';
 import { MemoryTransport } from '../src/whatsapp/transport.ts';
 import { CategoryGate, parseCategoryReply } from '../src/intake/unknown.ts';
 import { buildQuestionPlan, OTHER } from '../src/intake/questions.ts';
+import { IntakeAgent } from '../src/intake/agent.ts';
 
 const rules = loadRules();
 const OWNER = '+264811110000';
@@ -229,5 +230,55 @@ describe('a one-off that was accepted', () => {
 
   test('an unknown slug that is not the one-off marker is still a bug', () => {
     assert.throws(() => buildQuestionPlan(rules, 'jewellery'), /Not an accepted category/);
+  });
+});
+
+/**
+ * Which kind of phone, when the brand already says — playbook section 2.
+ *
+ * Asking the owner of a Nokia 3310 whether it is an iPhone is the kind of
+ * question that makes a customer decide nobody is reading. It was also what
+ * tripped the stuck-conversation escalation on the commonest path there is:
+ * most phones that come into the shop are Androids.
+ */
+describe('not asking what we already know', () => {
+  test('an Android brand settles it', () => {
+    for (const text of [
+      'Samsung Galaxy S25 Ultra, 512GB',
+      'Nokia 3310, old but works',
+      'Huawei P30 lite',
+      'my Redmi Note 12',
+      'Google Pixel 7',
+    ]) {
+      assert.equal(rules.variantFrom('phones', text), 'android', text);
+    }
+  });
+
+  test('and so does an iPhone', () => {
+    assert.equal(rules.variantFrom('phones', 'iPhone 15, 128GB'), 'iphone');
+  });
+
+  test('a phone that names no brand is still asked', () => {
+    assert.equal(rules.variantFrom('phones', 'a cellphone, 128GB, good condition'), null);
+    assert.equal(rules.variantFrom('phones', 'my phone'), null);
+  });
+
+  test('a category with no variants is never guessed at', () => {
+    assert.equal(rules.variantFrom('cars', 'Toyota Hilux 2016'), null);
+    assert.equal(rules.variantFrom('laptops', 'Samsung laptop'), null);
+  });
+
+  test('the conversation skips the question entirely', () => {
+    const store = new Store(':memory:');
+    const agent = new IntakeAgent(store, rules);
+    const phone = '+264811000077';
+
+    agent.handle(phone, { text: 'hi' });
+    agent.handle(phone, { text: 'Thomas Shilongo' });
+    const { replies } = agent.handle(phone, { text: 'Samsung Galaxy S25 Ultra, 512GB, perfect condition' });
+
+    assert.doesNotMatch(replies.join('\n'), /iPhone or Android/i);
+    assert.match(replies.join('\n'), /exactly what you have/i);
+    store.close();
   });
 });

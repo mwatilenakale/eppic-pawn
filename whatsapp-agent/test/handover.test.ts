@@ -174,14 +174,17 @@ describe('a person taking over', () => {
 
   test('BACK resumes mid-flow without losing the intake state', async () => {
     await midIntake();
-    const askedBefore = transport.to(CUSTOMER).at(-1)!;
+    // A Samsung Galaxy is an Android by the playbook's variant hints, so the
+    // pending question is already the description.
+    assert.match(transport.to(CUSTOMER).at(-1)!, /exactly what you have/i);
 
     await router.handle(from(CUSTOMER, 'let me talk to a real person'));
     await router.handle(from(OWNER, 'BACK +264811000009'));
-    await router.handle(from(CUSTOMER, 'Android'));
 
-    assert.match(askedBefore, /iPhone or Android/i);
-    assert.match(transport.to(CUSTOMER).at(-1)!, /exactly what you have/i, 'picked up where it left off');
+    // Answering the question it was on moves the intake forward, rather than
+    // starting the customer over from "what is your name?".
+    await router.handle(from(CUSTOMER, 'Samsung Galaxy S24, 256GB, tiny chip on the corner'));
+    assert.match(transport.to(CUSTOMER).at(-1)!, /photo of the item/i, 'picked up where it left off');
   });
 
   test('TAKE claims a quiet thread, and somebody else cannot steal it', async () => {
@@ -241,7 +244,7 @@ describe('getting nowhere', () => {
   test('three identical asks hand the thread to a person', async () => {
     await router.handle(from(CUSTOMER, 'hi'));
     await router.handle(from(CUSTOMER, 'Thomas Shilongo'));
-    await router.handle(from(CUSTOMER, 'Samsung Galaxy S25 Ultra, 512GB'));
+    await router.handle(from(CUSTOMER, 'a cellphone, 128GB, good condition'));
 
     const asked = transport.to(CUSTOMER).at(-1)!;
     assert.match(asked, /iPhone or Android/i);
@@ -257,7 +260,7 @@ describe('getting nowhere', () => {
   test('and then it stays quiet instead of asking a fourth time', async () => {
     await router.handle(from(CUSTOMER, 'hi'));
     await router.handle(from(CUSTOMER, 'Thomas Shilongo'));
-    await router.handle(from(CUSTOMER, 'Samsung Galaxy S25 Ultra, 512GB'));
+    await router.handle(from(CUSTOMER, 'a cellphone, 128GB, good condition'));
     await router.handle(from(CUSTOMER, 'the blue one'));
     await router.handle(from(CUSTOMER, 'the blue one'));
 
@@ -269,9 +272,9 @@ describe('getting nowhere', () => {
   test('a conversation that is moving is never escalated', async () => {
     await router.handle(from(CUSTOMER, 'hi'));
     await router.handle(from(CUSTOMER, 'Thomas Shilongo'));
-    await router.handle(from(CUSTOMER, 'Samsung Galaxy S25 Ultra, 512GB'));
+    await router.handle(from(CUSTOMER, 'a cellphone, 128GB, good condition'));
     await router.handle(from(CUSTOMER, 'Android'));
-    await router.handle(from(CUSTOMER, 'Samsung Galaxy S25 Ultra, 512GB, perfect condition'));
+    await router.handle(from(CUSTOMER, 'a cellphone, 128GB, good condition'));
 
     assert.equal(transport.to(OWNER).length, 0, 'answering the questions must not look like being stuck');
   });

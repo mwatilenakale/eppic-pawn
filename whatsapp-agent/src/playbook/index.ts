@@ -36,6 +36,12 @@ export interface Rules {
   category(input: string): Category | null;
   /** Device flavours for a category, e.g. iPhone / Android for phones. */
   variantsFor(categorySlug: string): FraudCheckGroup[];
+  /**
+   * The variant a message already implies, from the hints in playbook
+   * section 2 — "Nokia 3310" is an Android and does not need asking.
+   * Null when the brand genuinely does not settle it.
+   */
+  variantFrom(categorySlug: string, text: string): string | null;
   /** Playbook screening questions plus fraud checks, in that order. */
   checklistFor(categorySlug: string, variant?: string | null): ChecklistItem[];
   rate(id: string): RateRule | null;
@@ -73,6 +79,21 @@ export function loadRules(paths: RulesPaths = defaultRulesPaths()): Rules {
     variantsFor(categorySlug: string): FraudCheckGroup[] {
       const groups = fraudChecks.get(categorySlug) ?? [];
       return groups.filter((group) => group.variant !== null);
+    },
+
+    variantFrom(categorySlug: string, text: string): string | null {
+      const available = (fraudChecks.get(categorySlug) ?? [])
+        .map((group) => group.variant)
+        .filter((variant): variant is string => variant !== null);
+
+      // Longest term first, so "Samsung Galaxy" is considered before "Galaxy"
+      // and a two-word brand cannot lose to a one-word one.
+      const candidates = Object.entries(playbook.variantHints)
+        .filter(([variant]) => available.includes(variant))
+        .flatMap(([variant, terms]) => terms.map((term) => ({ variant, term })))
+        .sort((a, b) => b.term.length - a.term.length);
+
+      return candidates.find(({ term }) => mentions(text, term))?.variant ?? null;
     },
 
     checklistFor(categorySlug: string, variant?: string | null): ChecklistItem[] {

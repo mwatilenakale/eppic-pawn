@@ -457,7 +457,11 @@ export class IntakeAgent {
       // "iPhone 15" has already answered "is it iPhone or Android?". Asking it
       // anyway is the single clearest sign to a customer that nobody is
       // reading what they wrote.
-      const named = matchVariant(variants, text);
+      //
+      // The brand can answer it too: a Nokia or a Samsung Galaxy is an
+      // Android, from the hints in playbook section 2. Most phones that come
+      // in are Androids, so this is the common path, not the clever one.
+      const named = matchVariant(variants, text) ?? this.#rules.variantFrom(category.slug, text);
       if (named) state.variant = named;
       else {
         state.step = 'variant';
@@ -471,7 +475,7 @@ export class IntakeAgent {
 
   #handleVariant(state: IntakeState, text: string): IntakeOutcome {
     const variants = this.#rules.variantsFor(state.categorySlug!);
-    const chosen = matchVariant(variants, text);
+    const chosen = matchVariant(variants, text) ?? this.#rules.variantFrom(state.categorySlug!, text);
     if (!chosen) {
       return { replies: [copy.askVariant(variants.map((group) => group.label))] };
     }

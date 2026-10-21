@@ -59,6 +59,14 @@ phones, laptops, TVs and watches, so the brand alone says nothing — "Apple
 Watch" must not be taken in as a phone. Where the brand is all we have, the
 agent asks rather than guesses.
 
+Where the brand *does* settle which kind it is, the agent should not ask. Most
+phones that come in are Androids, and asking the owner of a Nokia 3310 whether
+it is an iPhone makes us look like we are not reading:
+
+- Variant hints — android: Samsung Galaxy, Galaxy, Nokia, Huawei, Xiaomi,
+  Redmi, Oppo, Vivo, Tecno, Infinix, Itel, Pixel, OnePlus, Motorola
+- Variant hints — iphone: iPhone
+
 **Storage:** a friend's garage (N$500/month) for bulkier items, plus his
 storage container for delicate ones (smaller separate fee).
 

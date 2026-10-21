@@ -85,6 +85,8 @@ export interface Playbook {
   /** The number customers are told to message, from the document's header. */
   whatsapp: string;
   categories: Category[];
+  /** Which variant a brand implies, keyed by variant (section 2). */
+  variantHints: Record<string, string[]>;
   loanSizing: {
     /** Which of the market estimates to start from, verbatim from section 3. */
     basis: string;
@@ -141,6 +143,7 @@ export function loadPlaybook(path: string): Playbook {
     path,
     whatsapp: readBusinessNumber(path, markdown),
     categories,
+    variantHints: readVariantHints(need(SECTIONS.categories, 'what we accept')),
     loanSizing: readLoanSizing(path, need(SECTIONS.loanSizing, 'loan sizing')),
     adjustmentMemoryDays: readAdjustmentMemoryDays(path, need(SECTIONS.loanSizing, 'loan sizing')),
     rates: readRates(path, need(SECTIONS.rates, 'interest rates & terms')),
@@ -219,10 +222,32 @@ export function slugify(label: string): string {
     .replace(/^-|-$/g, '');
 }
 
+/**
+ * `Variant hints — android: Samsung Galaxy, Nokia, …` from section 2.
+ *
+ * Which kind of phone a brand implies, so the agent does not ask the owner of
+ * a Nokia whether it is an iPhone. Keyed by variant, because the variant names
+ * are unique across categories and this stays correct if another category
+ * ever gains variants.
+ */
+function readVariantHints(block: string): Record<string, string[]> {
+  const hints: Record<string, string[]> = {};
+  for (const line of bullets(block).map(plain)) {
+    const match = /^variant hints?\s*[—-]\s*([a-z0-9-]+)\s*:\s*(.*)$/i.exec(line);
+    if (!match) continue;
+    hints[match[1]!.toLowerCase()] = match[2]!
+      .split(',')
+      .map((term) => term.replace(/\s+/g, ' ').trim().toLowerCase())
+      .filter(Boolean);
+  }
+  return hints;
+}
+
 function readCategories(path: string, block: string): Category[] {
   const categories = bullets(block)
     .map(plain)
     .filter((line) => !/^storage\b/i.test(line))
+    .filter((line) => !/^variant hints?\b/i.test(line))
     .map((line) => {
       // `Phones (iPhone and Android) — recognise: Samsung Galaxy, Nokia, …`
       const split = /^(.*?)\s+[—-]\s*recognise:\s*(.*)$/is.exec(line);
