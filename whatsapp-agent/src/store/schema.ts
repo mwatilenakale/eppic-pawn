@@ -430,4 +430,23 @@ export const MIGRATIONS: string[] = [
   CREATE UNIQUE INDEX category_requests_one_pending ON category_requests(customer_id)
     WHERE status = 'pending';
   `,
+
+  // 11 — handover to a human (docs/tasks/003).
+  //
+  // The agent answers everything by default, which is right: it is the only
+  // thing here that can reply to ten people at 21:00 without getting tired.
+  // But a figure being negotiated, a dispute about a loan that already exists,
+  // or somebody asking for a person are not its to answer.
+  //
+  // A taken thread stays taken until BACK. There is deliberately no timeout:
+  // an automatic resume halfway through somebody's complaint is worse than
+  // silence. `held_by` null with `taken_at` set never happens — they move
+  // together — but the intake state is untouched either way, so handing back
+  // resumes mid-flow rather than starting over.
+  `
+  ALTER TABLE conversations ADD COLUMN held_by TEXT REFERENCES users(id);
+  ALTER TABLE conversations ADD COLUMN held_reason TEXT NOT NULL DEFAULT '';
+  ALTER TABLE conversations ADD COLUMN taken_at TEXT;
+  CREATE INDEX conversations_held ON conversations(held_by) WHERE held_by IS NOT NULL;
+  `,
 ];

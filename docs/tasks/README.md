@@ -42,5 +42,5 @@ What you must not change without asking:
 |---|---|
 | [001 — inspection worksheet page](001-inspection-worksheet.md) | OPEN |
 | [002 — the second approval gate](002-second-gate.md) | BLOCKED on 001 |
-| [003 — WhatsApp handover](003-whatsapp-handover.md) | OPEN |
+| [003 — WhatsApp handover](003-whatsapp-handover.md) | DONE |
 | [004 — 24-hour message templates](004-message-templates.md) | OPEN |

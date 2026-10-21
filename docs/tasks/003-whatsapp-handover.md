@@ -1,6 +1,8 @@
 # 003 — WhatsApp handover to a human
 
-**Status:** OPEN
+**Status:** DONE — Claude, 21 October 2026. `src/intake/handover.ts`,
+`test/handover.test.ts`. Triggers fire from scenario evidence rather than
+guesswork; see the commit.
 
 ## Why this exists
 

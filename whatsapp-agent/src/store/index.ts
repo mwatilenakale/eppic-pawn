@@ -43,7 +43,16 @@ export interface DuplicateFlag {
   decided_at: string | null;
   created_at: string;
 }
-export interface Conversation { id: string; customer_id: string; status: 'active' | 'closed'; state: string }
+export interface Conversation {
+  id: string;
+  customer_id: string;
+  status: 'active' | 'closed';
+  state: string;
+  /** Set while a person is handling this thread; the agent stays quiet. */
+  held_by: string | null;
+  held_reason: string;
+  taken_at: string | null;
+}
 export interface Item {
   id: string;
   customer_id: string;
@@ -455,6 +464,60 @@ export class Store {
 
   // --- conversations & messages -----------------------------------------
 
+  // --- handover to a human (docs/tasks/003) --------------------------------
+
+  /**
+   * This thread needs a person; the agent stops replying on it.
+   *
+   * `held_reason` is what makes the agent quiet, not `held_by` — when the
+   * agent escalates something nobody has picked it up yet, so `held_by` is
+   * null until somebody types TAKE or SAY. The two states have to be
+   * distinguishable: "waiting for a person" and "Petrus is on it" are
+   * different lines on the WAITING list.
+   *
+   * The intake state is deliberately untouched, so handing it back resumes
+   * mid-flow instead of starting the customer over.
+   */
+  holdConversation(conversationId: string, held: { reason: string; actor: string; by?: string | null }): void {
+    this.db
+      .prepare('UPDATE conversations SET held_by = ?, held_reason = ?, taken_at = ?, updated_at = ? WHERE id = ?')
+      .run(held.by ?? null, held.reason, this.#now(), this.#now(), conversationId);
+    this.audit({
+      actor: held.actor,
+      action: 'conversation.held',
+      entity: 'conversation',
+      entityId: conversationId,
+      details: { reason: held.reason },
+    });
+  }
+
+  /** True when a person must handle this thread, claimed or not. */
+  conversationNeedsAPerson(conversationId: string): boolean {
+    return (this.conversationById(conversationId)?.held_reason ?? '') !== '';
+  }
+
+  releaseConversation(conversationId: string, actor: string): void {
+    this.db
+      .prepare("UPDATE conversations SET held_by = NULL, held_reason = '', taken_at = NULL, updated_at = ? WHERE id = ?")
+      .run(this.#now(), conversationId);
+    this.audit({ actor, action: 'conversation.released', entity: 'conversation', entityId: conversationId });
+  }
+
+  /** Every thread currently sitting on a person, oldest first. */
+  heldConversations(): (Conversation & { customer_name: string | null; customer_phone: string })[] {
+    return this.db
+      .prepare(
+        'SELECT c.*, cu.name AS customer_name, cu.phone AS customer_phone' +
+          ' FROM conversations c JOIN customers cu ON cu.id = c.customer_id' +
+          " WHERE c.held_reason <> '' AND c.status = 'active' ORDER BY c.taken_at",
+      )
+      .all() as unknown as (Conversation & { customer_name: string | null; customer_phone: string })[];
+  }
+
+  user(userId: string): User | null {
+    return (this.db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as unknown as User) ?? null;
+  }
+
   /** One conversation by id, open or closed. */
   conversationById(conversationId: string): Conversation | null {
     return (
@@ -477,6 +540,9 @@ export class Store {
       customer_id: customerId,
       status: 'active',
       state: JSON.stringify(state),
+      held_by: null,
+      held_reason: '',
+      taken_at: null,
     };
     const at = this.#now();
     this.db

@@ -45,6 +45,8 @@ export interface IntakeState {
   pendingItemText?: string | null;
   /** True once we have said we cannot quote, so we don't say it twice running. */
   priceAnswered?: boolean;
+  /** Descriptions too thin to value. After three we take what we are given. */
+  vagueDescriptions?: number;
   /**
    * Times we have failed to work out what the item is. The first time we ask
    * them to say it plainly; the second time we stop guessing and ask Lukas,
@@ -120,6 +122,16 @@ const copy = {
   refusedBefore: (reason: string, categories: string[]) =>
     `Lukas has looked at one of those before and we don't take them${reason ? ` — ${reason}` : ''}.\n\n` +
     `What we do take:\n${categories.map((label) => `• ${label}`).join('\n')}\n\nHave you got any of those?`,
+  /**
+   * The description was too thin to value. Asked a different way the second
+   * time, because repeating a question word for word is how a customer decides
+   * the thing is broken.
+   */
+  needMoreDetail: (attempt: number) =>
+    attempt === 1
+      ? "I need a bit more than that to put in front of Lukas — what make and model is it?\n\nFor example: *iPhone 13 Pro, 256GB, small scratch on the back* or *Toyota Hilux 2016, 180,000km*."
+      : 'Still not quite enough, sorry. Just the make and the model is fine — even *Dell laptop 2021* or *55 inch Samsung* gives him something to work with.',
+
   /** They messaged again while Lukas has the question. */
   stillWaiting:
     "I'm still waiting on Lukas for that one — he gets back to me as soon as he sees it, and I'll message you straight away.\n\n" +
@@ -319,8 +331,14 @@ export class IntakeAgent {
     // I want to pawn my phone" is both a name and an item, and rejecting it
     // because the word "phone" appears loses the name.
     const candidate = readName(text);
-    const name = candidate && !this.#rules.category(candidate) ? candidate : null;
     const item = this.#rules.category(text) ? text : null;
+
+    // A message that names an item is only *also* a name if they said so
+    // outright. "my name is Aina, I want to pawn my iPhone" gives up both;
+    // "actually I have an iPhone 13 to pawn" is an item and nothing else —
+    // it was being filed as a customer called "Actually I Have".
+    const alsoAName = !item || NAME_LEAD_IN.test(text);
+    const name = candidate && alsoAName && !this.#rules.category(candidate) ? candidate : null;
 
     if (!name) {
       // They told us the item instead. Keep it — asking for it a second time
@@ -483,6 +501,20 @@ export class IntakeAgent {
 
     // Free-text answer (the item description).
     if (text.length < 3) return { replies: [copy.confirmExpected(question.ask)] };
+
+    // The description is what gets valued. Letting a bare "yes" through sent
+    // Lukas a car application reading "*Item:* yes" with a suggested loan of
+    // N$1,612.50 against it, computed by asking the valuer what the word "yes"
+    // is worth. Ask again rather than price a word.
+    if (question.id === 'item-description' && !describesAnItem(text)) {
+      state.vagueDescriptions = (state.vagueDescriptions ?? 0) + 1;
+      if (state.vagueDescriptions < 3) {
+        return { replies: [copy.needMoreDetail(state.vagueDescriptions)] };
+      }
+      // Three tries. Take what they gave and let Lukas see it was thin
+      // rather than trapping them on one question forever.
+    }
+
     this.#record(state, question, text, null);
     if (question.id === 'item-description') {
       this.#ensureItem(customer, conversationId, state, text);
@@ -645,7 +677,54 @@ function initialState(knownName?: string | null): IntakeState {
  * Reads a name out of whatever they typed. People answer "Aina", "it's
  * Aina", "my name is Aina Shipanga", or a whole sentence about their phone.
  */
+/**
+ * Is this actually a description of an item?
+ *
+ * The bar is deliberately low — people type "ps5 1tb" and that is plenty — but
+ * it has to stop a bare confirmation or a sentence about something else
+ * becoming the thing we ask the valuer to price. Two signals, either of which
+ * is enough: a model number, or three words that are not filler.
+ */
+function describesAnItem(text: string): boolean {
+  const trimmed = text.trim();
+
+  // "yes", "ok", "not sure" — an answer to a different question.
+  if (readConfirmation(trimmed) !== null) return false;
+
+  // A digit almost always means a model, a size or a year: "iPhone 15",
+  // "55 inch", "ps5", "2016 Polo".
+  if (/\d/.test(trimmed) && /[a-z]/i.test(trimmed)) return true;
+
+  const words = trimmed
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .filter((word) => word.length > 1 && !DESCRIPTION_FILLER.has(word));
+
+  return words.length >= 3;
+}
+
+/** Words that pad a sentence without saying anything about the item. */
+const DESCRIPTION_FILLER = new Set([
+  'the', 'and', 'but', 'for', 'with', 'have', 'has', 'had', 'its', 'it', 'is',
+  'are', 'was', 'this', 'that', 'my', 'me', 'you', 'your', 'want', 'need',
+  'just', 'only', 'also', 'please', 'can', 'could', 'would', 'will', 'dont',
+  'not', 'any', 'some', 'very', 'really', 'today', 'now', 'cash', 'money',
+  'papers', 'receipt', 'thanks', 'thank', 'hello', 'okay', 'sure',
+]);
+
+/** They are telling us a name on purpose, not just happening to start with "I". */
+const NAME_LEAD_IN = /\b(my name is|name'?s|i'?m|i am|it'?s|this is|call me)\b/i;
+
 function readName(text: string): string | null {
+  // A question is not a name. "I said are you hiring" was filed as a customer
+  // called "I Said Are", which is both useless and faintly insulting to greet
+  // somebody by next time.
+  if (/\?\s*$/.test(text.trim())) return null;
+  if (/^\s*(are|is|was|do|does|did|can|could|will|would|what|where|when|why|how|who|which|whose)\b/i.test(text)) {
+    return null;
+  }
+  if (/^\s*i\s+(said|asked|told|want|need|have)\b/i.test(text)) return null;
+
   const cleaned = text
     .replace(/^(hi|hello|hey|good (morning|afternoon|evening))\b[,.!\s]*/i, '')
     .replace(/^(it'?s|this is|i'?m|i am|my name is|name is|call me)\b[\s:]*/i, '')

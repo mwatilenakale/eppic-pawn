@@ -12,6 +12,7 @@ import type { Store, User } from './store/index.ts';
 import { IntakeAgent, type IntakeState, type IntakeSubmission } from './intake/agent.ts';
 import { CategoryGate, parseCategoryReply, type CategoryDecisionResult } from './intake/unknown.ts';
 import { OTHER } from './intake/questions.ts';
+import { HandoverDesk, detectHandover, parseHandoverCommand, type Handover } from './intake/handover.ts';
 import { ApprovalWorkflow } from './approval/index.ts';
 import type { MarketEstimate } from './valuation.ts';
 import type { ContractService, SignedContract } from './contract/index.ts';
@@ -68,6 +69,7 @@ export class AgentRouter {
   readonly #directory: CustomerDirectory | null;
   readonly #book: Book;
   readonly #gate: CategoryGate;
+  readonly #desk: HandoverDesk;
   readonly #onError: (error: unknown, event: InboundEvent) => void;
 
   constructor(options: RouterOptions) {
@@ -99,6 +101,7 @@ export class AgentRouter {
 
     this.#book = new Book(options.store, { clock: options.clock });
     this.#gate = new CategoryGate(options.store, options.rules);
+    this.#desk = new HandoverDesk(options.store);
     this.#onError = options.onError ?? ((error) => console.error('[agent]', error));
   }
 
@@ -127,6 +130,15 @@ export class AgentRouter {
 
   async #handleCustomer(event: InboundEvent): Promise<void> {
     const media = event.mediaId ? await this.#transport.downloadMedia(event.mediaId) : undefined;
+
+    // Before anything else: is this one of ours to answer at all?
+    //
+    // The message is recorded either way — a thread a person is handling still
+    // needs a complete transcript — but when a human has it, or a trigger
+    // fires, the agent says nothing. Deciding a figure, an argument about an
+    // existing loan, or a question about the police are not its to answer, and
+    // guessing at those costs far more than waiting does.
+    if (await this.#handedToAPerson(event)) return;
 
     const outcome = this.#intake.handle(event.from, {
       text: event.text,
@@ -181,14 +193,83 @@ export class AgentRouter {
       return;
     }
 
+    // Staff can take a thread and answer as the shop. They still cannot
+    // approve — SAY is a message and nothing else, and a figure typed into it
+    // changes no loan, approval or ledger row.
+    if (await this.#runHandover(event, staff)) return;
+
     await this.#transport.sendText({
       to: event.from,
       body:
         `Hello ${staff.name.split(' ')[0]}.\n\n` +
         'Send *BOOK* for the totals, *DUE* for this week, *OVERDUE* for who is late, ' +
         'or *CUSTOMER <name or number>* to look someone up.\n\n' +
+        'For a customer thread: *WAITING*, *TAKE <number>*, *SAY <number> <message>*, *BACK <number>*.\n\n' +
         'Pricing and approvals are Lukas\'s — those come from his phone.',
     });
+  }
+
+  /**
+   * TAKE / SAY / BACK / WAITING, from Lukas or from staff. Returns false when
+   * the message was not one of these, so the caller can carry on.
+   */
+  async #runHandover(event: InboundEvent, user: User): Promise<boolean> {
+    const command = parseHandoverCommand(event.text ?? '');
+    if (!command) return false;
+
+    const result = this.#desk.run(command, user);
+    await this.#transport.sendText({ to: event.from, body: result.ownerMessage });
+
+    if (result.customerMessage && result.customerPhone) {
+      await this.#transport.sendText({ to: result.customerPhone, body: result.customerMessage });
+    }
+    return true;
+  }
+
+  /**
+   * True when the agent must stay quiet: a person is already holding this
+   * thread, or this message is one it should not answer.
+   *
+   * Returns true without replying in both cases. The customer gets one line
+   * when the agent steps back, so they are not left staring at silence, and
+   * nothing more until a human types BACK.
+   */
+  async #handedToAPerson(event: InboundEvent): Promise<boolean> {
+    const customer = this.#store.customerByPhone(event.from);
+    const conversation = customer ? this.#store.activeConversation(customer.id) : null;
+    if (!conversation) {
+      // No thread yet, so nothing can be held. A first message that trips a
+      // trigger is caught on the next one, once there is a transcript to send.
+      return false;
+    }
+
+    // A person has it, or is being waited on. Record what the customer said
+    // and say nothing.
+    if (conversation.held_reason) {
+      this.#store.recordInbound({
+        conversationId: conversation.id,
+        providerMessageId: event.messageId,
+        body: event.text ?? (event.mediaId ? '[photo]' : ''),
+      });
+      return true;
+    }
+
+    const handover = detectHandover(event.text ?? '');
+    if (!handover) return false;
+
+    this.#store.recordInbound({
+      conversationId: conversation.id,
+      providerMessageId: event.messageId,
+      body: event.text ?? '',
+    });
+
+    const message = this.#desk.escalate(conversation, handover, customer!.name, event.from);
+    if (message) await this.#transport.sendText({ to: this.#ownerPhone, body: message });
+
+    const holding = holdingLine(handover);
+    await this.#transport.sendText({ to: event.from, body: holding });
+    this.#store.recordOutbound({ conversationId: conversation.id, body: holding });
+    return true;
   }
 
   /**
@@ -229,6 +310,10 @@ export class AgentRouter {
       await this.#transport.sendText({ to: this.#ownerPhone, body: this.#answer(query, this.#owner) });
       return;
     }
+
+    // TAKE / SAY / BACK / WAITING — talking to a customer by hand. Before the
+    // approval parser: "BACK" must not be read as anything about money.
+    if (await this.#runHandover(event, this.#owner)) return;
 
     // ACCEPT / REFUSE answers "can we take this at all?" about an item outside
     // the five categories. Checked before the approval parser and kept to
@@ -360,4 +445,24 @@ export class AgentRouter {
       this.#onError(error, { from: to, messageId: '', type: 'text' });
     }
   }
+}
+
+/**
+ * The one line the customer gets as the agent steps back.
+ *
+ * Said plainly, because the alternative is silence and a customer who thinks
+ * they have been ignored. It promises a person, not a timeframe — Lukas has a
+ * day job and an over-promise here is worse than none.
+ */
+function holdingLine(handover: Handover): string {
+  if (handover.reason === 'negotiating') {
+    return "That's Lukas's to decide, not mine — I've passed it to him and he'll come back to you himself.";
+  }
+  if (handover.reason === 'existing-loan') {
+    return "That's about a loan you already have, so I'd rather Lukas answered it himself. I've sent it to him now.";
+  }
+  if (handover.reason === 'ownership') {
+    return "I'm not going to answer that one myself — I've passed it straight to Lukas and he'll be in touch.";
+  }
+  return "Of course — I've asked Lukas to pick this up with you himself. He'll reply here on this number.";
 }

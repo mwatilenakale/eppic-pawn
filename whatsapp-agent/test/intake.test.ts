@@ -404,3 +404,71 @@ describe('the finance check (the Spectra case)', () => {
     assert.doesNotMatch(asks, /Can you confirm: (since|because)\b/i);
   });
 });
+
+/**
+ * The description is what gets valued.
+ *
+ * Found by driving a car scenario where every prompt was answered "yes": Lukas
+ * received an application reading "*Item:* yes" with a suggested loan of
+ * N$1,612.50 against it, arrived at by asking the valuer what the word "yes"
+ * is worth.
+ */
+describe('a description worth pricing', () => {
+  const start = () => {
+    agent.handle(CUSTOMER, { text: 'hi' });
+    introduce();
+    agent.handle(CUSTOMER, { text: 'car' });
+  };
+
+  test('a bare confirmation is not an item', () => {
+    start();
+    const { replies } = agent.handle(CUSTOMER, { text: 'yes' });
+
+    assert.match(replies.join('\n'), /need a bit more than that/i);
+    assert.deepEqual(store.db.prepare('SELECT * FROM items').all(), [], 'nothing was created to value');
+  });
+
+  test('nor is a sentence about something else', () => {
+    start();
+    agent.handle(CUSTOMER, { text: 'yes' });
+    const { replies } = agent.handle(CUSTOMER, { text: 'I just need cash today' });
+    assert.match(replies.join('\n'), /still not quite enough/i);
+  });
+
+  test('the second ask is worded differently from the first', () => {
+    start();
+    const first = agent.handle(CUSTOMER, { text: 'yes' }).replies.join('\n');
+    const second = agent.handle(CUSTOMER, { text: 'sure' }).replies.join('\n');
+    assert.notEqual(first, second, 'repeating a question verbatim reads as broken');
+  });
+
+  test('a real description gets through', () => {
+    start();
+    agent.handle(CUSTOMER, { text: 'Toyota Hilux 2016, 180000km, runs well' });
+
+    const items = store.db.prepare('SELECT description FROM items').all() as { description: string }[];
+    assert.equal(items.length, 1);
+    assert.match(items[0]!.description, /Hilux/);
+  });
+
+  test('short is fine when it names a model', () => {
+    // The bar is low on purpose: "ps5 1tb" is plenty to go and price.
+    agent.handle(CUSTOMER, { text: 'hi' });
+    introduce();
+    agent.handle(CUSTOMER, { text: 'console' });
+    agent.handle(CUSTOMER, { text: 'ps5 1tb' });
+
+    const items = store.db.prepare('SELECT description FROM items').all() as { description: string }[];
+    assert.equal(items.length, 1, '"ps5 1tb" is a real answer and must not be rejected');
+  });
+
+  test('it gives up after three tries rather than trapping them', () => {
+    start();
+    agent.handle(CUSTOMER, { text: 'yes' });
+    agent.handle(CUSTOMER, { text: 'sure' });
+    const { replies } = agent.handle(CUSTOMER, { text: 'yes please' });
+
+    assert.match(replies.join('\n'), /photo/i, 'the conversation moves on');
+    assert.equal((store.db.prepare('SELECT * FROM items').all()).length, 1, 'Lukas sees it was thin, rather than nobody seeing it');
+  });
+});
