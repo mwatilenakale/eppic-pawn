@@ -95,25 +95,21 @@ whatsapp-agent/src/
   migrate/    the workbook importer
 ```
 
-## Open work, in priority order
+## Open work
 
-1. **Inspection queue and worksheet.** A staff page: unclaimed jobs,
-   claim one, work the checklist for that item with a tick per line,
-   findings in their own words. The checks already come from the
-   documents — see `buildQuestionPlan(...).inPersonChecks`. Submission
-   blocked until every line is answered.
-2. **A second approval gate.** Today one `APPROVE` issues the contract.
-   It splits: approve in principle, then release after inspection.
-3. **Human handover on WhatsApp.** `TAKE` / `SAY` / `BACK`, plus the
-   escalation triggers (any attempt to negotiate a figure, anything
-   about an existing loan, a request for a person, two unparseable
-   messages in a row).
-4. **24-hour message templates.** WhatsApp only allows free-form
-   messages within 24 hours of the customer's last one. Without
-   templates, nothing reaches the overdue book.
+Specs live in `docs/tasks/`. Read `docs/tasks/README.md` first — it says how
+to claim one so two agents do not start the same thing.
+
+Claude writes the specs and reviews what comes back. Build on a branch named
+`codex/<short-description>`, push it, and say what you did; do not merge.
 
 ## Before you build any of it
 
 Write the short plan first and check it against `docs/playbook.md` and
 `docs/architecture.md`. Those documents already answer most "how should
 this behave" questions, and the answer in them beats a guess.
+
+If a task appears to need a business rule that is not in the playbook —
+a threshold, a rate, a cutoff — **stop and say so**. The rule has to come
+from Lukas. Inventing one and burying it in code is the single worst thing
+that can happen to this project.

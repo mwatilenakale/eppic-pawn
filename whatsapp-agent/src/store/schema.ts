@@ -362,4 +362,40 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX staff_tokens_user ON staff_tokens(user_id, revoked_at);
   `,
+
+  // 9 — the shop-floor inspection, as a job someone owns.
+  //
+  // `inspections` already records what was found. This is the piece in front
+  // of it: a job appears when Lukas approves in principle, somebody claims it,
+  // and it comes back with a name against it. One job, one owner — two people
+  // half-checking the same phone is how a check gets skipped by both.
+  //
+  // Deliberately holds no money. The staff screen is built from this table and
+  // nothing else, so the valuation cannot reach it: an inspector who knows the
+  // figure has a reason to wave something through, which is the same worry the
+  // playbook already has about friendly car mechanics.
+  `
+  CREATE TABLE inspection_jobs (
+    id            TEXT PRIMARY KEY,
+    item_id       TEXT NOT NULL REFERENCES items(id),
+    approval_id   TEXT REFERENCES approvals(id),
+    status        TEXT NOT NULL CHECK (status IN ('open', 'claimed', 'submitted', 'cancelled')),
+    claimed_by    TEXT REFERENCES users(id),
+    claimed_at    TEXT,
+    -- [{ checkId, text, answer: 'pass'|'fail'|'na', note }] — one per check,
+    -- and the worksheet will not submit until every check has an answer.
+    results       TEXT NOT NULL DEFAULT '[]',
+    -- What the inspector wrote in their own words.
+    findings      TEXT NOT NULL DEFAULT '',
+    outcome       TEXT CHECK (outcome IN ('pass', 'fail')),
+    submitted_at  TEXT,
+    created_at    TEXT NOT NULL
+  );
+  CREATE INDEX inspection_jobs_status ON inspection_jobs(status, created_at);
+  CREATE INDEX inspection_jobs_claimed ON inspection_jobs(claimed_by, status);
+  -- An item is inspected once at a time; a second open job for the same item
+  -- would mean two people working from two different worksheets.
+  CREATE UNIQUE INDEX inspection_jobs_one_live ON inspection_jobs(item_id)
+    WHERE status IN ('open', 'claimed');
+  `,
 ];
