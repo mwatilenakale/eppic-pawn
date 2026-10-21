@@ -63,7 +63,7 @@ async function completeIntake(phone: string, name: string, item: string): Promis
   await say(phone, item);
   for (let turn = 0; turn < 45; turn += 1) {
     const last = transport.to(phone).at(-1) ?? '';
-    if (/sent your application to Lukas/i.test(last)) return;
+    if (/sent your application/i.test(last)) return;
     if (/photo/i.test(last)) await say(phone, undefined, `md${++counter}`);
     else if (/how much are you hoping/i.test(last)) await say(phone, 'not sure');
     else if (/exactly what you have/i.test(last)) await say(phone, item);

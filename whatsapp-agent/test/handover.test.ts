@@ -99,7 +99,7 @@ describe('stepping back', () => {
     await midIntake();
     await router.handle(from(CUSTOMER, 'can you do 6000?'));
 
-    assert.match(transport.to(CUSTOMER).at(-1)!, /Lukas's to decide/i);
+    assert.match(transport.to(CUSTOMER).at(-1)!, /the manager's to decide/i);
     assert.doesNotMatch(transport.to(CUSTOMER).join('\n'), /N\$\s?\d/, 'and still no figure');
   });
 
@@ -314,7 +314,7 @@ describe('no figure reaches a customer on WhatsApp before Lukas replies', () => 
 
     for (let turn = 0; turn < 45; turn += 1) {
       const last = transport.to(CUSTOMER).at(-1) ?? '';
-      if (/sent your application to Lukas/i.test(last)) break;
+      if (/sent your application/i.test(last)) break;
       if (/photo/i.test(last)) {
         await router.handle({ from: CUSTOMER, messageId: `wamid.p${++counter}`, type: 'image', mediaId: `md${counter}` });
       } else if (/how much are you hoping/i.test(last)) {
@@ -326,7 +326,7 @@ describe('no figure reaches a customer on WhatsApp before Lukas replies', () => 
       }
     }
 
-    assert.match(transport.to(CUSTOMER).at(-1)!, /sent your application to Lukas/i, 'intake completed');
+    assert.match(transport.to(CUSTOMER).at(-1)!, /sent your application to the manager/i, 'intake completed');
     assert.doesNotMatch(transport.to(CUSTOMER).join('\n'), /N\$\s?\d/, 'and still no figure');
 
     // Lukas is the one who gets the numbers.
@@ -339,7 +339,7 @@ describe('no figure reaches a customer on WhatsApp before Lukas replies', () => 
     await router.handle(from(CUSTOMER, 'iPhone 15, 128GB, box included, battery health 95%'));
     for (let turn = 0; turn < 45; turn += 1) {
       const last = transport.to(CUSTOMER).at(-1) ?? '';
-      if (/sent your application to Lukas/i.test(last)) break;
+      if (/sent your application/i.test(last)) break;
       if (/photo/i.test(last)) {
         await router.handle({ from: CUSTOMER, messageId: `wamid.q${++counter}`, type: 'image', mediaId: `md${counter}` });
       } else if (/how much are you hoping/i.test(last)) await router.handle(from(CUSTOMER, '3000'));
@@ -352,6 +352,6 @@ describe('no figure reaches a customer on WhatsApp before Lukas replies', () => 
 
     const after = transport.to(CUSTOMER).slice(beforeHisReply);
     assert.equal(after.filter((message) => /N\$\s?\d/.test(message)).length, 1, 'exactly one, and it is his');
-    assert.match(after.join('\n'), /Lukas has reviewed your application/i);
+    assert.match(after.join('\n'), /your application has been reviewed/i);
   });
 });

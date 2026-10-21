@@ -56,7 +56,7 @@ async function intakeWithoutTheDeclaration(): Promise<void> {
 
   for (let turn = 0; turn < 45; turn += 1) {
     const last = transport.to(CUSTOMER).at(-1) ?? '';
-    if (/sent your application to Lukas/i.test(last)) return;
+    if (/sent your application/i.test(last)) return;
     // No receipt, so the police declaration becomes the fallback (section 5)
     // — and they have not been to the station either. Both gaps reach Lukas.
     if (/proof of ownership/i.test(last)) await say(CUSTOMER, "I don't have a receipt for it");
@@ -143,7 +143,7 @@ describe('his end', () => {
     await say(CUSTOMER, 'iPhone 15, 128GB, box included, battery 95%');
     for (let turn = 0; turn < 45; turn += 1) {
       const last = transport.to(CUSTOMER).at(-1) ?? '';
-      if (/sent your application to Lukas/i.test(last)) break;
+      if (/sent your application/i.test(last)) break;
       if (/photo/i.test(last)) await say(CUSTOMER, undefined, `md${++counter}`);
       else if (/how much are you hoping/i.test(last)) await say(CUSTOMER, 'not sure');
       else if (/exactly what you have/i.test(last)) await say(CUSTOMER, 'iPhone 15, 128GB, box');

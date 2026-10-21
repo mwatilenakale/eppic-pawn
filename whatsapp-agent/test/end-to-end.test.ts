@@ -65,7 +65,7 @@ async function completeIntake(): Promise<void> {
 
   for (let turn = 0; turn < 40; turn += 1) {
     const last = transport.to(CUSTOMER).at(-1) ?? '';
-    if (/sent your application to Lukas/i.test(last)) return;
+    if (/sent your application/i.test(last)) return;
 
     if (/photo/i.test(last)) await router.handle(fromCustomer());
     else if (/how much are you hoping/i.test(last)) await router.handle(fromCustomer('3000'));

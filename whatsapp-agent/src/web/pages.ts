@@ -22,6 +22,11 @@ import { whatsappLink, type PrecheckOutcome, type PrecheckQuote } from './preche
 
 const STEPS = ['Item', 'Details', 'Research', 'Quote'] as const;
 
+/** "the manager" → "The manager", for a heading or the start of a sentence. */
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function page(title: string, body: string, whatsapp: string, step?: number): string {
   return `<!doctype html>
 <html lang="en">
@@ -84,7 +89,7 @@ export function landingPage(rules: Rules): string {
       <ul class="plain">
         <li>Tell us what the item is and answer a few questions.</li>
         <li>We work out an estimate from what the item is worth second-hand.</li>
-        <li>Lukas checks it and confirms the final figure on WhatsApp.</li>
+        <li>${escapeHtml(capitalise(rules.playbook.ownerLabel))} checks it and confirms the final figure on WhatsApp.</li>
         <li>You sign on your phone, then bring the item in.</li>
       </ul>
     </div>
@@ -112,7 +117,7 @@ export function chooseCategoryPage(rules: Rules, error?: string): string {
     ${error ? `<div class="verification-banner" role="alert"><strong>${escapeHtml(error)}</strong></div>` : ''}
     <div class="card"><ul class="category-grid stagger-children">${categories}</ul></div>
     <p class="muted">These five are what we take as standard. Got something else?
-    ${askAboutIt(rules.playbook.whatsapp)}</p>`,
+    ${askAboutIt(rules.playbook.whatsapp, rules.playbook.ownerLabel)}</p>`,
     rules.playbook.whatsapp, 1);
 }
 
@@ -125,10 +130,10 @@ export function chooseCategoryPage(rules: Rules, error?: string): string {
  * saying "we don't take that" — which is a decision the site has no business
  * making — and point them at the number where the agent will ask him.
  */
-function askAboutIt(whatsapp: string): string {
+function askAboutIt(whatsapp: string, owner: string): string {
   const number = whatsapp.replace(/[^\d+]/g, '');
   return `<a href="https://wa.me/${encodeURIComponent(number.replace(/^\+/, ''))}">Message us on WhatsApp</a>
-    and we'll ask Lukas — he does take other things when they're worth it.`;
+    and we'll ask ${escapeHtml(owner)} — we do take other things when they're worth it.`;
 }
 
 export function questionsPage(
@@ -200,7 +205,7 @@ export function questionsPage(
     rules.playbook.whatsapp, 2);
 }
 
-export function outcomePage(outcome: PrecheckOutcome, whatsapp: string): string {
+export function outcomePage(outcome: PrecheckOutcome, whatsapp: string, ownerLabel: string): string {
   const link = whatsappLink(whatsapp, outcome.whatsappText);
 
   if (outcome.status === 'not-accepted') {
@@ -217,9 +222,9 @@ export function outcomePage(outcome: PrecheckOutcome, whatsapp: string): string 
       <h1>${escapeHtml(outcome.headline)}</h1>
     </header>
 
-    ${outcome.quote?.belowMinimum ? tooSmallCard(outcome.quote) : outcome.quote ? quoteCard(outcome.quote) : noQuoteCard()}
+    ${outcome.quote?.belowMinimum ? tooSmallCard(outcome.quote) : outcome.quote ? quoteCard(outcome.quote) : noQuoteCard(ownerLabel)}
 
-    ${outcome.quote?.belowMinimum ? '' : verificationBanner()}
+    ${outcome.quote?.belowMinimum ? '' : verificationBanner(ownerLabel)}
 
     ${
       outcome.notes.length
@@ -301,22 +306,22 @@ function tooSmallCard(quote: PrecheckQuote): string {
   </div>`;
 }
 
-function noQuoteCard(): string {
+function noQuoteCard(ownerLabel: string): string {
   return `<div class="card">
-    <h2>Lukas will work out your figure</h2>
+    <h2>${escapeHtml(capitalise(ownerLabel))} will work out your figure</h2>
     <p class="lead" style="margin-top:var(--space-3)">We could not price this one automatically — send it over on
     WhatsApp with a photo and he will come back to you himself.</p>
   </div>`;
 }
 
 /** Section 5H of the design. `role="alert"` per its accessibility section. */
-function verificationBanner(): string {
+function verificationBanner(ownerLabel: string): string {
   return `<div class="verification-banner" role="alert">
     <span class="verification-icon" aria-hidden="true">&#9888;</span>
     <h2>This is an estimate, not an offer</h2>
     <p class="lead" style="margin-top:var(--space-2)">
-      Every figure here is worked out from what the item is worth second-hand. Lukas confirms the final
-      amount himself once he has seen the item and the photos — it can go up or down.
+      Every figure here is worked out from what the item is worth second-hand. ${escapeHtml(capitalise(ownerLabel))} confirms the final
+      amount once the item and the photos have been seen — it can go up or down.
     </p>
   </div>`;
 }

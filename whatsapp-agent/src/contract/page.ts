@@ -178,6 +178,6 @@ export function contractErrorPage(message: string, whatsapp: string): string {
     <div class="card">
       <h1>This link cannot be used</h1>
       <p class="error">${escapeHtml(message)}</p>
-      <p class="meta">WhatsApp ${escapeHtml(whatsapp)} and Lukas will sort it out.</p>
+      <p class="meta">WhatsApp ${escapeHtml(whatsapp)} and we'll sort it out.</p>
     </div>`);
 }

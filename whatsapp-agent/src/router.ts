@@ -77,6 +77,8 @@ export class AgentRouter {
   readonly #book: Book;
   readonly #gate: CategoryGate;
   readonly #desk: HandoverDesk;
+  /** What customers call whoever decides — "the manager", from the playbook. */
+  readonly #ownerLabel: string;
   readonly #forfeiture: Forfeiture;
   readonly #extensions: Extensions;
   readonly #onError: (error: unknown, event: InboundEvent) => void;
@@ -112,6 +114,7 @@ export class AgentRouter {
     this.#book = new Book(options.store, { clock: options.clock });
     this.#gate = new CategoryGate(options.store, options.rules);
     this.#desk = new HandoverDesk(options.store);
+    this.#ownerLabel = options.rules.playbook.ownerLabel;
     this.#forfeiture = new Forfeiture(options.store, options.rules, this.#book);
     this.#extensions = new Extensions(options.store, options.rules, this.#book, this.#valuator);
     this.#onError = options.onError ?? ((error) => console.error('[agent]', error));
@@ -262,8 +265,8 @@ export class AgentRouter {
     await this.#transport.sendText({ to: this.#ownerPhone, body: message });
 
     const line =
-      "I'm not following you properly, sorry — rather than keep guessing I've asked Lukas to take this over himself. " +
-      "He'll reply here on this number.";
+      `I'm not following you properly, sorry — rather than keep guessing I've asked ${this.#ownerLabel} to take this over. ` +
+      'Someone will reply here on this number.';
     await this.#transport.sendText({ to: phone, body: line });
     this.#store.recordOutbound({ conversationId: conversation.id, body: line });
   }
@@ -311,7 +314,7 @@ export class AgentRouter {
     const message = this.#desk.escalate(conversation, handover, customer!.name, event.from);
     if (message) await this.#transport.sendText({ to: this.#ownerPhone, body: message });
 
-    const holding = holdingLine(handover);
+    const holding = holdingLine(handover, this.#ownerLabel);
     await this.#transport.sendText({ to: event.from, body: holding });
     this.#store.recordOutbound({ conversationId: conversation.id, body: holding });
     return true;
@@ -526,15 +529,15 @@ export class AgentRouter {
  * they have been ignored. It promises a person, not a timeframe — Lukas has a
  * day job and an over-promise here is worse than none.
  */
-function holdingLine(handover: Handover): string {
+function holdingLine(handover: Handover, owner: string): string {
   if (handover.reason === 'negotiating') {
-    return "That's Lukas's to decide, not mine — I've passed it to him and he'll come back to you himself.";
+    return `That's ${owner}'s to decide, not mine — I've passed it across and you'll hear back directly.`;
   }
   if (handover.reason === 'existing-loan') {
-    return "That's about a loan you already have, so I'd rather Lukas answered it himself. I've sent it to him now.";
+    return `That's about a loan you already have, so I'd rather ${owner} answered it. I've sent it across now.`;
   }
   if (handover.reason === 'ownership') {
-    return "I'm not going to answer that one myself — I've passed it straight to Lukas and he'll be in touch.";
+    return `I'm not going to answer that one myself — I've passed it straight to ${owner} and someone will be in touch.`;
   }
-  return "Of course — I've asked Lukas to pick this up with you himself. He'll reply here on this number.";
+  return `Of course — I've asked ${owner} to pick this up with you directly. You'll get a reply here on this number.`;
 }

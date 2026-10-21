@@ -84,6 +84,14 @@ export interface Playbook {
   path: string;
   /** The number customers are told to message, from the document's header. */
   whatsapp: string;
+  /**
+   * What a customer is told to call the person who decides — "the manager".
+   *
+   * Never the owner's name. He is named to himself, to staff and in the
+   * records; customers read the role. From the document's header, so changing
+   * the wording there changes every customer-facing message.
+   */
+  ownerLabel: string;
   categories: Category[];
   /** Which variant a brand implies, keyed by variant (section 2). */
   variantHints: Record<string, string[]>;
@@ -150,6 +158,7 @@ export function loadPlaybook(path: string): Playbook {
   return {
     path,
     whatsapp: readBusinessNumber(path, markdown),
+    ownerLabel: readOwnerLabel(path, markdown),
     categories,
     variantHints: readVariantHints(need(SECTIONS.categories, 'what we accept')),
     loanSizing: readLoanSizing(path, need(SECTIONS.loanSizing, 'loan sizing')),
@@ -160,6 +169,24 @@ export function loadPlaybook(path: string): Playbook {
     ...readRequirements(path, need(SECTIONS.requirements, 'requirements')),
     screening,
   };
+}
+
+/**
+ * How customers are told to refer to whoever decides.
+ *
+ * Parsed rather than hard-coded for the same reason as the phone number: the
+ * shop's own words about itself belong in the shop's own document, and a copy
+ * of them in thirty string literals goes stale silently.
+ */
+function readOwnerLabel(path: string, markdown: string): string {
+  const match = /Customers are told\s*\*{0,2}"([^"]{2,40})"/i.exec(markdown);
+  if (!match) {
+    throw new PlaybookError(
+      path,
+      'the header does not say what customers call the decision-maker (expected a line like: Customers are told "the manager", never a name)',
+    );
+  }
+  return match[1]!.trim();
 }
 
 /**

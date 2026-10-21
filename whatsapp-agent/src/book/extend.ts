@@ -231,7 +231,7 @@ export class Extensions {
         `${testLine(test)}`,
       customerPhone: line.customer?.phone,
       customerMessage: line.customer
-        ? `Lukas has agreed to another month on your ${item?.description || 'item'}.\n\n` +
+        ? `${capitalise(this.#rules.playbook.ownerLabel)} has agreed to another month on your ${item?.description || 'item'}.\n\n` +
           `A further ${formatAmount(test.nextInterestCents)} interest has been added, so ` +
           `${formatAmount(nowOwed)} is now needed to collect it.\n\n` +
           `The new date is ${extended.due_date}, with the usual ${terms.graceDays}-day grace after that.`
@@ -278,6 +278,11 @@ function cannotTellMessage(line: LoanLine, test: ExtensionTest): string {
     `That has to come in at or below ${test.ceilingPct}% of what the item is worth today. ` +
     'Check a price and decide; nothing has been changed.'
   );
+}
+
+/** "the manager" → "The manager", for the start of a sentence. */
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function nameOf(line: LoanLine): string {

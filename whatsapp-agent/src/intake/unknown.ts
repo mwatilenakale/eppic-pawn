@@ -85,6 +85,7 @@ export class CategoryGate {
   }
 
   ask(customer: Customer, conversationId: string | null, description: string): AskResult {
+    const label = this.#rules.playbook.ownerLabel;
     const already = this.#store.pendingCategoryRequestFor(customer.id);
     const request = this.#store.askAboutCategory({
       customerId: customer.id,
@@ -94,7 +95,7 @@ export class CategoryGate {
 
     return {
       request,
-      customerMessage: already ? waitingAgain() : waiting(),
+      customerMessage: already ? waitingAgain(label) : waiting(label),
       ownerMessage: already ? null : question(request, customer, description, this.#rules),
     };
   }
@@ -132,6 +133,7 @@ export class CategoryGate {
       return { ownerMessage: `Nothing is waiting under reference ${reply.reference}.` };
     }
 
+    const label = this.#rules.playbook.ownerLabel;
     const decided = this.#store.decideCategoryRequest({
       id: request.id,
       status: reply.action === 'accept' ? 'accepted' : 'refused',
@@ -146,7 +148,7 @@ export class CategoryGate {
         reply.action === 'accept'
           ? `Noted — ${decided.description} is in. I've told ${firstName(customer?.name)} and I'm taking the details now.`
           : `Noted — ${firstName(customer?.name)} has been told we can't take it${reply.reason ? `: ${reply.reason}` : ''}.`,
-      customerMessage: reply.action === 'accept' ? accepted() : refused(reply.reason),
+      customerMessage: reply.action === 'accept' ? accepted(label) : refused(label, reply.reason),
       customerPhone: customer?.phone,
     };
   }
@@ -154,28 +156,28 @@ export class CategoryGate {
 
 // --- what everyone is told -------------------------------------------------
 
-function waiting(): string {
+function waiting(owner: string): string {
   return (
     "That's not one of the five things we normally take, so I can't start an application for it myself.\n\n" +
-    "What I can do is ask Lukas directly — he decides these one by one and does take things off the list " +
-    "when they're worth it. I've sent it to him now and I'll message you the moment he answers."
+    `What I can do is put it to ${owner} directly — these are decided one by one, and we do take things off ` +
+    "the list when they're worth it. It has gone across now and I'll message you the moment I hear back."
   );
 }
 
-function waitingAgain(): string {
-  return "Lukas has it — I asked him about yours already and I'll come straight back to you when he answers.";
+function waitingAgain(owner: string): string {
+  return `${capitalise(owner)} has it — yours has already gone across, and I'll come straight back to you with an answer.`;
 }
 
-function accepted(): string {
+function accepted(owner: string): string {
   return (
-    'Good news — Lukas says we can take a look at it 👍\n\n' +
+    `Good news — ${owner} says we can take a look at it 👍\n\n` +
     "Let's get the details down so he can price it. Tell me exactly what you have: make, model, and its condition."
   );
 }
 
-function refused(reason: string): string {
+function refused(owner: string, reason: string): string {
   return (
-    `I've heard back from Lukas and unfortunately we can't take that one${reason ? ` — ${reason}` : ''}.\n\n` +
+    `I've heard back from ${owner} and unfortunately we can't take that one${reason ? ` — ${reason}` : ''}.\n\n` +
     'If you have a phone, laptop, TV, console or a car, I can start an application for that right away.'
   );
 }
@@ -212,6 +214,11 @@ function keywords(description: string): string[] {
     .toLowerCase()
     .split(/[^a-z]+/)
     .filter((word) => word.length >= 4 && !COMMON.has(word));
+}
+
+/** "the manager" → "The manager", for the start of a sentence. */
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function firstName(name: string | null | undefined): string {

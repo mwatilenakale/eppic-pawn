@@ -146,7 +146,10 @@ export class ContractService {
     if (contract.status === 'void') throw new ContractError(`Contract ${contract.number} was cancelled`);
     if (contract.status === 'signed') return contract;
     if (this.#options.clock().toISOString() > contract.expires_at) {
-      throw new ContractError(`The signing link for contract ${contract.number} has expired — ask Lukas for a new one`);
+      // A customer reads this one, so it says the role (playbook header).
+      throw new ContractError(
+        `The signing link for contract ${contract.number} has expired — message us on WhatsApp for a new one`,
+      );
     }
     return contract;
   }

@@ -3,6 +3,15 @@
 Windhoek. WhatsApp: 081-813-1462. Run solo, alongside an FNB job (can't get
 FNB financing for this because of the conflict of interest).
 
+**Customers are told "the manager", never a name.** Every message a customer
+reads says the decision is the manager's — not Lukas's. He is named freely in
+messages to him, on the staff screens, and in the records; he is not named to
+the people on the other side of the counter. A one-man shop does not need to
+advertise which one man, and a customer who knows the owner's name is a
+customer who can ask for him by name when he would rather not be asked.
+
+Change the words here and every customer-facing message changes with them.
+
 The number above is the shop's — the one registered with Meta, printed on the
 flyer and the contract, and the one customers message. Lukas's own phone
 (081-282-3046) is separate: approvals arrive there and he replies from it. A

@@ -87,7 +87,7 @@ describe('a pre-check with a problem', () => {
     });
 
     assert.equal(outcome.status, 'needs-attention');
-    assert.match(outcome.headline, /you can still ask Lukas/i);
+    assert.match(outcome.headline, /you can still ask the manager/i);
     assert.match(outcome.notes.join(' '), /condition of taking the item in/i);
     assert.doesNotMatch(JSON.stringify(outcome), /rejected|declined|refused/i, 'the website never rejects anyone');
     assert.ok(outcome.whatsappText.length > 0, 'the conversation is still offered');
@@ -104,7 +104,7 @@ describe('a pre-check with a problem', () => {
     });
 
     assert.equal(outcome.status, 'ready');
-    assert.match(outcome.notes.join(' '), /Lukas will want to go through/);
+    assert.match(outcome.notes.join(' '), /The manager will want to go through/);
   });
 
   test('an unanswered form is treated as unsure, never as yes', () => {

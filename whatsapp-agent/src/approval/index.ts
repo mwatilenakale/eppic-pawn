@@ -227,7 +227,7 @@ export class ApprovalWorkflow {
         waivedNote,
       customerPhone: customer.phone,
       customerMessage:
-        `Good news — Lukas has reviewed your application and can offer ${formatAmount(amountCents)} on your ${item.description || 'item'}.\n\n` +
+        `Good news — your application has been reviewed and we can offer ${formatAmount(amountCents)} on your ${item.description || 'item'}.\n\n` +
         `Terms: ${terms.ratePct}% over ${terms.termDays} days, so ${formatAmount(terms.totalDueCents)} to collect it, with a ${terms.graceDays}-day grace period.\n\n` +
         'This is subject to the in-person check when you bring the item in. Bring your ID, proof of ownership and the police declaration. Reply here to arrange a time.',
     };
@@ -339,7 +339,7 @@ export class ApprovalWorkflow {
       ownerMessage: `Declined ${referenceFor(approval.id)}${reply.note ? ` — ${reply.note}` : ''}. The customer has been told.`,
       customerPhone: customer.phone,
       customerMessage:
-        'Thank you for your application. Unfortunately Lukas is not able to take this item on at the moment' +
+        `Thank you for your application. Unfortunately ${this.#rules.playbook.ownerLabel} is not able to take this item on at the moment` +
         (reply.note ? `: ${reply.note}.` : '.') +
         '\n\nYou are welcome to try again with something else — we take cars, phones, laptops, TVs and consoles.',
     };

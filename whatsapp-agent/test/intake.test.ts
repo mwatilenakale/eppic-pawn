@@ -152,7 +152,7 @@ describe('intake conversation', () => {
     assert.match(first.replies.join('\n'), /not quite sure what that is/i);
 
     const second = agent.handle(CUSTOMER, { text: 'a double bed' });
-    assert.match(second.replies.join('\n'), /ask Lukas|sent it to him/i);
+    assert.match(second.replies.join('\n'), /ask the manager|gone across/i);
     assert.equal(store.item(''), null);
   });
 
@@ -181,7 +181,7 @@ describe('intake conversation', () => {
     const { transcript } = runFullIntake({ category: 'phone', variant: 'iPhone' });
     const agentSaid = transcript.filter((line) => line.from === 'agent').map((line) => line.text).join('\n');
     assert.doesNotMatch(agentSaid, /N\$\s?\d/, 'the agent must never put a figure in front of a customer');
-    assert.match(agentSaid, /Lukas/);
+    assert.match(agentSaid, /the manager/i, 'the role, never the name');
   });
 
   test('deflects "how much can I get" without ever giving a figure', () => {
@@ -296,7 +296,7 @@ describe('intake conversation', () => {
   test('after submitting, the customer is told it is with Lukas — not approved', () => {
     runFullIntake({ category: 'phone', variant: 'iPhone' });
     const { replies } = agent.handle(CUSTOMER, { text: 'any news?' });
-    assert.match(replies[0]!, /with Lukas/i);
+    assert.match(replies[0]!, /with the manager/i);
     assert.doesNotMatch(replies[0]!, /approved/i);
   });
 

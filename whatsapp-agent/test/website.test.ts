@@ -118,7 +118,7 @@ describe('the pre-check form', () => {
 
     assert.match(html, /don(&#39;|')t normally take fridge/);
     assert.match(html, /isn(&#39;|')t an automatic no/);
-    assert.match(html, /ask Lukas/);
+    assert.match(html, /ask the manager/);
     assert.match(html, /wa\.me/, 'with a way to actually ask him');
     assert.match(html, /Consoles/, 'and the five it can price now');
   });

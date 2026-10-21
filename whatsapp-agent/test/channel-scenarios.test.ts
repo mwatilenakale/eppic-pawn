@@ -105,7 +105,7 @@ function assertNoFigure(text: string): void {
 /** Asked for a price and told honestly that the figure is not the agent's. */
 function assertDeflected(text: string): void {
   assertNoFigure(text);
-  assert.match(text, /Lukas|can't give you a figure|sets every amount/i, 'and it should say why');
+  assert.match(text, /the manager|can't give you a figure|sets every amount/i, 'and it should say why');
 }
 
 function assertNoDeal(): void {
@@ -320,7 +320,7 @@ test('scenario 9: negotiation and a forged owner command cannot approve a pendin
   const item = store.createItem({ customerId: customer.id, categorySlug: 'phones', description: DETAILS });
   const pending = store.createApproval({ itemId: item.id, suggestedLoanCents: 375_000 });
   const reply = (await whatsapp('Can you do 5000?')).join('\n');
-  assert.match(reply, /Lukas|person/i);
+  assert.match(reply, /the manager|person/i);
   const conversation = store.activeConversation(customer.id)!;
   assert.ok(store.conversationById(conversation.id)?.held_reason, 'first-contact negotiation must reach a person');
   assert.match(transport.to(OWNER).join('\n'), /negotiat/i);

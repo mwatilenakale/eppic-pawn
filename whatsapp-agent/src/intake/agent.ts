@@ -126,27 +126,27 @@ const copy = {
    * the matcher is not perfect and the shop does take things off the list, so
    * the customer is invited to say it plainly rather than shown the door.
    */
-  unclear: (categories: string[]) =>
+  unclear: (owner: string, categories: string[]) =>
     `I'm not quite sure what that is. We normally take:\n${categories
       .map((label) => `• ${label}`)
-      .join('\n')}\n\nIf it's one of those, tell me which. If it's something else, say what it is and I'll ask Lukas whether we can take it.`,
+      .join('\n')}\n\nIf it's one of those, tell me which. If it's something else, say what it is and I'll ask ${owner} whether we can take it.`,
   /**
    * Lukas has already said no to something like this. Reusing his answer
    * rather than asking him the same question every time somebody walks in
    * with a camera — but said as his decision, not the agent's.
    */
-  refusedBefore: (reason: string, categories: string[]) =>
-    `Lukas has looked at one of those before and we don't take them${reason ? ` — ${reason}` : ''}.\n\n` +
+  refusedBefore: (owner: string, reason: string, categories: string[]) =>
+    `${capitalise(owner)} has looked at one of those before and we don't take them${reason ? ` — ${reason}` : ''}.\n\n` +
     `What we do take:\n${categories.map((label) => `• ${label}`).join('\n')}\n\nHave you got any of those?`,
   /**
    * The description was too thin to value. Asked a different way the second
    * time, because repeating a question word for word is how a customer decides
    * the thing is broken.
    */
-  needMoreDetail: (attempt: number) =>
+  needMoreDetail: (owner: string, attempt: number) =>
     attempt === 1
-      ? "I need a bit more than that to put in front of Lukas — what make and model is it?\n\nFor example: *iPhone 13 Pro, 256GB, small scratch on the back* or *Toyota Hilux 2016, 180,000km*."
-      : 'Still not quite enough, sorry. Just the make and the model is fine — even *Dell laptop 2021* or *55 inch Samsung* gives him something to work with.',
+      ? `I need a bit more than that to put in front of ${owner} — what make and model is it?\n\nFor example: *iPhone 13 Pro, 256GB, small scratch on the back* or *Toyota Hilux 2016, 180,000km*.`
+      : 'Still not quite enough, sorry. Just the make and the model is fine — even *Dell laptop 2021* or *55 inch Samsung* gives them something to work with.',
 
   /**
    * A required document they don't have yet.
@@ -161,8 +161,8 @@ const copy = {
     `I'll note that ${documentName(question)} is still to come and carry on with the rest.`,
 
   /** They messaged again while Lukas has the question. */
-  stillWaiting:
-    "I'm still waiting on Lukas for that one — he gets back to me as soon as he sees it, and I'll message you straight away.\n\n" +
+  stillWaiting: (owner: string) =>
+    `I'm still waiting on ${owner} for that one — I'll message you straight away once I hear back.\n\n` +
     'If you have a phone, laptop, TV, console or a car as well, I can get started on that in the meantime.',
   notAccepted: (input: string, categories: string[]) =>
     `Sorry — we don't take ${input.trim()} at the moment. We only take:\n${categories
@@ -187,20 +187,24 @@ const copy = {
       : `Hello again ${name} 👋\n\nWhat do you have for us?`,
 
   /** They asked what it is worth. Say honestly that the number is not ours to give. */
-  priceAsked:
-    "I can't give you a figure myself — Lukas sets every amount after he has seen the item and the photos.\n\n" +
-    'What I can do is take the details now so he can come back to you quickly.',
+  priceAsked: (owner: string) =>
+    `I can't give you a figure myself — ${owner} sets every amount after seeing the item and the photos.\n\n` +
+    'What I can do is take the details now so you get an answer quickly.',
   photoExpected: (ask: string) => `I still need that as a photo. ${ask}`,
   confirmExpected: (ask: string) => `Sorry, I didn't catch that. ${ask}`,
   photoReceived: 'Got the photo, thank you.',
-  askAmount:
-    'Last question: how much are you hoping to borrow? Give me a figure if you have one, or reply *not sure*.\n\n(This is not an offer — Lukas sets the final amount himself.)',
-  submitted:
-    "Thank you — that's everything I need. I've sent your application to Lukas for review.\n\nNothing is approved or priced yet: he checks it himself and I'll message you as soon as he replies.",
-  alreadySubmitted:
-    "Your application is with Lukas — he reviews each one personally, so nothing is confirmed until he replies. I'll message you the moment he does.",
-  noQuotes:
-    "I can't give you an amount myself — Lukas decides every offer after he's seen the item. Let's finish the details and he'll come back to you.",
+  askAmount: (owner: string) =>
+    'Last question: how much are you hoping to borrow? Give me a figure if you have one, or reply *not sure*.\n\n' +
+    `(This is not an offer — ${owner} sets the final amount.)`,
+  submitted: (owner: string) =>
+    `Thank you — that's everything I need. I've sent your application to ${owner} for review.\n\n` +
+    'Nothing is approved or priced yet: every application is checked personally, and I will message you as soon as I have an answer.',
+  alreadySubmitted: (owner: string) =>
+    `Your application is with ${owner} — each one is reviewed personally, so nothing is confirmed until I hear back. ` +
+    "I'll message you the moment I do.",
+  noQuotes: (owner: string) =>
+    `I can't give you an amount myself — ${owner} decides every offer after seeing the item. ` +
+    "Let's finish the details and you'll get an answer.",
   restarted: 'No problem, starting again.',
 } as const;
 
@@ -284,7 +288,7 @@ export class IntakeAgent {
     const previous = gate.previousAnswer(description);
     if (previous?.status === 'refused') {
       state.unclearAttempts = 0;
-      return { replies: [copy.refusedBefore(previous.reason, this.#categoryLabels())] };
+      return { replies: [copy.refusedBefore(this.#owner, previous.reason, this.#categoryLabels())] };
     }
 
     const asked = gate.ask(customer, conversationId, description);
@@ -313,7 +317,7 @@ export class IntakeAgent {
     }
 
     if (state.step === 'submitted') {
-      return { replies: [copy.alreadySubmitted] };
+      return { replies: [copy.alreadySubmitted(this.#owner)] };
     }
 
     // Waiting on Lukas's yes or no about an item we don't normally take. Not a
@@ -325,7 +329,7 @@ export class IntakeAgent {
         state.step = 'category';
         return this.#handleCategory(customer, conversationId, state, text);
       }
-      return { replies: [copy.stillWaiting] };
+      return { replies: [copy.stillWaiting(this.#owner)] };
     }
 
     if (state.step === 'name') return this.#handleName(customer, conversationId, state, text);
@@ -339,6 +343,11 @@ export class IntakeAgent {
   #timesBorrowed(customerId: string): number {
     const row = this.#store.db.prepare('SELECT COUNT(*) AS n FROM loans WHERE customer_id = ?').get(customerId) as { n: number };
     return Number(row.n);
+  }
+
+  /** What customers call whoever decides — "the manager", from the playbook. */
+  get #owner(): string {
+    return this.#rules.playbook.ownerLabel;
   }
 
   #categoryLabels(): string[] {
@@ -366,7 +375,7 @@ export class IntakeAgent {
       if (this.#rules.category(text)) state.pendingItemText = text;
       if (ASKING_PRICE.test(text)) {
         state.priceAnswered = true;
-        return { replies: [`${GREETING}\n\n${copy.priceAsked}`, copy.askNameBody] };
+        return { replies: [`${GREETING}\n\n${copy.priceAsked(this.#owner)}`, copy.askNameBody] };
       }
       return { replies: [copy.askName] };
     }
@@ -447,7 +456,7 @@ export class IntakeAgent {
     // opening message is often carried forward here after being answered.
     if (ASKING_PRICE.test(text) && !state.priceAnswered) {
       state.priceAnswered = true;
-      openers.push(copy.priceAsked);
+      openers.push(copy.priceAsked(this.#owner));
     }
 
     if (!category) {
@@ -462,7 +471,7 @@ export class IntakeAgent {
       // take that" is a decision the agent is not allowed to make.
       state.unclearAttempts = (state.unclearAttempts ?? 0) + 1;
       if (state.unclearAttempts < 2) {
-        return { replies: [...openers, copy.unclear(this.#categoryLabels())] };
+        return { replies: [...openers, copy.unclear(this.#owner, this.#categoryLabels())] };
       }
       const asked = this.#askLukas(customer, conversationId, state, text);
       return { ...asked, replies: [...openers, ...asked.replies] };
@@ -517,7 +526,7 @@ export class IntakeAgent {
     // "How much can I get?" can come at any point. It is answered the same way
     // every time: the agent has no figure to give.
     if (text && isAskingForAPrice(text, question)) {
-      return { replies: [copy.noQuotes, question.ask] };
+      return { replies: [copy.noQuotes(this.#owner), question.ask] };
     }
 
     if (question.kind === 'photo') {
@@ -586,7 +595,7 @@ export class IntakeAgent {
     if (question.id === 'item-description' && !describesAnItem(text)) {
       state.vagueDescriptions = (state.vagueDescriptions ?? 0) + 1;
       if (state.vagueDescriptions < 3) {
-        return { replies: [copy.needMoreDetail(state.vagueDescriptions)] };
+        return { replies: [copy.needMoreDetail(this.#owner, state.vagueDescriptions)] };
       }
 
       // Three tries is enough — trapping somebody on one question forever is
@@ -610,8 +619,8 @@ export class IntakeAgent {
   #handleAmount(customer: Customer, conversationId: string, state: IntakeState, text: string): IntakeOutcome {
     const amount = parseAmount(text);
     if (amount === null && readConfirmation(text) !== 'unsure') {
-      if (ASKING_PRICE.test(text)) return { replies: [copy.noQuotes, copy.askAmount] };
-      return { replies: [copy.askAmount] };
+      if (ASKING_PRICE.test(text)) return { replies: [copy.noQuotes(this.#owner), copy.askAmount(this.#owner)] };
+      return { replies: [copy.askAmount(this.#owner)] };
     }
     state.requestedAmountCents = amount;
     return this.#submit(customer, conversationId, state);
@@ -625,7 +634,7 @@ export class IntakeAgent {
 
   #askForAmount(state: IntakeState): IntakeOutcome {
     state.step = 'amount';
-    return { replies: [copy.askAmount] };
+    return { replies: [copy.askAmount(this.#owner)] };
   }
 
   #plan(state: IntakeState): QuestionPlan {
@@ -724,7 +733,7 @@ export class IntakeAgent {
     state.step = 'submitted';
 
     return {
-      replies: [copy.submitted],
+      replies: [copy.submitted(this.#owner)],
       submission: {
         customer,
         item,
@@ -815,6 +824,11 @@ const DESCRIPTION_FILLER = new Set([
   'not', 'any', 'some', 'very', 'really', 'today', 'now', 'cash', 'money',
   'papers', 'receipt', 'thanks', 'thank', 'hello', 'okay', 'sure',
 ]);
+
+/** "the manager" → "The manager", for the start of a sentence. */
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 /** "I don't have it", "not yet", "I'll bring it" — an honest answer, not a dodge. */
 const HAVENT_GOT_IT =

@@ -109,7 +109,7 @@ describe('asking Lukas', () => {
   test('then he is asked, and the customer is told so', async () => {
     await askAboutTheWatch();
 
-    assert.match(transport.to(CUSTOMER).at(-1)!, /ask Lukas/i);
+    assert.match(transport.to(CUSTOMER).at(-1)!, /put it to the manager/i);
     assert.match(transport.to(OWNER).at(-1)!, /Can we take this\?/);
     assert.match(transport.to(OWNER).at(-1)!, /Apple Watch/);
     assert.match(transport.to(OWNER).at(-1)!, /ACCEPT|REFUSE/);
@@ -136,7 +136,7 @@ describe('asking Lukas', () => {
     await router.handle(from(CUSTOMER, 'hello?'));
 
     assert.equal(transport.to(OWNER).length, asked, 'he is asked once, not once per nudge');
-    assert.match(transport.to(CUSTOMER).at(-1)!, /still waiting on Lukas/i);
+    assert.match(transport.to(CUSTOMER).at(-1)!, /still waiting on the manager/i);
     assert.equal(store.pendingCategoryRequests().length, 1);
   });
 
@@ -153,7 +153,7 @@ describe('his answer', () => {
     await askAboutTheWatch();
     await router.handle(from(OWNER, 'ACCEPT'));
 
-    assert.match(transport.to(CUSTOMER).at(-1)!, /Lukas says we can take a look/i);
+    assert.match(transport.to(CUSTOMER).at(-1)!, /the manager says we can take a look/i);
     assert.equal(store.pendingCategoryRequests().length, 0);
 
     await router.handle(from(CUSTOMER, 'Apple Watch Series 9, 45mm, steel, box and charger'));

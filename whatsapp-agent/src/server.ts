@@ -198,7 +198,7 @@ async function handleRequest(
       });
     }
 
-    return respondHtml(response, 200, outcomePage(outcome, rules.playbook.whatsapp));
+    return respondHtml(response, 200, outcomePage(outcome, rules.playbook.whatsapp, rules.playbook.ownerLabel));
   }
 
   if (request.method === 'GET' && url.pathname === '/webhook') {

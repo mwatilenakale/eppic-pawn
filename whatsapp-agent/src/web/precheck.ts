@@ -103,6 +103,8 @@ export interface PrecheckSubmission {
 }
 
 export function evaluatePrecheck(rules: Rules, submission: PrecheckSubmission): PrecheckOutcome {
+  // Customers read the role, never the name (playbook header).
+  const owner = rules.playbook.ownerLabel;
   const category = rules.category(submission.category);
 
   if (!category) {
@@ -140,7 +142,7 @@ export function evaluatePrecheck(rules: Rules, submission: PrecheckSubmission): 
     notes.push(`The playbook treats this as a condition of taking the item in: ${answer.question}`);
   }
   if (unsure.length > 0) {
-    notes.push(`Lukas will want to go through ${unsure.length === 1 ? 'one other point' : `${unsure.length} other points`} with you: ${unsure.map((answer) => answer.question).join('; ')}`);
+    notes.push(`${owner.charAt(0).toUpperCase()}${owner.slice(1)} will want to go through ${unsure.length === 1 ? 'one other point' : `${unsure.length} other points`} with you: ${unsure.map((answer) => answer.question).join('; ')}`);
   }
 
   const status: PrecheckStatus = blocking.length > 0 ? 'needs-attention' : 'ready';
@@ -151,8 +153,8 @@ export function evaluatePrecheck(rules: Rules, submission: PrecheckSubmission): 
       status === 'ready'
         ? submission.quote
           ? 'Here is your estimate'
-          : 'Nothing here stops an application — send it to Lukas on WhatsApp.'
-        : 'There is something to sort out first, but you can still ask Lukas.',
+          : `Nothing here stops an application — send it to ${owner} on WhatsApp.`
+        : `There is something to sort out first, but you can still ask ${owner}.`,
     notes,
     answers,
     bring: rules.playbook.requirements,

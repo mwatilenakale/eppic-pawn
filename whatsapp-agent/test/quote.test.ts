@@ -102,7 +102,7 @@ describe('the estimate the customer sees', () => {
 
     assert.match(html, /This is an estimate, not an offer/);
     assert.match(html, /role="alert"/, 'the banner is announced to screen readers');
-    assert.match(html, /Lukas confirms the final\s+amount himself/);
+    assert.match(html, /The manager confirms the final\s+amount/);
     assert.doesNotMatch(html, /\bwe will lend you\b|\byou will get\b|guaranteed/i, 'nothing reads as a promise');
   });
 
@@ -110,7 +110,7 @@ describe('the estimate the customer sees', () => {
     const { html } = await apply({ category: 'phones', variant: 'iphone' });
 
     assert.doesNotMatch(html, /N\$\s?\d/, 'nothing to price on, so nothing is priced');
-    assert.match(html, /Lukas will work out your figure/);
+    assert.match(html, /The manager will work out your figure/);
   });
 });
 
