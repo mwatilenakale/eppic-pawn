@@ -13,6 +13,7 @@ import { IntakeAgent, type IntakeState, type IntakeSubmission } from './intake/a
 import { CategoryGate, parseCategoryReply, type CategoryDecisionResult } from './intake/unknown.ts';
 import { OTHER } from './intake/questions.ts';
 import { HandoverDesk, detectHandover, parseHandoverCommand, type Handover } from './intake/handover.ts';
+import { Forfeiture, parseForfeitCommand } from './book/forfeit.ts';
 import { ApprovalWorkflow } from './approval/index.ts';
 import type { MarketEstimate } from './valuation.ts';
 import type { ContractService, SignedContract } from './contract/index.ts';
@@ -70,6 +71,7 @@ export class AgentRouter {
   readonly #book: Book;
   readonly #gate: CategoryGate;
   readonly #desk: HandoverDesk;
+  readonly #forfeiture: Forfeiture;
   readonly #onError: (error: unknown, event: InboundEvent) => void;
 
   constructor(options: RouterOptions) {
@@ -102,6 +104,7 @@ export class AgentRouter {
     this.#book = new Book(options.store, { clock: options.clock });
     this.#gate = new CategoryGate(options.store, options.rules);
     this.#desk = new HandoverDesk(options.store);
+    this.#forfeiture = new Forfeiture(options.store, options.rules, this.#book);
     this.#onError = options.onError ?? ((error) => console.error('[agent]', error));
   }
 
@@ -338,6 +341,21 @@ export class AgentRouter {
     // TAKE / SAY / BACK / WAITING — talking to a customer by hand. Before the
     // approval parser: "BACK" must not be read as anything about money.
     if (await this.#runHandover(event, this.#owner)) return;
+
+    // SELL / KEEP sends a past-grace item to market, or takes it back off the
+    // list (playbook section 8). Before the approval parser, and separate
+    // words again: this decides about an *item already pawned*, not about an
+    // application, and the two must never be confusable.
+    const forfeit = parseForfeitCommand(event.text ?? '');
+    if (forfeit) {
+      const result = this.#forfeiture.run(forfeit, this.#owner);
+      await this.#transport.sendText({ to: this.#ownerPhone, body: result.ownerMessage });
+
+      if (result.customerMessage && result.customerPhone) {
+        await this.#safeSend(result.customerPhone, result.customerMessage);
+      }
+      return;
+    }
 
     // ACCEPT / REFUSE answers "can we take this at all?" about an item outside
     // the five categories. Checked before the approval parser and kept to

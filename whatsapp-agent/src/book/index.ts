@@ -21,6 +21,7 @@ import { require as requireCapability } from '../staff/access.ts';
 import { formatAmount } from '../money.ts';
 import { addDays } from '../valuation.ts';
 import { normalizePhone } from '../whatsapp/webhook.ts';
+import { referenceFor } from '../reference.ts';
 
 /** How far ahead *DUE* looks. A week is what fits in a WhatsApp message. */
 const DUE_WINDOW_DAYS = 7;
@@ -202,6 +203,14 @@ export class Book {
       .all(customerId) as unknown as Loan[];
   }
 
+  /**
+   * One loan as a line, for callers working from a loan rather than a list —
+   * the forfeiture flow starts from a reference, not from the book.
+   */
+  lineFor(loan: Loan): LoanLine {
+    return this.#line(loan);
+  }
+
   #line(loan: Loan): LoanLine {
     const today = this.#today();
     return {
@@ -277,7 +286,12 @@ export function renderOverdue(lines: LoanLine[], inGrace: LoanLine[]): string {
     const total = lines.reduce((sum, line) => sum + line.owedCents, 0);
     parts.push(`*Past grace — ${lines.length}, ${formatAmount(total)} owed*`, '');
     for (const line of lines.slice(0, MAX_ROWS)) {
-      parts.push(`• ${nameOf(line)} — ${formatAmount(line.owedCents)}, ${line.daysPastGrace} days past grace`);
+      // With a reference, because the only thing he can do from here is
+      // decide about one of them, and SELL needs something to name.
+      parts.push(
+        `• ${referenceFor(line.loan.id)} — ${nameOf(line)}, ${formatAmount(line.owedCents)}, ` +
+          `${line.daysPastGrace} days past grace`,
+      );
     }
     parts.push(...more(lines));
     parts.push(
@@ -287,6 +301,8 @@ export function renderOverdue(lines: LoanLine[], inGrace: LoanLine[]): string {
       // assessed value against its market value today — figures the workbook
       // never held, so this prompts the step rather than pretending to do it.
       '_Playbook section 8: reach out first. Before selling anything, run the margin check — assessed value plus interest owed against what it would fetch today._',
+      '',
+      'Send *SELL <ref>* to put one on the market — it tells you the margin and the customer can still redeem until it goes.',
     );
   }
 

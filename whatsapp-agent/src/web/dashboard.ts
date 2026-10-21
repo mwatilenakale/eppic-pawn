@@ -14,6 +14,7 @@
 import { escapeHtml } from '../html.ts';
 import { formatAmount } from '../money.ts';
 import { BUSINESS } from '../contract/document.ts';
+import { referenceFor } from '../reference.ts';
 import { DASHBOARD_CSS, THEME } from './theme.ts';
 import type { CategoryQuestion, Dashboard, DealLine, WaitingOnAPerson } from '../dashboard/index.ts';
 import type { LoanLine } from '../book/index.ts';
@@ -180,7 +181,8 @@ function book(dashboard: Dashboard): string {
         <span class="row-who">${escapeHtml(line.customer?.name ?? 'Unknown')}</span>
         <span class="row-when">${escapeHtml(formatAmount(line.owedCents))}</span>
       </div>
-      <div class="row-meta">due ${escapeHtml(line.loan.due_date)}${
+      <div class="row-meta"><span class="ref">${escapeHtml(referenceFor(line.loan.id))}</span>
+        · due ${escapeHtml(line.loan.due_date)}${
         line.daysPastGrace > 0 ? ` · ${line.daysPastGrace} days past grace` : ''
       }</div>
     </div>`,
@@ -200,6 +202,7 @@ function book(dashboard: Dashboard): string {
 </div>
 
 ${section('Past grace', dashboard.pastGrace.length, [lines(dashboard.pastGrace, 'row-bad')].filter(Boolean), 'Nobody is past grace.', dashboard.pastGrace.length > 0)}
+${dashboard.pastGrace.length > 0 ? `<p class="muted">Sending one to market is Lukas's call — *SELL &lt;ref&gt;* on WhatsApp, after the section 8 margin check.</p>` : ''}
 ${section('In grace', dashboard.inGrace.length, [lines(dashboard.inGrace, '')].filter(Boolean), 'Nobody is in grace.', false)}
 ${section('Due this week', dashboard.dueThisWeek.length, [lines(dashboard.dueThisWeek, '')].filter(Boolean), 'Nothing falls due this week.', false)}`;
 }

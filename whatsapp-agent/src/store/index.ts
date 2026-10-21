@@ -776,6 +776,56 @@ export class Store {
     return this.db.prepare("SELECT * FROM approvals WHERE status = 'pending' ORDER BY created_at").all() as unknown as Approval[];
   }
 
+  // --- sending an item to market (playbook section 8) ---------------------
+
+  /**
+   * Marks a loan forfeited and its item for sale. Lukas's decision only; the
+   * capability check sits with the caller.
+   *
+   * Nothing financial is written here. The ledger is append-only and what is
+   * owed stays owed — a forfeiture is a decision about the *item*, and the
+   * money is settled when it actually sells. That also means this is
+   * reversible: `unforfeitLoan` puts it straight back.
+   */
+  forfeitLoan(forfeit: { loanId: string; actor: string; note?: string; marginPct?: number | null }): void {
+    const at = this.#now();
+    const loan = this.loan(forfeit.loanId);
+    if (!loan) throw new Error(`No such loan: ${forfeit.loanId}`);
+
+    this.db.prepare("UPDATE loans SET status = 'forfeited', updated_at = ? WHERE id = ?").run(at, forfeit.loanId);
+    this.db.prepare("UPDATE items SET status = 'for-sale', updated_at = ? WHERE id = ?").run(at, loan.item_id);
+
+    this.audit({
+      actor: forfeit.actor,
+      action: 'loan.forfeited',
+      entity: 'loan',
+      entityId: forfeit.loanId,
+      details: {
+        note: forfeit.note ?? '',
+        // The margin the decision was taken against, so the reasoning is on
+        // the record and not only in his head.
+        marginPct: forfeit.marginPct ?? null,
+      },
+    });
+  }
+
+  /** Back on the book — the item has not been sold, so this is not a correction. */
+  unforfeitLoan(loanId: string, actor: string): void {
+    const at = this.#now();
+    const loan = this.loan(loanId);
+    if (!loan) throw new Error(`No such loan: ${loanId}`);
+
+    this.db.prepare("UPDATE loans SET status = 'active', updated_at = ? WHERE id = ?").run(at, loanId);
+    this.db.prepare("UPDATE items SET status = 'pledged', updated_at = ? WHERE id = ?").run(at, loan.item_id);
+    this.audit({ actor, action: 'loan.unforfeited', entity: 'loan', entityId: loanId });
+  }
+
+  forfeitedLoans(): Loan[] {
+    return this.db
+      .prepare("SELECT * FROM loans WHERE status = 'forfeited' ORDER BY due_date")
+      .all() as unknown as Loan[];
+  }
+
   // --- documents Lukas approved around (playbook section 5) ---------------
 
   /**
