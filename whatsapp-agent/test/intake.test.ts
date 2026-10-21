@@ -39,6 +39,7 @@ function runFullIntake(opts: { category?: string; variant?: string } = {}): {
   };
 
   say('hi');
+  say('Aina Shipanga');
   say(opts.category ?? 'phone');
   if (opts.variant) say(opts.variant);
 
@@ -57,6 +58,14 @@ function runFullIntake(opts: { category?: string; variant?: string } = {}): {
 
   assert.ok(submission, 'intake did not complete');
   return { transcript, submission };
+}
+
+/**
+ * Answers the name question, which every conversation from an unknown number
+ * now starts with. Returns the reply so a test can assert on what follows it.
+ */
+function introduce(name = 'Aina Shipanga') {
+  return agent.handle(CUSTOMER, { text: name });
 }
 
 describe('question plan', () => {
@@ -100,14 +109,16 @@ describe('question plan', () => {
 
 describe('intake conversation', () => {
   test('opens by offering exactly the categories the playbook accepts', () => {
-    const { replies } = agent.handle(CUSTOMER, { text: 'hello' });
+    agent.handle(CUSTOMER, { text: 'hello' });
+    const { replies } = introduce();
     for (const category of rules.categories) {
-      assert.match(replies[0]!, new RegExp(category.label.replace(/[()]/g, '\\$&')));
+      assert.match(replies.join('\n'), new RegExp(category.label.replace(/[()]/g, '\\$&')));
     }
   });
 
   test('turns away a category the playbook does not take', () => {
     agent.handle(CUSTOMER, { text: 'hello' });
+    introduce();
     const { replies } = agent.handle(CUSTOMER, { text: 'a double bed' });
     assert.match(replies[0]!, /don't take/i);
     assert.equal(store.item(''), null);
@@ -115,6 +126,7 @@ describe('intake conversation', () => {
 
   test('asks iPhone or Android before the phone checklist', () => {
     agent.handle(CUSTOMER, { text: 'hi' });
+    introduce();
     const { replies } = agent.handle(CUSTOMER, { text: 'phone' });
     assert.match(replies[0]!, /iPhone or Android/i);
   });
@@ -179,6 +191,7 @@ describe('intake conversation', () => {
 
   test('asks again when a photo request gets a text answer', () => {
     agent.handle(CUSTOMER, { text: 'hi' });
+    introduce();
     agent.handle(CUSTOMER, { text: 'laptop' });
     agent.handle(CUSTOMER, { text: 'Dell XPS 13, 2021, 16GB RAM' });
     const { replies } = agent.handle(CUSTOMER, { text: 'I will bring it in' });
@@ -220,6 +233,116 @@ describe('intake conversation', () => {
     assert.equal(inspection.stage, 'remote');
     assert.ok(JSON.parse(inspection.results).length > 0);
     assert.match(JSON.parse(inspection.outstanding).join(' | '), /IMEI|Activation Lock|fraud/i);
+  });
+});
+
+/**
+ * Knowing who you are talking to.
+ *
+ * All four of these were found by reading a real transcript rather than from a
+ * failing assertion, which is why they are written down now.
+ */
+describe('who this is', () => {
+  test('a new number is asked for a name, and it is kept', () => {
+    const first = agent.handle(CUSTOMER, { text: 'hi' });
+    assert.match(first.replies[0]!, /what is your name/i);
+
+    introduce('aina shipanga');
+    assert.equal(store.customerByPhone(CUSTOMER)!.name, 'Aina Shipanga');
+  });
+
+  test('the greeting is said once, not twice', () => {
+    agent.handle(CUSTOMER, { text: 'hi' });
+    const { replies } = introduce();
+
+    const hellos = replies.join('\n').match(/this is Eppic Pawn Shop/g) ?? [];
+    assert.equal(hellos.length, 0, 'they were greeted one message ago');
+  });
+
+  test('a returning number is greeted by name and never asked again', () => {
+    runFullIntake({ category: 'phone', variant: 'iPhone' });
+    const customer = store.customerByPhone(CUSTOMER)!;
+    store.closeConversation(store.activeConversation(customer.id)!.id);
+
+    const { replies } = agent.handle(CUSTOMER, { text: 'hi' });
+    assert.match(replies[0]!, /Aina/);
+    assert.doesNotMatch(replies.join('\n'), /what is your name/i);
+  });
+
+  test('"phone" is an item, not a person', () => {
+    agent.handle(CUSTOMER, { text: 'hi' });
+    const { replies } = agent.handle(CUSTOMER, { text: 'phone' });
+
+    assert.match(replies[0]!, /your own name/i);
+    assert.equal(store.customerByPhone(CUSTOMER)!.name, null, 'no customer called Phone');
+  });
+
+  test('it stops asking after two tries rather than blocking the conversation', () => {
+    agent.handle(CUSTOMER, { text: 'hi' });
+    agent.handle(CUSTOMER, { text: 'phone' });
+    const { replies } = agent.handle(CUSTOMER, { text: '???' });
+
+    // Two tries is enough: a nameless record is a small problem, an agent that
+    // will not move on until it gets one is a much bigger one. And it kept the
+    // phone they led with, so the item is not asked for a third time.
+    assert.doesNotMatch(replies.join('\n'), /your own name/i);
+    assert.match(replies.join('\n'), /iPhone or Android/i);
+  });
+
+  test('a second item replaces the first, rather than the first winning', () => {
+    agent.handle(CUSTOMER, { text: 'hi' });
+    agent.handle(CUSTOMER, { text: 'phone' });
+    const { replies } = agent.handle(CUSTOMER, { text: 'laptop' });
+
+    assert.match(replies.join('\n'), /Laptops/);
+  });
+
+  test('a name and an item in one message gives up both', () => {
+    agent.handle(CUSTOMER, { text: 'hi' });
+    const { replies } = agent.handle(CUSTOMER, { text: 'my name is Aina, I want to pawn my iPhone' });
+
+    assert.equal(store.customerByPhone(CUSTOMER)!.name, 'Aina');
+    // iPhone was named, so "iPhone or Android?" has already been answered.
+    assert.doesNotMatch(replies.join('\n'), /iPhone or Android/i);
+    assert.match(replies.join('\n'), /exactly what you have/i);
+  });
+
+  test('starting over does not make them a stranger again', () => {
+    agent.handle(CUSTOMER, { text: 'hi' });
+    introduce();
+    agent.handle(CUSTOMER, { text: 'phone' });
+
+    const { replies } = agent.handle(CUSTOMER, { text: 'restart' });
+    assert.doesNotMatch(replies.join('\n'), /what is your name/i);
+    assert.match(replies.join('\n'), /Which one do you have/i);
+  });
+});
+
+describe('"how much can I get?"', () => {
+  test('the opening question is answered, not talked over', () => {
+    const { replies } = agent.handle(CUSTOMER, { text: 'Hi, how much can I get for an iPhone 15?' });
+
+    assert.match(replies.join('\n'), /can't give you a figure/i);
+    assert.match(replies.join('\n'), /what is your name/i);
+    assert.doesNotMatch(replies.join('\n'), /N\$\s?\d/);
+  });
+
+  test('and answered once, not again on the next message', () => {
+    agent.handle(CUSTOMER, { text: 'Hi, how much can I get for an iPhone 15?' });
+    const { replies } = introduce();
+
+    assert.doesNotMatch(replies.join('\n'), /can't give you a figure/i, 'already answered');
+    // The iPhone from the opening message is still known.
+    assert.match(replies.join('\n'), /exactly what you have/i);
+  });
+
+  test('an unknown item plus a price question is not a rejection', () => {
+    agent.handle(CUSTOMER, { text: 'hi' });
+    introduce();
+    const { replies } = agent.handle(CUSTOMER, { text: 'how much for a fridge?' });
+
+    assert.doesNotMatch(replies.join('\n'), /don't take/i);
+    assert.match(replies.join('\n'), /Which one do you have/i);
   });
 });
 
