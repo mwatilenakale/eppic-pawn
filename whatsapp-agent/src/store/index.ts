@@ -904,6 +904,76 @@ export class Store {
     return this.loan(extension.loanId)!;
   }
 
+  /**
+   * A customer handing money over — docs/tasks/006.
+   *
+   * Two negative entries, interest then principal, and the loan closes only
+   * when the balance reaches zero. Nothing is edited: the charges stay exactly
+   * as they were posted, so what was owed at each stage is still readable, and
+   * a payment recorded against the wrong loan is corrected by reversing the
+   * entries rather than removing them.
+   */
+  recordRepayment(payment: {
+    loanId: string;
+    interestCents: number;
+    principalCents: number;
+    actor: string;
+    note?: string;
+    settles: boolean;
+  }): Loan {
+    const loan = this.loan(payment.loanId);
+    if (!loan) throw new Error(`No such loan: ${payment.loanId}`);
+    if (loan.status === 'paid') throw new Error(`Loan ${payment.loanId} is already paid`);
+
+    const at = this.#now();
+    const memo = payment.note ? `payment — ${payment.note}` : 'payment';
+
+    // Interest first. The book reports "interest collected" from these rows,
+    // and a payment that came off principal first would make a month of real
+    // earnings read as zero.
+    if (payment.interestCents > 0) {
+      this.postLedgerEntry({
+        loanId: payment.loanId,
+        entryType: 'repayment.interest',
+        amountCents: -payment.interestCents,
+        memo,
+        actor: payment.actor,
+        at,
+      });
+    }
+    if (payment.principalCents > 0) {
+      this.postLedgerEntry({
+        loanId: payment.loanId,
+        entryType: 'repayment.principal',
+        amountCents: -payment.principalCents,
+        memo,
+        actor: payment.actor,
+        at,
+      });
+    }
+
+    if (payment.settles) {
+      this.db.prepare("UPDATE loans SET status = 'paid', updated_at = ? WHERE id = ?").run(at, payment.loanId);
+      // `redeemed` is the word the workbook importer already uses for an item
+      // the customer got back.
+      this.db.prepare("UPDATE items SET status = 'redeemed', updated_at = ? WHERE id = ?").run(at, loan.item_id);
+    }
+
+    this.audit({
+      actor: payment.actor,
+      action: payment.settles ? 'loan.settled' : 'loan.part-paid',
+      entity: 'loan',
+      entityId: payment.loanId,
+      details: {
+        interestCents: payment.interestCents,
+        principalCents: payment.principalCents,
+        note: payment.note ?? '',
+      },
+    });
+
+    return this.loan(payment.loanId)!;
+  }
+
   /** Back on the book — the item has not been sold, so this is not a correction. */
   unforfeitLoan(loanId: string, actor: string): void {
     const at = this.#now();

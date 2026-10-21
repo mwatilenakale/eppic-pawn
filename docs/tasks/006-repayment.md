@@ -1,6 +1,10 @@
 # 006 — Taking the money back
 
-**Status:** OPEN
+**Status:** DONE — Claude, 21 October 2026 (Codex was out of tokens).
+`src/book/repay.ts`, `src/store/index.ts` (`recordRepayment`),
+`test/repay.test.ts`. `PAID <ref> [amount]`. An overpayment is refused rather
+than absorbed; a forfeited loan can still be redeemed, because the contract
+says so.
 **Depends on:** nothing.
 **You may change:** `src/book/`, `src/store/` (a migration and store methods),
 `src/router.ts` (the command), and the tests for those. Nothing else without

@@ -15,6 +15,7 @@ import { OTHER } from './intake/questions.ts';
 import { HandoverDesk, detectHandover, parseHandoverCommand, type Handover } from './intake/handover.ts';
 import { Forfeiture, parseForfeitCommand } from './book/forfeit.ts';
 import { Extensions, parseExtendCommand } from './book/extend.ts';
+import { Repayments, parseRepayCommand } from './book/repay.ts';
 import { ApprovalWorkflow } from './approval/index.ts';
 import type { MarketEstimate } from './valuation.ts';
 import type { ContractService, SignedContract } from './contract/index.ts';
@@ -81,6 +82,7 @@ export class AgentRouter {
   readonly #ownerLabel: string;
   readonly #forfeiture: Forfeiture;
   readonly #extensions: Extensions;
+  readonly #repayments: Repayments;
   readonly #onError: (error: unknown, event: InboundEvent) => void;
 
   constructor(options: RouterOptions) {
@@ -117,6 +119,7 @@ export class AgentRouter {
     this.#ownerLabel = options.rules.playbook.ownerLabel;
     this.#forfeiture = new Forfeiture(options.store, options.rules, this.#book);
     this.#extensions = new Extensions(options.store, options.rules, this.#book, this.#valuator);
+    this.#repayments = new Repayments(options.store, options.rules, this.#book);
     this.#onError = options.onError ?? ((error) => console.error('[agent]', error));
   }
 
@@ -362,6 +365,19 @@ export class AgentRouter {
     // TAKE / SAY / BACK / WAITING — talking to a customer by hand. Before the
     // approval parser: "BACK" must not be read as anything about money.
     if (await this.#runHandover(event, this.#owner)) return;
+
+    // PAID records money coming back. First of the book commands, because it
+    // is the one that happens most and the one he will be typing at a counter
+    // with somebody waiting.
+    const repay = parseRepayCommand(event.text ?? '');
+    if (repay) {
+      const result = this.#repayments.run(repay, this.#owner);
+      await this.#transport.sendText({ to: this.#ownerPhone, body: result.ownerMessage });
+      if (result.customerMessage && result.customerPhone) {
+        await this.#safeSend(result.customerPhone, result.customerMessage);
+      }
+      return;
+    }
 
     // EXTEND gives a customer another month, if section 8's 70% line allows
     // it. Before SELL, so "extend" is never read as anything else.

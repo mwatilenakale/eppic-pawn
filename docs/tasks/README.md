@@ -69,5 +69,5 @@ What you must not change without asking, ever:
 | [003 — WhatsApp handover](003-whatsapp-handover.md) | DONE |
 | [004 — 24-hour message templates](004-message-templates.md) | OPEN |
 | [005 — extending a loan by a month](005-extend-a-loan.md) | DONE |
-| [006 — taking the money back](006-repayment.md) | OPEN — build this first |
-| [007 — twenty scenarios, both channels](007-twenty-scenarios.md) | BLOCKED on 006 |
+| [006 — taking the money back](006-repayment.md) | DONE |
+| [007 — twenty scenarios, both channels](007-twenty-scenarios.md) | OPEN — unblocked |

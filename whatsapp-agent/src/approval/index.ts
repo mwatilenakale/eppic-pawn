@@ -59,7 +59,12 @@ const HELP =
   '• *BOOK* — what is out, what is coming in\n' +
   '• *DUE* — falling due this week\n' +
   '• *OVERDUE* — past grace, and what is in grace\n' +
-  '• *CUSTOMER <name or number>* — one person’s history';
+  '• *CUSTOMER <name or number>* — one person’s history\n\n' +
+  'When money moves on a loan that already exists:\n' +
+  '• *PAID <ref>* — settled in full, item goes back\n' +
+  '• *PAID <ref> <amount>* — a part payment\n' +
+  '• *EXTEND <ref>* — another month, if section 8 allows it\n' +
+  '• *SELL <ref>* — past grace, send it to market (*KEEP <ref>* undoes it)';
 
 export { referenceFor };
 
