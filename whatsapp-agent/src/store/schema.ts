@@ -449,4 +449,18 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE conversations ADD COLUMN taken_at TEXT;
   CREATE INDEX conversations_held ON conversations(held_by) WHERE held_by IS NOT NULL;
   `,
+
+  // 12 — dated price evidence. Migrations 9–11 belong to Claude's inspection,
+  // category and handover work; never renumber them to fit the earlier draft.
+  `
+  CREATE TABLE market_observations (
+    id TEXT PRIMARY KEY,
+    category_slug TEXT NOT NULL,
+    variant TEXT,
+    description TEXT NOT NULL,
+    estimates TEXT NOT NULL,
+    observed_at TEXT NOT NULL
+  );
+  CREATE INDEX market_observations_recent ON market_observations(category_slug, variant, observed_at);
+  `,
 ];

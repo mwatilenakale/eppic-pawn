@@ -33,6 +33,13 @@ describe('money', () => {
 });
 
 describe('valuation formula (playbook section 3)', () => {
+  test('invalid cents cannot become a valuation or loan terms', () => {
+    for (const amount of [NaN, Infinity, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
+      assert.throws(() => suggestValuation([{ source: 'invalid', amountCents: amount }], rules), ValuationError);
+      assert.throws(() => loanTerms({ principalCents: amount }, rules), ValuationError);
+    }
+  });
+
   test("the playbook's worked example: N$10,000 item -> N$7,500 assessed -> N$3,750 loan", () => {
     const valuation = suggestValuation(
       [

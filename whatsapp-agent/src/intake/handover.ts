@@ -35,9 +35,14 @@ export type HandoverReason =
  * what was asked. Escalating that would punish the honest ones and bury Lukas
  * in messages about paperwork that is going fine.
  */
-const EXEMPT = /\b(police\s+(declaration|affidavit|clearance)|declaration of ownership)\b/i;
+const EXEMPT = /\b(police\s+(declaration|affidavit|clearance)|declaration of ownership)\b/gi;
 
 const TRIGGERS: { reason: HandoverReason; pattern: RegExp; why: string }[] = [
+  {
+    reason: 'ownership',
+    pattern: /\bstill\s+(?:on|under)\s+(?:an?\s+)?(?:payment plan|finance|financing|credit agreement|account)\b/i,
+    why: 'The item may still have a financier\'s ownership claim',
+  },
   {
     reason: 'ownership',
     pattern: /\b(stolen|stole|steal|i took it|not mine|belongs to|police|reported it|robbed|snatch)\b/i,
@@ -46,7 +51,7 @@ const TRIGGERS: { reason: HandoverReason; pattern: RegExp; why: string }[] = [
   {
     reason: 'existing-loan',
     pattern:
-      /\b(my loan|existing loan|extend|extension|roll ?over|can'?t pay|cannot pay|late payment|already pawned|still owe|owe you|my item back|collect my)\b/i,
+      /\b(my loan|previous loan|existing loan|overdue|extend|extension|roll ?over|can'?t pay|cannot pay|late payment|already pawned|still owe|owe you|my item back|collect my)\b/i,
     why: 'About a loan they already have',
   },
   {
@@ -60,6 +65,11 @@ const TRIGGERS: { reason: HandoverReason; pattern: RegExp; why: string }[] = [
     pattern:
       /\b(can you do|will you take|how about|make it|i'?ll accept|lowest you|best you can|negotiate|more than that|too low)\b/i,
     why: 'Negotiating a figure',
+  },
+  {
+    reason: 'negotiating',
+    pattern: /^\s*(approve|adjust|decline|release)\b/i,
+    why: 'A customer attempted an owner-only decision command',
   },
 ];
 
@@ -77,9 +87,11 @@ export interface Handover {
 export function detectHandover(text: string): Handover | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
-  if (EXEMPT.test(trimmed)) return null;
+  // Paperwork alone is ordinary intake, but mentioning a police declaration
+  // must not exempt the rest of a message from negotiation/ownership checks.
+  const relevant = trimmed.replace(EXEMPT, '');
   for (const trigger of TRIGGERS) {
-    if (trigger.pattern.test(trimmed)) return { reason: trigger.reason, why: trigger.why };
+    if (trigger.pattern.test(relevant)) return { reason: trigger.reason, why: trigger.why };
   }
   return null;
 }

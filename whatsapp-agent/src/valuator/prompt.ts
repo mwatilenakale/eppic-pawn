@@ -60,6 +60,13 @@ export interface EstimateInput {
   description: string;
   categorySlug: string;
   variant: string | null;
+  history?: MarketObservation[];
+}
+
+export interface MarketObservation {
+  description: string;
+  observedAt: string;
+  estimates: MarketEstimate[];
 }
 
 export function systemPrompt(rules: Rules): string {
@@ -70,6 +77,9 @@ export function systemPrompt(rules: Rules): string {
     '',
     'Give 2 to 4 realistic prices the item would actually sell for second-hand in Namibia — what a private',
     'seller gets on Facebook Marketplace or a local dealer pays, not new retail and not an international price.',
+    'Use the declared storage capacity, battery health, box availability and damage. A normal/base iPhone',
+    'is not a Pro, Pro Max or Plus: never upgrade the model to fill a gap. Do not copy a past price for',
+    'different specifications or condition. Historical estimates are not verified sales or current listings.',
     '',
     'Be conservative. The lowest of your estimates is what the loan is sized from, so an optimistic number',
     'costs the shop real money. Prefer under-estimating to over-estimating.',
@@ -87,7 +97,12 @@ export function userPrompt(rules: Rules, input: EstimateInput, memory: PriceMemo
   return [
     `Category: ${category?.label ?? input.categorySlug}${input.variant ? ` (${input.variant})` : ''}`,
     `Customer's description: ${input.description}`,
-    recentCorrections(input.categorySlug, memory),
+    recentCorrections(input.categorySlug, memory, rules),
+    ...(input.history?.length ? [
+      'Earlier AI estimates (unverified historical evidence, not transactions or owner decisions).',
+      'Check dates, model, storage, battery health, box and damage; do not treat these as current listings:',
+      ...input.history.map((row) => `- ${row.observedAt}: ${JSON.stringify(row.description)}; ${row.estimates.map((e) => `${e.amountCents / CENTS} NAD`).join(', ')}`),
+    ] : []),
     '',
     'What would this sell for second-hand in Namibia?',
   ]
@@ -106,7 +121,7 @@ export function userPrompt(rules: Rules, input: EstimateInput, memory: PriceMemo
  * Context, not instruction. A correction on a different phone does not settle
  * what this one is worth.
  */
-function recentCorrections(categorySlug: string, memory: PriceMemory | null): string {
+function recentCorrections(categorySlug: string, memory: PriceMemory | null, rules: Rules): string {
   if (!memory) return '';
 
   const recent = memory
@@ -117,8 +132,10 @@ function recentCorrections(categorySlug: string, memory: PriceMemory | null): st
   if (recent.length === 0) return '';
 
   const lines = recent.map((price) => {
-    const market = price.marketValueCents ?? (price.assessedValueCents !== null ? price.assessedValueCents / 0.75 : null);
-    const described = price.fingerprint.split('|')[2] || 'similar item';
+    const market = price.marketValueCents ?? (price.assessedValueCents !== null
+      ? round(price.assessedValueCents / rules.playbook.loanSizing.discountFactor)
+      : null);
+    const described = price.description || 'similar item';
     return market !== null
       ? `- ${described}: the owner valued at N$${Math.round(market / 100).toLocaleString('en-US')}`
       : `- ${described}: the owner lent N$${Math.round(price.loanCents / 100).toLocaleString('en-US')}`;

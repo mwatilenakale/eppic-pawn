@@ -3,7 +3,16 @@
 Step 1 from `docs/architecture.md` Section 5: a WhatsApp agent that runs the
 intake conversation, enforces the per-category screening and fraud checks, and
 sends Lukas an approval message he replies to. Nothing is priced or approved
-without that reply.
+without that reply, except for clearly labelled, nonbinding estimates requested
+by a customer. WhatsApp and the website share the same QuoteService.
+
+For example, "What is my iPhone 15 worth, with a box and 95% battery health?"
+first asks an unknown customer's name, remembers the enquiry, and asks for
+missing storage/condition details. Returning customers keep their stated name;
+Meta profile nicknames do not overwrite it. Both channels show estimated market,
+pawn-loan and buy-outright values and state that Lukas must confirm the deal.
+Earlier AI estimates are retained as dated evidence, separate from owner price
+corrections. Storage, battery, damage and box differences prevent exact reuse.
 
 ## Try it without a Meta account
 

@@ -104,6 +104,19 @@ it stays a human sign-off, since it's the step most exposed to fraud
 sees on the website is an **estimate**, clearly marked as not final until
 Lukas has approved it.
 
+The same applies when a customer asks for a valuation on WhatsApp: show the
+market value, pawn loan and buy-outright price as **estimates, not an offer**.
+Ask for missing item details first. No estimate approves an application or
+creates a loan; final pricing, acceptance and payment remain Lukas's decision.
+Record a new WhatsApp customer's stated name against their phone number and
+recognise them on later visits. A profile nickname must not overwrite a name
+they have already given. Keep prior market estimates as dated evidence for
+future research, separate from Lukas's price corrections; model guesses never
+become owner decisions merely because they have been stored.
+Storage capacity, battery health, damage and box availability must be preserved
+when matching a previous item's price; a different specification needs fresh
+research rather than an automatic copy of an old correction.
+
 ### Minimum loan
 
 - **Minimum loan: N$1,000.** Anything that prices below that is declined.

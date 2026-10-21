@@ -108,6 +108,25 @@ describe('question plan', () => {
 });
 
 describe('intake conversation', () => {
+  test('a failed photo can be retried with the same WhatsApp message ID', () => {
+    agent.handle(CUSTOMER, { text: 'phone' });
+    agent.handle(CUSTOMER, { text: 'iphone' });
+    agent.handle(CUSTOMER, { text: 'iPhone 13 Pro' });
+    const conversation = store.activeConversation(store.customerByPhone(CUSTOMER)!.id)!;
+    const before = store.messages(conversation.id).length;
+    const put = store.media!.put;
+    store.media!.put = () => { throw new Error('disk unavailable'); };
+    const incoming = { providerMessageId: 'wamid.retry-photo', media: { content: photo() } };
+
+    assert.throws(() => agent.handle(CUSTOMER, incoming), /disk unavailable/);
+    assert.equal(store.messages(conversation.id).length, before);
+    store.media!.put = put;
+    assert.ok(agent.handle(CUSTOMER, incoming).replies.length > 0);
+    const state = JSON.parse(store.activeConversation(store.customerByPhone(CUSTOMER)!.id)!.state) as { itemId: string };
+    assert.equal(store.photos(state.itemId).length, 1);
+    assert.deepEqual(agent.handle(CUSTOMER, incoming).replies, [], 'a successful retry is still deduplicated');
+  });
+
   test('opens by offering exactly the categories the playbook accepts', () => {
     agent.handle(CUSTOMER, { text: 'hello' });
     const { replies } = introduce();
@@ -333,7 +352,7 @@ describe('"how much can I get?"', () => {
   test('the opening question is answered, not talked over', () => {
     const { replies } = agent.handle(CUSTOMER, { text: 'Hi, how much can I get for an iPhone 15?' });
 
-    assert.match(replies.join('\n'), /can't give you a figure/i);
+    assert.match(replies.join('\n'), /Lukas sets every final amount/i);
     assert.match(replies.join('\n'), /what is your name/i);
     assert.doesNotMatch(replies.join('\n'), /N\$\s?\d/);
   });
@@ -342,9 +361,9 @@ describe('"how much can I get?"', () => {
     agent.handle(CUSTOMER, { text: 'Hi, how much can I get for an iPhone 15?' });
     const { replies } = introduce();
 
-    assert.doesNotMatch(replies.join('\n'), /can't give you a figure/i, 'already answered');
+    assert.doesNotMatch(replies.join('\n'), /Lukas sets every final amount/i, 'already answered');
     // The iPhone from the opening message is still known.
-    assert.match(replies.join('\n'), /exactly what you have/i);
+    assert.match(replies.join('\n'), /storage|condition/i);
   });
 
   test('an unknown item plus a price question is not a rejection', () => {

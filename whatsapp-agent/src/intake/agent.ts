@@ -13,6 +13,8 @@ import type { Rules } from '../playbook/index.ts';
 import type { Customer, Item, Store } from '../store/index.ts';
 import { parseAmount } from '../money.ts';
 import { CategoryGate } from './unknown.ts';
+import { describeItem, missingPhoneDetails } from '../valuator/quotes.ts';
+import type { EstimateInput } from '../valuator/prompt.ts';
 import { buildQuestionPlan, readConfirmation, type Question, type QuestionPlan } from './questions.ts';
 
 export interface Incoming {
@@ -43,6 +45,7 @@ export interface IntakeState {
   nameAttempts?: number;
   /** An item named before we had a name for them — so we don't ask for it twice. */
   pendingItemText?: string | null;
+  quoteDraft?: string;
   /** True once we have said we cannot quote, so we don't say it twice running. */
   priceAnswered?: boolean;
   /** Descriptions too thin to value. After three we stop asking. */
@@ -85,6 +88,7 @@ export interface IntakeSubmission {
 
 export interface IntakeOutcome {
   replies: string[];
+  estimateRequest?: EstimateInput;
   submission?: IntakeSubmission;
   /**
    * The agent has asked the same question three times running and is getting
@@ -174,8 +178,7 @@ const copy = {
 
   /** They asked what it is worth. Say honestly that the number is not ours to give. */
   priceAsked:
-    "I can't give you a figure myself — Lukas sets every amount after he has seen the item and the photos.\n\n" +
-    'What I can do is take the details now so he can come back to you quickly.',
+    'Lukas sets every final amount after checking the item and photos. I can show an estimate, not an offer, once I have the item details.',
   photoExpected: (ask: string) => `I still need that as a photo. ${ask}`,
   confirmExpected: (ask: string) => `Sorry, I didn't catch that. ${ask}`,
   photoReceived: 'Got the photo, thank you.',
@@ -213,6 +216,10 @@ export class IntakeAgent {
    * Duplicate deliveries (same provider message id) produce no replies.
    */
   handle(fromPhone: string, incoming: Incoming): IntakeOutcome {
+    return this.#store.transaction(() => this.#handleIncoming(fromPhone, incoming));
+  }
+
+  #handleIncoming(fromPhone: string, incoming: Incoming): IntakeOutcome {
     const customer = this.#store.upsertCustomer(fromPhone);
     const conversation =
       this.#store.activeConversation(customer.id) ??
@@ -281,6 +288,7 @@ export class IntakeAgent {
     const text = (incoming.text ?? '').trim();
 
     if (RESTART.test(text)) {
+      delete state.quoteDraft;
       // Starting the item again does not make us strangers. Keep who they are;
       // throw away only what they said about the item.
       const knownName = state.knownName ?? null;
@@ -296,6 +304,11 @@ export class IntakeAgent {
 
     if (state.step === 'submitted') {
       return { replies: [copy.alreadySubmitted] };
+    }
+
+    if (state.step !== 'name') {
+      const estimate = this.#prepareEstimate(state, text);
+      if (estimate) return estimate;
     }
 
     // Waiting on Lukas's yes or no about an item we don't normally take. Not a
@@ -393,11 +406,31 @@ export class IntakeAgent {
     const replies = [`Thank you ${name}.`];
     const carried = item ?? state.pendingItemText ?? null;
     if (carried) {
+      const estimate = this.#prepareEstimate(state, carried);
+      if (estimate) return { ...estimate, replies: [...replies, ...estimate.replies] };
       const onwards = this.#handleCategory(customer, conversationId, state, carried);
       return { replies: [...replies, ...onwards.replies] };
     }
     // Already greeted when we asked for the name, so the list only.
     return { replies: [...replies, whichCategory(this.#categoryLabels())] };
+  }
+
+  /** Produce a request, never a price or decision, for the router's shared engine. */
+  #prepareEstimate(state: IntakeState, text: string): IntakeOutcome | null {
+    if (!state.quoteDraft && !ASKING_PRICE.test(text) && !/pre-check/i.test(text)) return null;
+    const description = describeItem(state.quoteDraft ? `${state.quoteDraft}. ${text}` : text);
+    const category = this.#rules.category(description);
+    if (!category) return null;
+    const missing = missingPhoneDetails(description);
+    if (missing.length) {
+      state.quoteDraft = description;
+      return { replies: [`Please tell me the ${missing.join(' and ')} before I estimate this item.`] };
+    }
+    delete state.quoteDraft;
+    state.greeted = true;
+    const variant = this.#rules.variantsFor(category.slug).find((entry) => entry.variant &&
+      new RegExp(`\\b${entry.variant}\\b`, 'i').test(description))?.variant ?? null;
+    return { replies: [], estimateRequest: { description, categorySlug: category.slug, variant } };
   }
 
   #handleCategory(customer: Customer, conversationId: string, state: IntakeState, text: string): IntakeOutcome {
@@ -709,11 +742,11 @@ function isAskingForAPrice(text: string, question: Question): boolean {
   return text.trim().endsWith('?') || question.kind !== 'text';
 }
 
-export /**
+/**
  * A conversation starts by asking who this is, unless we already know. A
  * returning customer should never have to introduce themselves twice.
  */
-function initialState(knownName?: string | null): IntakeState {
+export function initialState(knownName?: string | null): IntakeState {
   return {
     step: knownName ? 'category' : 'name',
     greeted: false,

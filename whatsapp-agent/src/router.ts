@@ -9,7 +9,7 @@
 
 import type { Rules } from './playbook/index.ts';
 import type { Store, User } from './store/index.ts';
-import { IntakeAgent, type IntakeState, type IntakeSubmission } from './intake/agent.ts';
+import { IntakeAgent, initialState, type IntakeState, type IntakeSubmission } from './intake/agent.ts';
 import { CategoryGate, parseCategoryReply, type CategoryDecisionResult } from './intake/unknown.ts';
 import { OTHER } from './intake/questions.ts';
 import { HandoverDesk, detectHandover, parseHandoverCommand, type Handover } from './intake/handover.ts';
@@ -30,6 +30,9 @@ import {
 import { samePhone, type InboundEvent } from './whatsapp/webhook.ts';
 import { can } from './staff/access.ts';
 import type { WhatsAppTransport } from './whatsapp/transport.ts';
+import { QuoteService } from './valuator/quotes.ts';
+import type { EstimateInput } from './valuator/prompt.ts';
+import { formatAmount } from './money.ts';
 
 /**
  * Supplies market estimates for the valuation engine. Optional: with none
@@ -37,7 +40,7 @@ import type { WhatsAppTransport } from './whatsapp/transport.ts';
  * one.
  */
 export interface Valuator {
-  estimate(input: { description: string; categorySlug: string; variant: string | null }): Promise<MarketEstimate[]>;
+  estimate(input: EstimateInput): Promise<MarketEstimate[]>;
 }
 
 export interface RouterOptions {
@@ -47,6 +50,7 @@ export interface RouterOptions {
   ownerPhone: string;
   ownerName?: string;
   valuator?: Valuator;
+  quotes?: QuoteService;
   /** Issues the agreement once Lukas approves. Omit to skip contracts. */
   contracts?: ContractService;
   /** Checks a newly identified customer against everyone already known. */
@@ -65,6 +69,8 @@ export class AgentRouter {
   readonly #ownerPhone: string;
   readonly #owner: User;
   readonly #valuator: Valuator | null;
+  readonly #quotes: QuoteService;
+  readonly #customerQueues = new Map<string, Promise<void>>();
   readonly #contracts: ContractService | null;
   readonly #directory: CustomerDirectory | null;
   readonly #book: Book;
@@ -84,6 +90,7 @@ export class AgentRouter {
       role: 'owner',
     });
     this.#valuator = options.valuator ?? null;
+    this.#quotes = options.quotes ?? new QuoteService(options.store, options.rules, this.#valuator);
     this.#contracts = options.contracts ?? null;
     this.#directory = options.directory ?? null;
     // Two different numbers, and it has to be two. The shop's number is the one
@@ -121,7 +128,11 @@ export class AgentRouter {
         return;
       }
 
-      await this.#handleCustomer(event);
+      const previous = this.#customerQueues.get(event.from) ?? Promise.resolve();
+      const current = previous.catch(() => {}).then(() => this.#handleCustomer(event));
+      this.#customerQueues.set(event.from, current);
+      try { await current; }
+      finally { if (this.#customerQueues.get(event.from) === current) this.#customerQueues.delete(event.from); }
     } catch (error) {
       this.#onError(error, event);
       await this.#safeSend(event.from, 'Sorry — something went wrong on our side. Please send that again in a moment.');
@@ -129,6 +140,9 @@ export class AgentRouter {
   }
 
   async #handleCustomer(event: InboundEvent): Promise<void> {
+    // Do this before handover or any async research. A replay must not escalate
+    // or advance a different question after its first delivery has completed.
+    if (this.#store.db.prepare('SELECT id FROM messages WHERE provider_message_id = ?').get(event.messageId)) return;
     const media = event.mediaId ? await this.#transport.downloadMedia(event.mediaId) : undefined;
 
     // Before anything else: is this one of ours to answer at all?
@@ -146,8 +160,9 @@ export class AgentRouter {
       media: media ? { content: media.content, extension: media.extension } : undefined,
     });
 
-    if (event.profileName) this.#store.upsertCustomer(event.from, event.profileName);
+    // A profile nickname must not overwrite a customer's stated or signed name.
     for (const reply of outcome.replies) await this.#transport.sendText({ to: event.from, body: reply });
+    if (outcome.estimateRequest) await this.#sendEstimate(event, outcome.estimateRequest);
 
     // "Can we take a smartwatch?" — a question, not an approval request.
     for (const message of outcome.ownerMessages ?? []) {
@@ -163,21 +178,39 @@ export class AgentRouter {
   }
 
   async #requestApproval(submission: IntakeSubmission): Promise<void> {
-    const estimates = this.#valuator
-      ? await this.#valuator
-          .estimate({
+    const quote = await this.#quotes
+          .quote({
             description: submission.item.description,
             categorySlug: submission.item.category_slug,
             variant: submission.item.variant,
           })
           .catch((error) => {
             this.#onError(error, { from: submission.customer.phone, messageId: '', type: 'text' });
-            return [] as MarketEstimate[];
-          })
-      : [];
+            return null;
+          });
 
-    const request = this.#approvals.request(submission, estimates);
+    const request = this.#approvals.request(submission, [], quote?.valuation);
     await this.#transport.sendText({ to: this.#ownerPhone, body: request.ownerMessage });
+  }
+
+  async #sendEstimate(event: InboundEvent, input: EstimateInput): Promise<void> {
+    const customer = this.#store.customerByPhone(event.from)!;
+    const conversation = this.#store.activeConversation(customer.id)!;
+    let quote;
+    try { quote = await this.#quotes.quote(input); }
+    catch (error) { this.#onError(error, event); }
+    const body = quote ? [
+      `${customer.name ?? 'Hello'}, here are your estimates — not an offer.`,
+      `Market value: ${formatAmount(quote.marketValueCents)}`,
+      `Assessed value: ${formatAmount(quote.assessedValueCents)}`,
+      `Estimated pawn loan: ${formatAmount(quote.loanCents)}`,
+      `Estimated buy-outright price: ${formatAmount(quote.buyNowCents)}`,
+      quote.belowMinimum ? `Below the ${formatAmount(quote.minimumLoanCents)} minimum loan in the playbook.` : '',
+      'Lukas must check the item and documents and confirm the final amount. Nothing has been approved.',
+      `To start a pawn application, reply ${input.categorySlug}.`,
+    ].filter(Boolean).join('\n') : 'I could not obtain a reliable estimate. Lukas will need to value this himself; no price or deal has been approved.';
+    this.#store.recordOutbound({ conversationId: conversation.id, body });
+    await this.#transport.sendText({ to: event.from, body });
   }
 
   /**
@@ -259,12 +292,16 @@ export class AgentRouter {
    * nothing more until a human types BACK.
    */
   async #handedToAPerson(event: InboundEvent): Promise<boolean> {
-    const customer = this.#store.customerByPhone(event.from);
-    const conversation = customer ? this.#store.activeConversation(customer.id) : null;
+    let customer = this.#store.customerByPhone(event.from);
+    let conversation = customer ? this.#store.activeConversation(customer.id) : null;
+    const handover = detectHandover(event.text ?? '');
     if (!conversation) {
-      // No thread yet, so nothing can be held. A first message that trips a
-      // trigger is caught on the next one, once there is a transcript to send.
-      return false;
+      if (!handover) return false;
+      // Escalation must not depend on a preceding hello. Create the transcript
+      // before processing this very first message, then let the normal desk
+      // hold it. No approval, loan or owner-only decision is made here.
+      customer ??= this.#store.upsertCustomer(event.from);
+      conversation = this.#store.openConversation(customer.id, initialState(customer.name));
     }
 
     // A person has it, or is being waited on. Record what the customer said
@@ -278,7 +315,6 @@ export class AgentRouter {
       return true;
     }
 
-    const handover = detectHandover(event.text ?? '');
     if (!handover) return false;
 
     this.#store.recordInbound({

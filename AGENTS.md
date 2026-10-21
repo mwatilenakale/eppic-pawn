@@ -31,7 +31,7 @@ playbook did nothing.
 Every valuation is a suggestion. Every accept, decline and price change
 routes to Lukas over WhatsApp and waits. There is no auto-approve path
 and none may be added, not behind a flag, not for testing, not "just for
-the demo". The website may show an *estimate* — labelled as one, with
+the demo". Both channels may show an *estimate* — labelled as one, with
 the verification banner — but an estimate binds nobody.
 
 **3. The ledger is append-only.**

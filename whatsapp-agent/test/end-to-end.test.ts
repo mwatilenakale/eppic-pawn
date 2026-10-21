@@ -59,6 +59,7 @@ const fromCustomer = (text?: string) => ({
 /** Answers whatever the agent last asked, until the application is submitted. */
 async function completeIntake(): Promise<void> {
   await router.handle(fromCustomer('hello'));
+  await router.handle(fromCustomer('Test Customer'));
   await router.handle(fromCustomer('phone'));
   await router.handle(fromCustomer('iPhone'));
 

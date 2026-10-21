@@ -136,6 +136,7 @@ export function questionsPage(
   category: { slug: string; label: string },
   variant: string | null,
   questions: Question[],
+  options: { description?: string; error?: string } = {},
 ): string {
   const variants = rules.variantsFor(category.slug);
 
@@ -179,6 +180,7 @@ export function questionsPage(
       <p class="lead">Answer honestly — this is a check for you, not a test. Everything is confirmed in person anyway.</p>
     </header>
 
+    ${options.error ? `<p class="verification-banner" role="alert">${escapeHtml(options.error)}</p>` : ''}
     <form method="post" action="/apply" class="card">
       <input type="hidden" name="category" value="${escapeHtml(category.slug)}">
       ${variant ? `<input type="hidden" name="variant" value="${escapeHtml(variant)}">` : ''}
@@ -186,7 +188,7 @@ export function questionsPage(
       <div class="input-group">
         <label class="input-label" for="description">What is it, exactly?</label>
         <input class="input" type="text" id="description" name="description" maxlength="160"
-               placeholder="e.g. iPhone 13 Pro, 256GB" autocomplete="off">
+               placeholder="e.g. iPhone 15, 128GB, box, 95% battery, no damage" autocomplete="off" value="${escapeHtml(options.description ?? '')}">
         <p class="muted" style="margin-top:var(--space-2)">The more exact, the closer the estimate.</p>
       </div>
 

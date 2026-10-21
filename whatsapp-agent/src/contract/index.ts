@@ -171,6 +171,13 @@ export class ContractService {
     const image = readSignatureImage(submission.signatureDataUrl);
     if (!image) throw new ContractError('Please sign in the box before submitting');
 
+    // Handoff: the loan, ledger, signature record and audit must succeed
+    // together. In particular, a full media disk must not leave an unsigned
+    // contract owing money, or make a retry create a second loan.
+    return this.#store.transaction(() => this.#completeSigning(contract, name, idNumber, image));
+  }
+
+  #completeSigning(contract: Contract, name: string, idNumber: string, image: Buffer): SignedContract {
     const item = this.#store.item(contract.item_id)!;
     const loan = this.#store.createLoan({
       customerId: contract.customer_id,

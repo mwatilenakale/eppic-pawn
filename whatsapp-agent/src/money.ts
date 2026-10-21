@@ -19,7 +19,8 @@ export function parseAmount(text: string): number | null {
     .replace(/(?<=\d)[\s,](?=\d{3}(\D|$))/g, '')
     .trim();
   if (!/^-?\d+(\.\d{1,2})?$/.test(cleaned)) return null;
-  return round(Number(cleaned) * CENTS);
+  const cents = round(Number(cleaned) * CENTS);
+  return Number.isSafeInteger(cents) ? cents : null;
 }
 
 /** 108750 -> `N$1,087.50`. */
