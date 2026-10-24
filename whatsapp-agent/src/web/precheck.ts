@@ -14,6 +14,7 @@
 
 import { buildQuestionPlan, readConfirmation, type Question } from '../intake/questions.ts';
 import type { Rules } from '../playbook/index.ts';
+import { proofOfPurchaseFor, type ProofOfPurchase } from '../requirements.ts';
 import { normalizePhone } from '../whatsapp/webhook.ts';
 
 /** Keep the form short enough that people finish it. */
@@ -77,8 +78,10 @@ export interface PrecheckOutcome {
   verifiedInPerson: string[];
   /** Prefilled WhatsApp handoff — the real intake still runs from scratch. */
   whatsappText: string;
-  /** Null when no market estimate could be had; then Lukas is asked instead. */
+  /** Null when no market estimate could be had; then the owner is asked instead. */
   quote: PrecheckQuote | null;
+  /** Whether section 5's N$5,000 proof-of-purchase line applies to this item. */
+  proofOfPurchase: ProofOfPurchase;
 }
 
 /** The questions the web form asks — the same ones WhatsApp would. */
@@ -114,6 +117,7 @@ export function evaluatePrecheck(rules: Rules, submission: PrecheckSubmission): 
       notes: [`Eppic Pawn Shop takes ${rules.categories.map((entry) => entry.label).join(', ')}.`],
       answers: [],
       bring: [],
+      proofOfPurchase: proofOfPurchaseFor(rules, null),
       verifiedInPerson: [],
       whatsappText: 'Hello, I would like to ask about pawning an item.',
       quote: null,
@@ -145,6 +149,13 @@ export function evaluatePrecheck(rules: Rules, submission: PrecheckSubmission): 
     notes.push(`${owner.charAt(0).toUpperCase()}${owner.slice(1)} will want to go through ${unsure.length === 1 ? 'one other point' : `${unsure.length} other points`} with you: ${unsure.map((answer) => answer.question).join('; ')}`);
   }
 
+  // Playbook section 5: above the threshold the proof has to be the receipt or
+  // a settlement letter. The website is the one channel that already knows the
+  // market value, so it is the one place a customer can be told before they
+  // travel in with the wrong piece of paper.
+  const proof = proofOfPurchaseFor(rules, submission.quote?.marketValueCents ?? null);
+  if (proof.instruction) notes.push(proof.instruction);
+
   const status: PrecheckStatus = blocking.length > 0 ? 'needs-attention' : 'ready';
 
   return {
@@ -157,7 +168,18 @@ export function evaluatePrecheck(rules: Rules, submission: PrecheckSubmission): 
         : `There is something to sort out first, but you can still ask ${owner}.`,
     notes,
     answers,
-    bring: rules.playbook.requirements,
+    bring: proof.required
+      ? rules.playbook.requirements.map((requirement) =>
+          // Anchored on purpose. "Police declaration of ownership — only if
+          // there is no proof of ownership" contains the same words, and an
+          // unanchored match appended the suffix to it as well, which read as
+          // nonsense.
+          /^proof of ownership\b/i.test(requirement)
+            ? `${requirement} — at this value, the original receipt or a settlement letter`
+            : requirement,
+        )
+      : rules.playbook.requirements,
+    proofOfPurchase: proof,
     verifiedInPerson: plan.inPersonChecks.map((check) => check.text),
     whatsappText: composeHandoff(category.label, submission.description ?? '', blocking.length > 0),
     quote: submission.quote ?? null,

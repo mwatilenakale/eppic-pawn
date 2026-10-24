@@ -171,3 +171,79 @@ export function describeRequirements(
     return { requirement: id, label: question ? label(question) : id };
   });
 }
+
+// --- the N$5,000 proof-of-purchase line (playbook section 5) ---------------
+
+/**
+ * Above the threshold a declaration stops being enough.
+ *
+ * The playbook: *"proof of purchase required above N$5,000 market value — the
+ * original receipt, or a settlement letter where it was bought on credit."*
+ * And, on the forms that count: *"a box with a matching serial is evidence of
+ * possession, not of a debt being settled — which is the whole Spectra
+ * lesson."*
+ *
+ * The threshold was parsed from the document and then consumed by nothing at
+ * all, in three places, for weeks. A N$10,000 phone was asked for exactly the
+ * same documents as a N$800 one. The rule written after losing money on a
+ * financed S25 Ultra did nothing.
+ *
+ * **There is no automatic check here, and there cannot be one.** A photo of a
+ * receipt and a photo of a handwritten declaration are both `ownership` and
+ * nothing in this system can read either. So what this does is tell the people
+ * who can look: the website visitor, before they travel in, and Lukas, with
+ * the valuation in front of him. The same shape as every other check the
+ * system cannot perform itself.
+ */
+export interface ProofOfPurchase {
+  /** True when the item's value puts it over the line. */
+  required: boolean;
+  thresholdCents: number;
+  /** The market value the decision was made on, when one is known. */
+  marketValueCents: number | null;
+  /** What to tell somebody, or null when the rule does not bite. */
+  instruction: string | null;
+}
+
+/** The rule, given a market value. Null value means nobody has priced it yet. */
+export function proofOfPurchaseFor(rules: Rules, marketValueCents: number | null): ProofOfPurchase {
+  const thresholdCents = rules.playbook.proofOfPurchaseAboveCents;
+  const required = marketValueCents !== null && marketValueCents > thresholdCents;
+
+  return {
+    required,
+    thresholdCents,
+    marketValueCents,
+    instruction: required
+      ? `Over ${money(thresholdCents)}, so the proof of ownership has to be the original receipt — or a ` +
+        'settlement letter if it was bought on credit. A written declaration is not enough at this value, ' +
+        'and neither is the box: a matching serial shows possession, not that a debt was settled.'
+      : null,
+  };
+}
+
+/** The same rule, read off whatever valuation the item already has. */
+export function proofOfPurchaseForItem(store: Store, rules: Rules, itemId: string): ProofOfPurchase {
+  const valuation = store.db
+    .prepare('SELECT assessed_value_cents, estimates FROM valuations WHERE item_id = ? ORDER BY created_at DESC LIMIT 1')
+    .get(itemId) as { assessed_value_cents: number; estimates: string } | undefined;
+
+  if (!valuation) return proofOfPurchaseFor(rules, null);
+
+  // The threshold is on *market* value, not the assessed figure the loan is
+  // sized from. Taking the lowest estimate, as section 3 does everywhere else.
+  let market: number | null = null;
+  try {
+    const estimates = JSON.parse(valuation.estimates) as { amountCents?: number }[];
+    const amounts = estimates.map((estimate) => estimate.amountCents ?? 0).filter((amount) => amount > 0);
+    if (amounts.length > 0) market = Math.min(...amounts);
+  } catch {
+    market = null;
+  }
+
+  return proofOfPurchaseFor(rules, market);
+}
+
+function money(cents: number): string {
+  return `N$${(cents / 100).toLocaleString('en-NA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}

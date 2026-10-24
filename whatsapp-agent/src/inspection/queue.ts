@@ -32,6 +32,9 @@ import { can } from '../staff/access.ts';
 export type JobStatus = 'open' | 'claimed' | 'submitted' | 'cancelled';
 export type CheckAnswer = 'pass' | 'fail' | 'na';
 
+/** The same three values at runtime, where the type is no longer present. */
+const ANSWERS: readonly CheckAnswer[] = ['pass', 'fail', 'na'];
+
 export interface CheckResult {
   checkId: string;
   /** The check as written in the documents, kept so the record reads alone. */
@@ -184,7 +187,61 @@ export class InspectionQueue {
   /** Saves progress without finishing. A long inspection survives a dropped phone. */
   record(jobId: string, user: User, results: CheckResult[]): void {
     const job = this.#claimedBy(jobId, user);
-    this.#store.db.prepare('UPDATE inspection_jobs SET results = ? WHERE id = ?').run(JSON.stringify(results), job.id);
+    const clean = this.#validate(job.id, results);
+    this.#store.db.prepare('UPDATE inspection_jobs SET results = ? WHERE id = ?').run(JSON.stringify(clean), job.id);
+  }
+
+  /**
+   * Checks the answers are actually answers, before anything is written.
+   *
+   * `CheckAnswer` is `'pass' | 'fail' | 'na'`, and until now that was the only
+   * thing enforcing it — which is worth nothing, because these values arrive
+   * from an HTML form at runtime and TypeScript is gone by then.
+   *
+   * Codex's twenty-scenario audit, scenario 18: it submitted every check with
+   * the answer `approved-by-client` and got `status=submitted; outcome=pass`.
+   * The completeness check asked only whether the field was truthy, and the
+   * outcome was "fail if any answer is the exact string fail" — so an invalid
+   * answer satisfied both and a worksheet nobody had really filled in came
+   * out of the far end marked as passed.
+   *
+   * Enforced here, in the domain layer, rather than in the page: a second
+   * caller — the page that is still to be built, a repair script, a future
+   * import — must not be able to get past it by not knowing the rule.
+   */
+  #validate(jobId: string, results: CheckResult[]): CheckResult[] {
+    const known = new Map(this.worksheet(jobId).map((line) => [line.checkId, line.text]));
+    const seen = new Set<string>();
+    const clean: CheckResult[] = [];
+
+    for (const result of results) {
+      if (!known.has(result.checkId)) {
+        throw new InspectionError(`There is no check "${result.checkId}" on this worksheet.`);
+      }
+      if (seen.has(result.checkId)) {
+        // Two answers for one check is not something a person does by hand;
+        // it is a form posted twice or a script, and silently keeping one of
+        // them would decide which at random.
+        throw new InspectionError(`Check "${known.get(result.checkId)}" was answered twice.`);
+      }
+      if (!ANSWERS.includes(result.answer)) {
+        throw new InspectionError(
+          `"${String(result.answer)}" is not an answer. Every check is pass, fail or n/a.`,
+        );
+      }
+
+      seen.add(result.checkId);
+      // The text is taken from the worksheet, never from the caller: a report
+      // Lukas reads must say what was actually checked.
+      clean.push({
+        checkId: result.checkId,
+        text: known.get(result.checkId)!,
+        answer: result.answer,
+        note: typeof result.note === 'string' ? result.note : '',
+      });
+    }
+
+    return clean;
   }
 
   /**
@@ -197,8 +254,12 @@ export class InspectionQueue {
   submit(input: { jobId: string; user: User; results: CheckResult[]; findings: string }): Job {
     const job = this.#claimedBy(input.jobId, input.user);
 
+    // Validated first, so an invalid answer cannot satisfy the completeness
+    // check on its way to being counted as a pass.
+    const results = this.#validate(job.id, input.results);
+
     const required = this.worksheet(job.id);
-    const answered = new Map(input.results.map((result) => [result.checkId, result]));
+    const answered = new Map(results.map((result) => [result.checkId, result]));
     const missing = required.filter((line) => !answered.get(line.checkId)?.answer);
     if (missing.length > 0) {
       throw new InspectionError(
@@ -212,19 +273,19 @@ export class InspectionQueue {
 
     // Any failed check fails the inspection. Lukas can still choose to take the
     // item; what he cannot do is not be told.
-    const outcome = input.results.some((result) => result.answer === 'fail') ? 'fail' : 'pass';
+    const outcome = results.some((result) => result.answer === 'fail') ? 'fail' : 'pass';
     const at = new Date().toISOString();
 
     this.#store.db
       .prepare("UPDATE inspection_jobs SET status = 'submitted', results = ?, findings = ?, outcome = ?, submitted_at = ? WHERE id = ?")
-      .run(JSON.stringify(input.results), input.findings.trim(), outcome, at, job.id);
+      .run(JSON.stringify(results), input.findings.trim(), outcome, at, job.id);
 
     // Also recorded against the item, where the rest of its history lives.
     this.#store.saveInspection({
       itemId: job.itemId,
       stage: 'in-person',
-      results: input.results,
-      outstanding: input.results.filter((result) => result.answer === 'fail').map((result) => result.text),
+      results,
+      outstanding: results.filter((result) => result.answer === 'fail').map((result) => result.text),
       complete: true,
       recordedBy: input.user.id,
     });
@@ -234,7 +295,7 @@ export class InspectionQueue {
       action: 'inspection.submitted',
       entity: 'inspection_job',
       entityId: job.id,
-      details: { outcome, failed: input.results.filter((result) => result.answer === 'fail').length },
+      details: { outcome, failed: results.filter((result) => result.answer === 'fail').length },
     });
 
     return this.job(job.id)!;

@@ -10,7 +10,7 @@
 
 import { formatAmount, parseAmount } from '../money.ts';
 import { referenceFor } from '../reference.ts';
-import { describeRequirements, outstandingIds } from '../requirements.ts';
+import { describeRequirements, outstandingIds, proofOfPurchaseFor } from '../requirements.ts';
 import type { Rules } from '../playbook/index.ts';
 import type { Approval, Store, User } from '../store/index.ts';
 import type { IntakeSubmission } from '../intake/agent.ts';
@@ -405,6 +405,12 @@ function isAmount(token: string): boolean {
   return /^\d+$/.test(token);
 }
 
+/** Section 3 takes the lowest estimate everywhere; so does the section 5 line. */
+function lowestEstimate(valuation: Valuation | null): number | null {
+  const amounts = (valuation?.estimates ?? []).map((estimate) => estimate.amountCents).filter((amount) => amount > 0);
+  return amounts.length > 0 ? Math.min(...amounts) : null;
+}
+
 /** The message Lukas actually receives on WhatsApp. */
 export function composeApprovalMessage(
   submission: IntakeSubmission,
@@ -455,6 +461,19 @@ export function composeApprovalMessage(
     lines.push('');
     lines.push('*Still missing:*');
     for (const question of missing) lines.push(`  • ${shorten(question.ask)}`);
+  }
+
+  // Playbook section 5: above the threshold a declaration is not enough.
+  //
+  // Nothing here can read a photograph, so a receipt and a handwritten
+  // declaration are indistinguishable to the system — this tells the one
+  // person who can look, with the valuation in front of him. The threshold was
+  // parsed out of the document and acted on nowhere until now.
+  const proof = proofOfPurchaseFor(rules, lowestEstimate(valuation));
+  if (proof.instruction) {
+    lines.push('');
+    lines.push('*⚠️ Check the paperwork yourself on this one:*');
+    lines.push(`  ${proof.instruction}`);
   }
 
   if (plan.inPersonChecks.length > 0) {

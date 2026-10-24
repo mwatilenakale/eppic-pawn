@@ -10,7 +10,7 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadRules } from '../src/playbook/index.ts';
 import { Store, type User } from '../src/store/index.ts';
-import { InspectionQueue, InspectionError, type CheckResult } from '../src/inspection/queue.ts';
+import { InspectionQueue, InspectionError, type CheckAnswer, type CheckResult } from '../src/inspection/queue.ts';
 
 const rules = loadRules();
 
@@ -287,5 +287,112 @@ describe('the inspector is never shown the money', () => {
     assert.match(everything, /Aina/, 'enough to greet the person at the counter');
     assert.doesNotMatch(everything, /Shipanga/, 'but not their full identity');
     assert.doesNotMatch(everything, /\+264811234567/);
+  });
+});
+
+/**
+ * Answers that are not answers.
+ *
+ * Codex's twenty-scenario audit, scenario 18. `CheckAnswer` is
+ * `'pass' | 'fail' | 'na'`, and the type was the only thing enforcing it —
+ * which is worth nothing, because these values arrive from an HTML form at
+ * runtime. The audit submitted every check as `approved-by-client` and got
+ * `status=submitted; outcome=pass`: the completeness check asked only whether
+ * the field was truthy, and the outcome was "fail if any answer is exactly
+ * fail", so an invalid answer satisfied both.
+ */
+describe('an invalid answer is not a pass', () => {
+  const bogus = (jobId: string, answer: string): CheckResult[] =>
+    queue.worksheet(jobId).map((line) => ({
+      checkId: line.checkId,
+      text: line.text,
+      answer: answer as CheckAnswer,
+      note: '',
+    }));
+
+  test('the exact exploit from the audit is refused', () => {
+    const job = queue.open({ itemId, actor: lukas.id });
+    queue.claim(job.id, staff);
+
+    assert.throws(
+      () => queue.submit({ jobId: job.id, user: staff, results: bogus(job.id, 'approved-by-client'), findings: 'fine' }),
+      /not an answer/i,
+    );
+
+    const after = queue.job(job.id)!;
+    assert.equal(after.status, 'claimed', 'nothing was submitted');
+    assert.equal(after.outcome, null, 'and nothing was marked as passed');
+  });
+
+  test('nor any other truthy string', () => {
+    const job = queue.open({ itemId, actor: lukas.id });
+    queue.claim(job.id, staff);
+
+    for (const answer of ['passed', 'PASS', 'ok', 'yes', 'true', '1', ' pass', 'n/a']) {
+      assert.throws(
+        () => queue.submit({ jobId: job.id, user: staff, results: bogus(job.id, answer), findings: 'fine' }),
+        /not an answer/i,
+        `"${answer}" was accepted`,
+      );
+    }
+  });
+
+  test('saving progress is guarded too, not just submitting', () => {
+    // The domain layer is the guard, so a second caller cannot get past it by
+    // not knowing the rule — including the worksheet page still to be built.
+    const job = queue.open({ itemId, actor: lukas.id });
+    queue.claim(job.id, staff);
+
+    assert.throws(() => queue.record(job.id, staff, bogus(job.id, 'approved-by-client')), /not an answer/i);
+    assert.equal(queue.worksheet(job.id)[0]!.answer, null, 'nothing was written');
+  });
+
+  test('a check that is not on the worksheet is refused', () => {
+    const job = queue.open({ itemId, actor: lukas.id });
+    queue.claim(job.id, staff);
+
+    assert.throws(
+      () => queue.submit({
+        jobId: job.id, user: staff, findings: 'fine',
+        results: [...answerAll(job.id), { checkId: 'invented-1', text: 'Something I made up', answer: 'pass', note: '' }],
+      }),
+      /no check "invented-1"/i,
+    );
+  });
+
+  test('answering the same check twice is refused', () => {
+    const job = queue.open({ itemId, actor: lukas.id });
+    queue.claim(job.id, staff);
+
+    const results = answerAll(job.id);
+    assert.throws(
+      () => queue.submit({ jobId: job.id, user: staff, results: [...results, results[0]!], findings: 'fine' }),
+      /answered twice/i,
+    );
+  });
+
+  test('the recorded text comes from the worksheet, not from the caller', () => {
+    const job = queue.open({ itemId, actor: lukas.id });
+    queue.claim(job.id, staff);
+
+    // A report Lukas reads must say what was actually checked, whatever the
+    // caller claims it checked.
+    const lied = answerAll(job.id).map((result) => ({ ...result, text: 'Everything was fine, honestly' }));
+    queue.submit({ jobId: job.id, user: staff, results: lied, findings: 'All good.' });
+
+    const sheet = queue.worksheet(job.id);
+    assert.doesNotMatch(sheet.map((line) => line.text).join(' '), /honestly/);
+    assert.match(sheet.map((line) => line.text).join(' | '), /reset in front of staff/i);
+  });
+
+  test('a valid sheet still goes through', () => {
+    const job = queue.open({ itemId, actor: lukas.id });
+    queue.claim(job.id, staff);
+
+    const done = queue.submit({
+      jobId: job.id, user: staff, results: answerAll(job.id, 'na'), findings: 'No box to cross-check against.',
+    });
+    assert.equal(done.status, 'submitted');
+    assert.equal(done.outcome, 'pass');
   });
 });
