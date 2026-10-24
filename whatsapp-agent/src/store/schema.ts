@@ -1,4 +1,3 @@
-/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 /**
  * Schema for step 1, trimmed to the MVP tables in architecture section 3.
  * The fuller list (commissions, storage_locations, buyers, disputes) is

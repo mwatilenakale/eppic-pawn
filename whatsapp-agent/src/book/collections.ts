@@ -1,4 +1,3 @@
-/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 /** Callable only. Task 008 supplies scheduling; construction/read methods send nothing. */
 import type { Rules } from '../playbook/index.ts';
 import type { Loan, Store } from '../store/index.ts';

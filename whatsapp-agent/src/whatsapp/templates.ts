@@ -1,4 +1,3 @@
-/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 /** Deployment identifiers, not business rules. Draft bodies: docs/message-templates.md. */
 export const TEMPLATES = {
   outcome: { name: 'eppic_outcome_v1', language: 'en', parameters: ['update'] },

@@ -1,4 +1,3 @@
-/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 # WhatsApp template drafts and task 004 handoff
 
 **DRAFT — Lukas has not approved this wording. Nothing was submitted to Meta.**

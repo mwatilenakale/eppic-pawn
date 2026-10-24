@@ -1,4 +1,3 @@
-/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 /**
  * Routes an inbound WhatsApp message to the right half of the system: the
  * intake conversation for customers, the approval workflow for Lukas.
