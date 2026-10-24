@@ -1,6 +1,6 @@
 # 004 — 24-hour message templates
 
-**Status:** OPEN — scope defined 25 October 2026, ready to claim.
+**Status:** CLAIMED — Codex, 2026-10-25 (scope clarification required).
 **This is the one blocking real money.**
 
 **You may change:** `whatsapp-agent/src/whatsapp/transport.ts`;
