@@ -197,6 +197,15 @@ describe('the website and the contract', () => {
 
     for (const [index, page] of pages.entries()) assertUnnamed(page, `website page ${index}`);
     assert.match(pages.join('\n'), /the manager/i, 'and the role does appear');
+
+    // A role still called "he" is not anonymised. On a one-man shop the
+    // pronoun tells a customer exactly as much as the name did — and the
+    // no-quote card said "he will come back to you himself" for three days
+    // after I claimed the pronouns had gone with the name.
+    for (const [index, page] of pages.entries()) {
+      const prose = page.replace(/<[^>]+>/g, ' ');
+      assert.doesNotMatch(prose, /\bhe will\b|\bhe has\b|\bhe checks\b|\bhimself\b/i, `website page ${index} says "he"`);
+    }
   });
 
   test('nor the contract pages a customer is sent to', async () => {
