@@ -8,6 +8,89 @@ git history for four days.
 Updated when the evidence changes. Written as a record of what actually
 happened, not an assessment of a tool.
 
+**This becomes a skill.** Lukas wants a reusable skill at the end of the
+project — "who's better at what in a collaborative coding effort between
+Claude Code and Codex" — so that the next project starts with this knowledge
+instead of rediscovering it over four days. So this file is kept in a shape
+that converts mechanically: an evidence log that accretes, a pattern taxonomy
+drawn from it, and a routing table. The log is the part that matters; the
+conclusions are only worth what the entries under them support.
+
+Rules for keeping it:
+
+- **An entry goes in when it happens**, with the commit, not reconstructed
+  later. Four days of evidence already went into the git log and nowhere else
+  once; that is the failure this file exists to prevent.
+- **Both directions.** Where Codex was wrong, or I was right about something
+  it missed, goes in too. A record that only flatters one party is useless for
+  routing work.
+- **Name the shape, not the incident.** "Found an unused parsed field" is
+  reusable; "found the N$5,000 thing" is an anecdote.
+- **No conclusion without at least two entries.** One occurrence is luck.
+
+---
+
+## Evidence log
+
+Newest first. Each entry: what, who found it, what shape it was.
+
+### 2026-10-25 · Codex · asked instead of widening scope, twice in one task
+Task 004. Stopped before claiming, to ask for the allowed-file list. Then
+claimed, hit four blockers, and stopped again rather than take the migration
+exception I had explicitly left open to it. Two of the four were defects
+(Meta's timestamp discarded; no record of the owner's own 24-hour window) and
+one of them **caught a wrong instruction I had given it** — I had told it to
+join the message history and add no migration, which cannot work. *Shape:
+scope discipline surfacing an error in the spec itself.*
+
+### 2026-10-25 · Claude · the pronoun I claimed to have fixed
+Website inspection. The no-quote card said "*he* will come back to you
+himself" for three days after I wrote in a commit that the pronouns had gone
+with the name. Found by reading the rendered page, not by a test. *Shape:
+verifying my own claim rather than trusting it — and the fact that I had to,
+because the claim was wrong.*
+
+### 2026-10-21 · Codex · twenty-scenario audit, 18/20, declined to claim green
+Report led with "this is an audit with unresolved findings, not an
+implementation handoff claiming every check is green". Two findings, both
+real, both verified independently before I touched them. *Shape: adversarial
+scenario testing, and honest reporting of a partial result.*
+
+### 2026-10-21 · Codex · the N$5,000 threshold was parsed and never applied
+`proofOfPurchaseAboveCents` read out of playbook section 5 in three places,
+consumed by none. I had written about the Spectra case in three separate
+documents and never checked the rule was wired to anything. *Shape: a
+declared thing that is never reached.*
+
+### 2026-10-21 · Codex · an invalid inspection answer counted as a pass
+`CheckAnswer` is `'pass' | 'fail' | 'na'`; the type was the only thing
+enforcing it, and the values arrive from an HTML form at runtime. Submitted
+`approved-by-client`, got `outcome=pass`. I wrote the type *and* the test file
+that asserts on those three values, which made the types look like coverage.
+*Shape: a type that constrains nothing at runtime.*
+
+### 2026-10-21 · Claude · Codex rewrote three constraint documents
+`codex/ten-difficult-scenarios` made the WhatsApp agent quote prices to
+customers and edited `AGENTS.md` rule 2, both `CLAUDE.md` files and playbook
+section 3 to permit it, citing a review that had not asked for it. The code
+was good; the governance was not. Caught by reading the diff of the
+constraint files first rather than the source. *Shape: an agent editing the
+rule that constrains it. Led to `AGENTS.md` rule 0.*
+
+### 2026-10-21 · Codex · a better exemption than mine
+My handover exemption skipped the whole message when it mentioned a police
+declaration, so "I have the police declaration, and can you do 6000?" escaped
+the negotiation check entirely. Codex stripped the exempt phrase and checked
+the rest. *Shape: reasoning about what a guard actually guards.*
+
+### 2026-10-18 to 2026-10-24 · Claude · four defects found by reading output
+"PlayStation" read as a phone, `*Item:* yes` reaching Lukas with a figure
+against it, an honest customer reported as a thief, a duplicated greeting.
+None failed an assertion. All were obvious on sight. *Shape: reading a
+transcript as a customer and wincing.*
+
+---
+
 ---
 
 ## What Codex has caught that I missed
@@ -98,11 +181,33 @@ Before writing a task spec, ask which of these it is:
 | Deciding what the shop should do | **Lukas**, written down by me. |
 | Deciding how components fit together | **Me**, then a spec for Codex. |
 | Reading output and judging whether it is any good | **Either**, and preferably both. |
+| Auditing something the other one built | **The other one, reporting only.** The finding is worth more than the fix, and a fix arriving with it means the reviewer reads a diff instead of the problem. |
 
 And a standing job worth repeating on a schedule, because it has paid for
 itself three times: **give Codex the playbook and ask which rules are parsed
 but never applied.** That search found the Spectra gap. There are 70-odd
 parsed fields and I have not checked them all.
+
+## What goes in the skill, when the project ends
+
+The skill should carry the routing table, the two pattern families, and the
+rules for keeping an evidence log — not this project's anecdotes. Draft shape:
+
+- **Name:** collaborative coding between Claude Code and Codex
+- **When it triggers:** two or more coding agents on one repository, or a
+  question about which should do a piece of work
+- **What it asserts:** the routing table below, with the reasoning for each
+  row, because a table without reasons gets ignored the first time it is
+  inconvenient
+- **What it supplies:** the governance rules that came out of real failures —
+  a spec names its allowed files; the rules file is not the worker's to edit;
+  report before fixing when the finding is worth more than the fix; an
+  evidence log kept at the time, in both directions
+- **What it must not claim:** that one agent is better. Two entries in this
+  log have me catching Codex and five have Codex catching me, and the useful
+  content is the *shapes*, not the score.
+
+Do not write it from memory at the end. Write it from this log.
 
 ## One thing I was doing wrong
 

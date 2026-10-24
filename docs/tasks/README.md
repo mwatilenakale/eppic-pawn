@@ -79,3 +79,5 @@ What you must not change without asking, ever:
 | [005 — extending a loan by a month](005-extend-a-loan.md) | DONE |
 | [006 — taking the money back](006-repayment.md) | DONE |
 | [007 — twenty scenarios, both channels](007-twenty-scenarios.md) | DONE — 20/20 |
+| [008 — the collections scheduler](008-collections-scheduler.md) | Claude's, after 004 |
+| [009 — audit the website, report only](009-website-audit.md) | OPEN — for Codex |
