@@ -1,3 +1,4 @@
+/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 /**
  * What is actually happening today.
  *
@@ -20,6 +21,7 @@ import type { Store } from '../store/index.ts';
 import { Book, type BookSummary, type LoanLine } from '../book/index.ts';
 import { outstandingFor } from '../requirements.ts';
 import { referenceFor } from '../reference.ts';
+import { Collections } from '../book/collections.ts';
 
 /** An application somewhere between "hello" and money changing hands. */
 export interface DealLine {
@@ -76,6 +78,7 @@ export interface Today {
 }
 
 export interface Dashboard {
+  collectionNotices: { reminders: number; final: number; missedFinal: number; needsReview: number };
   today: Today;
 
   /** Applications waiting on Lukas's yes or no. The first thing he wants. */
@@ -132,7 +135,9 @@ export class DashboardQuery {
   }
 
   read(): Dashboard {
+    const collections = new Collections(this.#store, this.#rules, null, { clock: this.#now });
     return {
+      collectionNotices: { reminders: collections.reminders().length, final: collections.finalNotices().length, missedFinal: collections.missedFinalNotices().length, needsReview: this.#store.collectionNoticesNeedingReview() },
       today: this.#today(),
       awaitingDecision: this.#awaitingDecision(),
       awaitingCategoryAnswer: this.#categoryQuestions(),
@@ -322,5 +327,6 @@ export class DashboardQuery {
 function isComplete(line: DealLine): boolean {
   return line.missingDocuments.length === 0 && line.unansweredQuestions === 0;
 }
+
 
 

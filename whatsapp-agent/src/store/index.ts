@@ -1,3 +1,4 @@
+/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 /**
  * Storage for step 1. SQLite via `node:sqlite` — a real database from the
  * start, per the component brief's third open question, but a single file
@@ -588,7 +589,62 @@ export class Store {
    * Records an inbound message. Returns null when WhatsApp redelivers a
    * message we already handled, so retries never double-run the intake step.
    */
-  recordInbound(message: { conversationId: string; providerMessageId?: string | null; body?: string; mediaId?: string | null }): string | null {
+  // --- Meta's 24-hour window (migration 14) --------------------------------
+
+  /**
+   * Notes that this number messaged us, and when.
+   *
+   * Called for **every** inbound message from every number — customer, owner
+   * and staff alike — because the shop's number sending to any of them is
+   * subject to the same 24-hour rule, and the approval request to Lukas is the
+   * message this whole project depends on.
+   *
+   * `at` is Meta's own send time when we have it. Only ever moves forward: a
+   * webhook redelivered out of order must not wind somebody's window back.
+   */
+  noteInbound(phone: string, at?: string | null): void {
+    const tail = phone.replace(/\D/g, '').slice(-9);
+    if (tail.length < 9) return;
+
+    const source = at ? 'meta' : 'received';
+    const when = at ?? this.#now();
+
+    this.db
+      .prepare(
+        'INSERT INTO inbound_windows (phone, last_inbound_at, source, updated_at) VALUES (?, ?, ?, ?)' +
+          ' ON CONFLICT(phone) DO UPDATE SET' +
+          '   last_inbound_at = CASE WHEN excluded.last_inbound_at > last_inbound_at THEN excluded.last_inbound_at ELSE last_inbound_at END,' +
+          '   source = CASE WHEN excluded.last_inbound_at > last_inbound_at THEN excluded.source ELSE source END,' +
+          '   updated_at = excluded.updated_at',
+      )
+      .run(tail, when, source, this.#now());
+  }
+
+  /**
+   * When this number last messaged us, or null if we have never heard from
+   * them — which a caller must read as "the window is shut", not as "no
+   * restriction". Guessing the window is open costs a message nobody
+   * receives; guessing it is shut costs the price of a template.
+   */
+  lastInboundAt(phone: string): { at: string; source: 'meta' | 'received' } | null {
+    const tail = phone.replace(/\D/g, '').slice(-9);
+    if (tail.length < 9) return null;
+
+    const row = this.db
+      .prepare('SELECT last_inbound_at, source FROM inbound_windows WHERE phone = ?')
+      .get(tail) as { last_inbound_at: string; source: 'meta' | 'received' } | undefined;
+
+    return row ? { at: row.last_inbound_at, source: row.source } : null;
+  }
+
+  recordInbound(message: {
+    conversationId: string;
+    providerMessageId?: string | null;
+    body?: string;
+    mediaId?: string | null;
+    /** Meta's own send time, where the webhook gave us one. */
+    at?: string | null;
+  }): string | null {
     if (message.providerMessageId) {
       const seen = this.db
         .prepare('SELECT id FROM messages WHERE provider_message_id = ?')
@@ -599,7 +655,17 @@ export class Store {
     const id = randomUUID();
     this.db
       .prepare("INSERT INTO messages (id, conversation_id, direction, provider_message_id, body, media_id, created_at) VALUES (?, ?, 'in', ?, ?, ?, ?)")
-      .run(id, message.conversationId, message.providerMessageId ?? null, message.body ?? '', message.mediaId ?? null, this.#now());
+      .run(
+        id,
+        message.conversationId,
+        message.providerMessageId ?? null,
+        message.body ?? '',
+        message.mediaId ?? null,
+        // Meta's send time where we have it. Using our receipt time instead
+        // made a webhook delivered after an outage look freshly arrived, which
+        // would reopen a 24-hour window that had closed days earlier.
+        message.at ?? this.#now(),
+      );
     return id;
   }
 
@@ -1280,6 +1346,27 @@ export class Store {
 
   // --- contracts ---------------------------------------------------------
 
+  /** Claim once per loan and kind, atomically, before any network request. */
+  reserveCollectionNotice(loanId: string, kind: 'reminder' | 'final'): boolean {
+    const at = this.#now();
+    return Number(this.db.prepare("INSERT OR IGNORE INTO collection_notices (loan_id, kind, state, created_at, updated_at) VALUES (?, ?, 'sending', ?, ?)").run(loanId, kind, at, at).changes) === 1;
+  }
+
+  collectionNotice(loanId: string, kind: 'reminder' | 'final'): { state: 'sending' | 'accepted' | 'failed'; provider_message_id: string | null; error: string } | null {
+    return this.db.prepare('SELECT state, provider_message_id, error FROM collection_notices WHERE loan_id = ? AND kind = ?').get(loanId, kind) as { state: 'sending' | 'accepted' | 'failed'; provider_message_id: string | null; error: string } | undefined ?? null;
+  }
+
+  finishCollectionNotice(loanId: string, kind: 'reminder' | 'final', result: { providerMessageId: string } | { error: string }): void {
+    const accepted = 'providerMessageId' in result;
+    if (accepted && !result.providerMessageId) throw new Error('A notice needs a provider message ID');
+    this.db.prepare("UPDATE collection_notices SET state = ?, provider_message_id = ?, error = ?, updated_at = ? WHERE loan_id = ? AND kind = ? AND state = 'sending'")
+      .run(accepted ? 'accepted' : 'failed', accepted ? result.providerMessageId : null, accepted ? '' : result.error, this.#now(), loanId, kind);
+  }
+
+  collectionNoticesNeedingReview(): number {
+    return Number((this.db.prepare("SELECT COUNT(*) n FROM collection_notices WHERE state <> 'accepted'").get() as { n: number }).n);
+  }
+
   /** `EPP-2026-0007` — sequential within the year the contract is issued. */
   nextContractNumber(year: number): string {
     const row = this.db
@@ -1575,3 +1662,4 @@ function migrate(db: DatabaseSync): void {
     }
   }
 }
+

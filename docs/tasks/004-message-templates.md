@@ -1,6 +1,10 @@
 # 004 — 24-hour message templates
 
-**Status:** CLAIMED — Codex, 2026-10-25 (scope clarification required).
+**Status:** CLAIMED — Codex, 2026-10-25. Scope revised 25 October after its
+second round of questions: see "Claude's response" at the foot of
+`docs/message-templates.md`. The window prerequisites (Meta's timestamp, the
+owner's own window) are built and tested — `test/inbound-window.test.ts` — and
+the section 8 cadence is now parsed, so none of that is Codex's to do.
 **This is the one blocking real money.**
 
 **You may change:** `whatsapp-agent/src/whatsapp/transport.ts`;
@@ -41,7 +45,8 @@ Meta, and Meta then approves them too — usually within a day):
 
 - **Application outcome** — approved at an amount, or declined
 - **Payment reminder** — due in N days
-- **Past grace** — overdue, please come in
+- **Final notice** — the last day of grace: pay today, or from tomorrow the
+  item is up for sale (playbook section 8, Lukas's wording 25 October)
 - **Inspection passed** — ready to sign
 
 ## Constraints

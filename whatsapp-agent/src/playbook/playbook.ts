@@ -120,6 +120,25 @@ export interface Playbook {
      * extension to be allowed at all.
      */
     extensionCeilingPct: number;
+    /**
+     * Section 8 step 2: days before the due date a reminder goes out. One
+     * message, that many days out.
+     */
+    reminderDaysBeforeDue: number;
+    /**
+     * Section 8 step 2: a final notice on the last day of grace — "pay today,
+     * or from tomorrow the item is up for sale".
+     *
+     * On the last day rather than after it, because a warning the customer can
+     * still act on is worth something and one they cannot is just bad news.
+     */
+    finalNoticeOnLastGraceDay: boolean;
+    /**
+     * Whether the system keeps chasing once grace has gone. False: by then the
+     * customer has had a reminder and a final warning and there is nothing
+     * left to tell them.
+     */
+    chaseAfterGrace: boolean;
   };
   /** Documents the customer brings in (section 5). */
   requirements: string[];
@@ -445,7 +464,51 @@ function readCollections(path: string, block: string): Playbook['collections'] {
     );
   }
 
-  return { marginThresholdPct, extensionCeilingPct };
+  // Section 8 step 2, the outreach cadence. Lukas's decision, 25 October
+  // 2026; before that the document said "direct outreach" and never said when,
+  // which is a rule nobody should be inventing in a transport.
+  const reminderLine = block
+    .split('\n')
+    .map(plain)
+    .find((line) => /reminder before the due date/i.test(line));
+  const reminderDaysBeforeDue = reminderLine ? dayCount(reminderLine) : null;
+  if (reminderDaysBeforeDue === null) {
+    throw new PlaybookError(
+      path,
+      `section ${SECTIONS.collections} does not say how many days before the due date a reminder goes out`,
+    );
+  }
+
+  // The final warning, and the absence of chasing after it. Both read rather
+  // than assumed: "nothing after grace" is a decision, and somebody who later
+  // thinks more chasing is better should have to edit the document to get it.
+  const lines = block.split('\n').map(plain);
+  const finalNotice = lines.find((line) => /final notice/i.test(line) && /grace/i.test(line));
+  const afterGrace = lines.find((line) => /after grace runs out/i.test(line));
+
+  if (!finalNotice) {
+    throw new PlaybookError(
+      path,
+      `section ${SECTIONS.collections} does not say when the final notice goes out (expected a line like "Final notice on the last day of grace")`,
+    );
+  }
+  if (!afterGrace) {
+    throw new PlaybookError(path, `section ${SECTIONS.collections} does not say what happens after grace runs out`);
+  }
+
+  return {
+    marginThresholdPct,
+    extensionCeilingPct,
+    reminderDaysBeforeDue,
+    finalNoticeOnLastGraceDay: /last day of grace/i.test(finalNotice),
+    chaseAfterGrace: !/nothing after/i.test(afterGrace),
+  };
+}
+
+/** `Reminder before the due date: 3 days.` -> 3 */
+function dayCount(line: string): number | null {
+  const match = /(\d+)\s*days?/i.exec(line);
+  return match ? Number(match[1]) : null;
 }
 
 function readScreening(block: string): Map<string, ChecklistItem[]> {

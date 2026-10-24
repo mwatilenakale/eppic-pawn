@@ -310,7 +310,7 @@ function noQuoteCard(ownerLabel: string): string {
   return `<div class="card">
     <h2>${escapeHtml(capitalise(ownerLabel))} will work out your figure</h2>
     <p class="lead" style="margin-top:var(--space-3)">We could not price this one automatically — send it over on
-    WhatsApp with a photo and he will come back to you himself.</p>
+    WhatsApp with a photo and you will get a figure back.</p>
   </div>`;
 }
 

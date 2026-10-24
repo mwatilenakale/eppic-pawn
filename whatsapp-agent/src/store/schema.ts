@@ -1,3 +1,4 @@
+/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 /**
  * Schema for step 1, trimmed to the MVP tables in architecture section 3.
  * The fuller list (commissions, storage_locations, buyers, disputes) is
@@ -496,4 +497,58 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX market_observations_recent ON market_observations(category_slug, variant, observed_at);
   `,
+
+  // 14 — when each number last messaged us, for Meta's 24-hour window.
+  //
+  // WhatsApp only delivers a free-form message within 24 hours of the *user's*
+  // last message to the business. Outside it, only a pre-approved template
+  // arrives — and a free-form send does not fail loudly, it simply never
+  // reaches anybody. So the one thing the system must know before sending is
+  // when that number last spoke to us.
+  //
+  // One row per phone number rather than a query over `messages`, for three
+  // reasons found by asking:
+  //
+  //   1. The window belongs to the *number*, not a conversation. A customer
+  //      who has borrowed twice has two conversations, one of them closed, and
+  //      a new conversation opening does not reopen their window.
+  //   2. Lukas and the hire have no conversation at all. Their inbound
+  //      messages were recorded nowhere, so the system could not tell whether
+  //      the approval request — the message every decision in this project
+  //      depends on — would even be delivered.
+  //   3. It holds Meta's own send time, not ours. A webhook delivered after an
+  //      outage would otherwise look freshly received and open a window that
+  //      closed days ago.
+  //
+  // `last_inbound_at` is Meta's timestamp where we have it. A row that
+  // predates this table has none, and the absence is deliberately not filled
+  // in: unknown must read as "closed", because guessing "open" means a silent
+  // non-delivery, and guessing "closed" only costs a template.
+  `
+  CREATE TABLE inbound_windows (
+    phone           TEXT PRIMARY KEY,
+    last_inbound_at TEXT NOT NULL,
+    -- 'meta' when it is the platform's own send time, 'received' when all we
+    -- had was the moment the webhook reached us. A caller deciding whether to
+    -- risk a free-form send is entitled to know which.
+    source          TEXT NOT NULL CHECK (source IN ('meta', 'received')),
+    updated_at      TEXT NOT NULL
+  );
+  `,
+
+  // 15 — reserve before sending: no duplicate notice after a crash/restart.
+  // 'sending' after restart means unknown delivery, not permission to retry.
+  `
+  CREATE TABLE collection_notices (
+    loan_id TEXT NOT NULL REFERENCES loans(id),
+    kind TEXT NOT NULL CHECK (kind IN ('reminder', 'final')),
+    state TEXT NOT NULL CHECK (state IN ('sending', 'accepted', 'failed')),
+    provider_message_id TEXT,
+    error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (loan_id, kind)
+  );
+  `,
 ];
+

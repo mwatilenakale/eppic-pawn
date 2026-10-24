@@ -329,10 +329,14 @@ in, so in-person time is minimal.
      timer.
    - **Reminder before the due date: 3 days.** One message, three days out.
      Close enough that they have not forgotten, far enough to find the money.
-   - **After grace runs out: one message, then it is Lukas's.** The system
-     sends a single notice when grace ends and then stops. It does not chase
-     weekly and it does not chase daily. Who gets a phone call after that is
-     his decision about that person — a machine repeating itself is how a
+   - **Final notice on the last day of grace.** On the fourth day of grace —
+     the last one — the customer is told plainly: pay today, or from tomorrow
+     the item is up for sale. That is the whole message and it goes once.
+   - **Nothing after grace runs out.** No chasing, not weekly and not daily.
+     The customer has had a reminder and a final warning, both while they
+     could still do something about it; once grace is gone they have been told
+     everything there is to tell. Who gets a phone call after that is Lukas's
+     decision about that person, and a machine repeating itself is how a
      customer who would have paid decides not to come back.
 3. **Extension test (the 70% line).** A customer who has not settled within
    the repayment period and asks for another month: add the next month's

@@ -1,3 +1,4 @@
+/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 /**
  * Routes an inbound WhatsApp message to the right half of the system: the
  * intake conversation for customers, the approval workflow for Lukas.
@@ -30,9 +31,10 @@ import {
   renderCustomerChoices,
   type BookCommand,
 } from './book/index.ts';
-import { samePhone, type InboundEvent } from './whatsapp/webhook.ts';
+import { metaTimestampToIso, samePhone, type InboundEvent } from './whatsapp/webhook.ts';
 import { can } from './staff/access.ts';
-import type { WhatsAppTransport } from './whatsapp/transport.ts';
+import { WindowAwareTransport, type WhatsAppTransport, type OutboundMessage } from './whatsapp/transport.ts';
+import { Collections } from './book/collections.ts';
 import { QuoteService } from './valuator/quotes.ts';
 import type { EstimateInput } from './valuator/prompt.ts';
 
@@ -64,6 +66,8 @@ export interface RouterOptions {
 }
 
 export class AgentRouter {
+  /** Callable by the future scheduler; construction never starts a timer. */
+  readonly collections: Collections;
   readonly #store: Store;
   readonly #transport: WhatsAppTransport;
   readonly #intake: IntakeAgent;
@@ -87,7 +91,11 @@ export class AgentRouter {
 
   constructor(options: RouterOptions) {
     this.#store = options.store;
-    this.#transport = options.transport;
+    const onFailure = (message: OutboundMessage, error: Error) => this.#deliveryFailure(message, error);
+    this.#transport = new WindowAwareTransport(options.transport, {
+      lastInboundAt: (phone) => options.store.lastInboundAt(phone), clock: options.clock, onFailure,
+    });
+    this.collections = new Collections(options.store, options.rules, options.transport, { clock: options.clock, onFailure });
     this.#intake = new IntakeAgent(options.store, options.rules);
     this.#approvals = new ApprovalWorkflow(options.store, options.rules);
     this.#ownerPhone = options.ownerPhone;
@@ -125,6 +133,15 @@ export class AgentRouter {
 
   async handle(event: InboundEvent): Promise<void> {
     try {
+      // Meta's 24-hour window, for every number without exception.
+      //
+      // The shop sending to anybody — customer, hire, or Lukas himself — is
+      // subject to the same rule, and only an inbound message from them opens
+      // it. Recording this on the customer path alone meant the system could
+      // not tell whether the approval request would be delivered at all, and
+      // that is the message every decision in this project depends on.
+      this.#store.noteInbound(event.from, metaTimestampToIso(event.timestamp));
+
       if (samePhone(event.from, this.#ownerPhone)) {
         await this.#handleOwner(event);
         return;
@@ -168,6 +185,7 @@ export class AgentRouter {
     const outcome = this.#intake.handle(event.from, {
       text: event.text,
       providerMessageId: event.messageId,
+      at: metaTimestampToIso(event.timestamp),
       media: media ? { content: media.content, extension: media.extension } : undefined,
     });
 
@@ -302,6 +320,7 @@ export class AgentRouter {
         conversationId: conversation.id,
         providerMessageId: event.messageId,
         body: event.text ?? (event.mediaId ? '[photo]' : ''),
+        at: metaTimestampToIso(event.timestamp),
       });
       return true;
     }
@@ -312,6 +331,7 @@ export class AgentRouter {
       conversationId: conversation.id,
       providerMessageId: event.messageId,
       body: event.text ?? '',
+      at: metaTimestampToIso(event.timestamp),
     });
 
     const message = this.#desk.escalate(conversation, handover, customer!.name, event.from);
@@ -504,7 +524,7 @@ export class AgentRouter {
       this.#onError(error, { from: customerPhone, messageId: '', type: 'text' });
       await this.#safeSend(
         this.#ownerPhone,
-        'The offer went out, but the contract could not be generated. Check the agent logs before handover.',
+        'Agreement generation or delivery failed. Check the agent logs before handover; do not assume the signing link reached the customer.',
       );
     }
   }
@@ -536,6 +556,19 @@ export class AgentRouter {
       this.#onError(error, { from: to, messageId: '', type: 'text' });
     }
   }
+
+  async #deliveryFailure(message: OutboundMessage, error: Error): Promise<void> {
+    this.#onError(error, { from: message.to, messageId: '', type: 'text' });
+    // Report through the same window-aware path. Never recurse if the owner's
+    // own template is unavailable; that failure stays visible in server logs.
+    if (samePhone(message.to, this.#ownerPhone)) return;
+    try {
+      await this.#transport.sendText({ to: this.#ownerPhone,
+        body: `Message to ${message.to} was not confirmed. ${error.message} Check WhatsApp Manager and the logs before retrying; do not assume delivery.` });
+    } catch (notificationError) {
+      this.#onError(notificationError, { from: this.#ownerPhone, messageId: '', type: 'text' });
+    }
+  }
 }
 
 /**
@@ -557,3 +590,4 @@ function holdingLine(handover: Handover, owner: string): string {
   }
   return `Of course — I've asked ${owner} to pick this up with you directly. You'll get a reply here on this number.`;
 }
+

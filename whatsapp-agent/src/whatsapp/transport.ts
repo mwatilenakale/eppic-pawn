@@ -1,3 +1,4 @@
+/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 /**
  * Sending and receiving on WhatsApp.
  *
@@ -7,9 +8,14 @@
  * lead time (whatsapp-agent/CLAUDE.md, open question 1).
  */
 
+import { updateTemplate, type TemplateMessage } from './templates.ts';
+
 export interface OutboundMessage {
   to: string;
   body: string;
+  template?: TemplateMessage;
+  /** Collection notices must not retry a possibly accepted POST. */
+  singleAttempt?: boolean;
 }
 
 export interface DownloadedMedia {
@@ -20,6 +26,7 @@ export interface DownloadedMedia {
 
 export interface WhatsAppTransport {
   sendText(message: OutboundMessage): Promise<string>;
+  sendTemplate?(message: TemplateMessage): Promise<string>;
   downloadMedia(mediaId: string): Promise<DownloadedMedia>;
 }
 
@@ -58,7 +65,7 @@ export class CloudApiTransport implements WhatsAppTransport {
     };
   }
 
-  async sendText({ to, body }: OutboundMessage): Promise<string> {
+  async sendText({ to, body, singleAttempt }: OutboundMessage): Promise<string> {
     const { baseUrl, apiVersion, phoneNumberId, token } = this.#options;
     const response = await this.#withRetry(() =>
       this.#options.fetch(`${baseUrl}/${apiVersion}/${phoneNumberId}/messages`, {
@@ -71,7 +78,7 @@ export class CloudApiTransport implements WhatsAppTransport {
           type: 'text',
           text: { preview_url: false, body },
         }),
-      }),
+      }), singleAttempt ? 1 : this.#options.maxAttempts,
     );
 
     const payload = (await response.json()) as { messages?: { id: string }[] };
@@ -98,16 +105,38 @@ export class CloudApiTransport implements WhatsAppTransport {
     };
   }
 
-  async #withRetry(call: () => Promise<Response>): Promise<Response> {
+  async sendTemplate(message: TemplateMessage): Promise<string> {
+    if (!message.name || !message.language || message.parameters.some((value) => !value.trim())) {
+      throw new WhatsAppError('Missing template name, language or parameter');
+    }
+    const { baseUrl, apiVersion, phoneNumberId, token } = this.#options;
+    try {
+      const response = await this.#withRetry(() => this.#options.fetch(`${baseUrl}/${apiVersion}/${phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: message.to,
+          type: 'template', template: { name: message.name, language: { code: message.language },
+            components: [{ type: 'body', parameters: message.parameters.map((text) => ({ type: 'text', text })) }] } }),
+      }), 1);
+      const payload = await response.json() as { messages?: { id: string }[] };
+      const id = payload.messages?.[0]?.id;
+      if (!id) throw new WhatsAppError('Meta accepted no message ID; delivery is unconfirmed');
+      return id;
+    } catch (error) {
+      throw new WhatsAppError(`Template ${message.name} (${message.language}) could not be sent. Check that it exists, is approved and has the expected parameters. ${error instanceof Error ? error.message : 'Unknown failure'}`, error instanceof WhatsAppError ? error.status : 0);
+    }
+  }
+
+  async #withRetry(call: () => Promise<Response>, maxAttempts = this.#options.maxAttempts): Promise<Response> {
     let lastError: WhatsAppError | null = null;
 
-    for (let attempt = 1; attempt <= this.#options.maxAttempts; attempt += 1) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       let response: Response;
       try {
         response = await call();
       } catch (error) {
         lastError = new WhatsAppError(`WhatsApp request failed: ${(error as Error).message}`);
-        await delay(this.#options.retryDelayMs * attempt);
+        if (attempt < maxAttempts) await delay(this.#options.retryDelayMs * attempt);
         continue;
       }
 
@@ -117,7 +146,7 @@ export class CloudApiTransport implements WhatsAppTransport {
       lastError = new WhatsAppError(`WhatsApp returned ${response.status}: ${detail.slice(0, 300)}`, response.status);
       const retryable = response.status === 429 || response.status >= 500;
       if (!retryable) throw lastError;
-      await delay(this.#options.retryDelayMs * attempt);
+      if (attempt < maxAttempts) await delay(this.#options.retryDelayMs * attempt);
     }
 
     throw lastError ?? new WhatsAppError('WhatsApp request failed');
@@ -127,10 +156,17 @@ export class CloudApiTransport implements WhatsAppTransport {
 /** Records what would have been sent. Used by the simulator and the tests. */
 export class MemoryTransport implements WhatsAppTransport {
   readonly sent: OutboundMessage[] = [];
+  readonly templates: TemplateMessage[] = [];
   readonly media = new Map<string, DownloadedMedia>();
 
   async sendText(message: OutboundMessage): Promise<string> {
     this.sent.push(message);
+    return `local.${this.sent.length}`;
+  }
+
+  async sendTemplate(message: TemplateMessage): Promise<string> {
+    this.templates.push(message);
+    this.sent.push({ to: message.to, body: message.body, template: message });
     return `local.${this.sent.length}`;
   }
 
@@ -149,6 +185,52 @@ export class MemoryTransport implements WhatsAppTransport {
   }
 }
 
+/** Meta's customer-service window is 24 hours after the user's message.
+ * https://developers.facebook.com/docs/whatsapp/cloud-api/guides/send-messages
+ * Unknown, future or receipt-only timestamps never prove an open window.
+ */
+export const META_CUSTOMER_SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export class WindowAwareTransport implements WhatsAppTransport {
+  readonly #raw: WhatsAppTransport;
+  readonly #lastInbound: (phone: string) => { at: string; source: 'meta' | 'received' } | null;
+  readonly #clock: () => Date;
+  readonly #onFailure: (message: OutboundMessage, error: Error) => void | Promise<void>;
+
+  constructor(raw: WhatsAppTransport, options: {
+    lastInboundAt: (phone: string) => { at: string; source: 'meta' | 'received' } | null;
+    clock?: () => Date;
+    onFailure?: (message: OutboundMessage, error: Error) => void | Promise<void>;
+  }) {
+    this.#raw = raw; this.#lastInbound = options.lastInboundAt;
+    this.#clock = options.clock ?? (() => new Date());
+    this.#onFailure = options.onFailure ?? ((message, error) => console.error(`[whatsapp] Send to ${message.to} failed`, error));
+  }
+
+  async sendText(message: OutboundMessage): Promise<string> {
+    try {
+      const inbound = this.#lastInbound(message.to);
+      const age = inbound ? this.#clock().getTime() - Date.parse(inbound.at) : NaN;
+      let id: string;
+      if (inbound?.source === 'meta' && age >= 0 && age < META_CUSTOMER_SERVICE_WINDOW_MS) {
+        id = await this.#raw.sendText(message);
+      } else {
+        if (!this.#raw.sendTemplate) throw new WhatsAppError('No template-capable transport; message not sent');
+        if (message.template && message.template.to !== message.to) throw new WhatsAppError('Template recipient does not match the message');
+        id = await this.#raw.sendTemplate(message.template ?? updateTemplate(message.to, message.body));
+      }
+      if (!id) throw new WhatsAppError('No provider message ID; message delivery is unconfirmed');
+      return id;
+    } catch (cause) {
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+      await this.#onFailure(message, error);
+      throw error;
+    }
+  }
+
+  downloadMedia(mediaId: string): Promise<DownloadedMedia> { return this.#raw.downloadMedia(mediaId); }
+}
+
 function extensionFor(mimeType: string | undefined): string {
   const known: Record<string, string> = {
     'image/jpeg': 'jpg',
@@ -163,3 +245,4 @@ function extensionFor(mimeType: string | undefined): string {
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
