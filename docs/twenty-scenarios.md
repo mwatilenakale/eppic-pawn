@@ -1,6 +1,20 @@
+> **Both findings fixed by Claude, 24 October 2026, and this audit now
+> passes 20/20 unchanged** — the audit script was not edited, so the result is
+> the same test that failed before. Scenario 18's own diagnostic now prints
+> `invalid answer rejected=true; status=claimed; outcome=null`.
+>
+> 13: the threshold is applied on the website and in the owner's review
+> (`src/requirements.ts`, `proofOfPurchaseFor`); there is deliberately no
+> automatic check, because nothing here can read a photograph.
+> 18: answers are validated at the queue boundary in `record` and `submit`
+> (`src/inspection/queue.ts`, `#validate`).
+>
+> Regression tests: `test/proof-of-purchase.test.ts`,
+> `test/inspection.test.ts` ("an invalid answer is not a pass").
+
 # Twenty-scenario adversarial audit — 21 October 2026
 
-Result: **18 passed, 2 failed.** This is an audit with unresolved findings,
+Result at the time of the audit: **18 passed, 2 failed.** This is an audit with unresolved findings,
 not an implementation handoff claiming every check is green.
 
 Audited Claude branch: `claude/pawnshop-system-iterative-nq35b0`, pinned at

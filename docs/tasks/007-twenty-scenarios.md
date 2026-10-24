@@ -1,6 +1,8 @@
 # 007 — Twenty scenarios, both channels, end to end
 
-**Status:** OPEN
+**Status:** DONE — Codex ran the audit 21 October 2026 (`audits/twenty-scenarios.ts`,
+`docs/twenty-scenarios.md`), reporting 18/20 with two findings. Claude fixed both
+on 24 October; the unedited audit now passes 20/20.
 **Depends on:** 006 (repayment). Scenarios 14–17 cannot be written until a
 loan can be paid.
 **You may change:** `test/` only, plus `docs/twenty-scenarios.md` for the

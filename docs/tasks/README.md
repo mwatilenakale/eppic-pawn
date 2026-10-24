@@ -70,4 +70,4 @@ What you must not change without asking, ever:
 | [004 — 24-hour message templates](004-message-templates.md) | OPEN |
 | [005 — extending a loan by a month](005-extend-a-loan.md) | DONE |
 | [006 — taking the money back](006-repayment.md) | DONE |
-| [007 — twenty scenarios, both channels](007-twenty-scenarios.md) | OPEN — unblocked |
+| [007 — twenty scenarios, both channels](007-twenty-scenarios.md) | DONE — 20/20 |
