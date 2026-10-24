@@ -45,7 +45,8 @@ Meta, and Meta then approves them too — usually within a day):
 
 - **Application outcome** — approved at an amount, or declined
 - **Payment reminder** — due in N days
-- **Past grace** — overdue, please come in
+- **Final notice** — the last day of grace: pay today, or from tomorrow the
+  item is up for sale (playbook section 8, Lukas's wording 25 October)
 - **Inspection passed** — ready to sign
 
 ## Constraints

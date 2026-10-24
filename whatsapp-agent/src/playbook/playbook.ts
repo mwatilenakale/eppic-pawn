@@ -126,9 +126,17 @@ export interface Playbook {
      */
     reminderDaysBeforeDue: number;
     /**
-     * Section 8 step 2: whether the system keeps chasing after grace ends.
-     * False means one notice and then it stops — who gets a phone call after
-     * that is Lukas's decision about that person.
+     * Section 8 step 2: a final notice on the last day of grace — "pay today,
+     * or from tomorrow the item is up for sale".
+     *
+     * On the last day rather than after it, because a warning the customer can
+     * still act on is worth something and one they cannot is just bad news.
+     */
+    finalNoticeOnLastGraceDay: boolean;
+    /**
+     * Whether the system keeps chasing once grace has gone. False: by then the
+     * customer has had a reminder and a final warning and there is nothing
+     * left to tell them.
      */
     chaseAfterGrace: boolean;
   };
@@ -471,21 +479,30 @@ function readCollections(path: string, block: string): Playbook['collections'] {
     );
   }
 
-  // "one message, then it is Lukas's" — the absence of chasing is the rule,
-  // so it is read rather than assumed.
-  const afterGrace = block
-    .split('\n')
-    .map(plain)
-    .find((line) => /after grace runs out/i.test(line));
-  if (!afterGrace) {
+  // The final warning, and the absence of chasing after it. Both read rather
+  // than assumed: "nothing after grace" is a decision, and somebody who later
+  // thinks more chasing is better should have to edit the document to get it.
+  const lines = block.split('\n').map(plain);
+  const finalNotice = lines.find((line) => /final notice/i.test(line) && /grace/i.test(line));
+  const afterGrace = lines.find((line) => /after grace runs out/i.test(line));
+
+  if (!finalNotice) {
     throw new PlaybookError(
       path,
-      `section ${SECTIONS.collections} does not say what happens after grace runs out`,
+      `section ${SECTIONS.collections} does not say when the final notice goes out (expected a line like "Final notice on the last day of grace")`,
     );
   }
-  const chaseAfterGrace = !/one message/i.test(afterGrace);
+  if (!afterGrace) {
+    throw new PlaybookError(path, `section ${SECTIONS.collections} does not say what happens after grace runs out`);
+  }
 
-  return { marginThresholdPct, extensionCeilingPct, reminderDaysBeforeDue, chaseAfterGrace };
+  return {
+    marginThresholdPct,
+    extensionCeilingPct,
+    reminderDaysBeforeDue,
+    finalNoticeOnLastGraceDay: /last day of grace/i.test(finalNotice),
+    chaseAfterGrace: !/nothing after/i.test(afterGrace),
+  };
 }
 
 /** `Reminder before the due date: 3 days.` -> 3 */

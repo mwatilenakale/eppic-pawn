@@ -83,10 +83,34 @@ seconds and returns null for anything that is not one. Tests:
 `test/inbound-window.test.ts`, including a three-day-old webhook arriving now
 and correctly reading as shut.
 
-**3 — yes, and done.** `collections.reminderDaysBeforeDue` is 3 and
-`collections.chaseAfterGrace` is false, both parsed from section 8, both
-throwing if the wording goes missing. You do not need `playbook.ts` in scope
-after all. Read the lead time from Rules; never hard-code 3.
+**3 — yes, and done.** Three fields, all parsed from section 8, all throwing
+if the wording goes missing. You do not need `playbook.ts` in scope after all,
+and you must not hard-code any of them:
+
+```
+collections.reminderDaysBeforeDue      3
+collections.finalNoticeOnLastGraceDay  true
+collections.chaseAfterGrace            false
+```
+
+**Corrected 25 October, after you had already read the first version of this
+answer.** Lukas changed the rule and his version is better than what I first
+wrote. It is now:
+
+> **Final notice on the last day of grace.** On the fourth day of grace — the
+> last one — the customer is told plainly: pay today, or from tomorrow the
+> item is up for sale. That is the whole message and it goes once.
+> **Nothing after grace runs out.**
+
+So the final notice fires **on** `grace_ends_date`, not after it. Grace is 4
+days (`playbook.grace.defaultDays`), so that is due + 4, and the sale it warns
+about is due + 5 — which lines up with `SELL`, since forfeiture already
+requires grace to have passed.
+
+The difference matters and is worth getting right: a warning the customer can
+still act on is worth something, and one that arrives after the deadline is
+just bad news. Compute the date from `grace.defaultDays` and the loan's own
+`grace_ends_date`, not from a 4 you typed.
 
 `chaseAfterGrace: false` is the rule expressed as data on purpose: the absence
 of chasing is a decision, not an omission, and somebody later who thinks more
@@ -102,9 +126,9 @@ out right now?" and sends it when called. No timer, no scheduler, nothing
 always-on. Something like:
 
 ```
-collections.due()       -> loans reminderDaysBeforeDue from their due date
-collections.overdue()   -> loans whose grace has just ended, not yet noticed
-collections.send(...)   -> sends them, respecting the window, recording what went
+collections.reminders()    -> loans reminderDaysBeforeDue from their due date
+collections.finalNotices()  -> loans on the LAST DAY of grace, not yet noticed
+collections.send(...)       -> sends them, respecting the window, recording what went
 ```
 
 Then say plainly in your handoff that nothing fires it yet. I will write 008
@@ -113,8 +137,11 @@ question and it is mine, not yours.
 
 Two things worth building deliberately while you are in there:
 
-- **"Once, then stop" needs memory.** A restart must not re-send an overdue
-  notice. If the honest way needs a column, take it — that is the exception,
+- **"Once, then stop" needs memory.** A restart must not re-send a final
+  notice, and the notice has exactly one day on which it is due — so a day
+  missed is a day missed, and re-sending it two days late to a customer whose
+  item is already on the market would be worse than silence. Decide what
+  happens to a notice whose day has passed unsent, and say so. If the honest way needs a column, take it — that is the exception,
   and you have already shown you will ask rather than assume. Say why in the
   commit.
 - **Make it visible before it is automatic.** Add the count to the dashboard
