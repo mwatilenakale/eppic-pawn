@@ -1345,6 +1345,27 @@ export class Store {
 
   // --- contracts ---------------------------------------------------------
 
+  /** Claim once per loan and kind, atomically, before any network request. */
+  reserveCollectionNotice(loanId: string, kind: 'reminder' | 'final'): boolean {
+    const at = this.#now();
+    return Number(this.db.prepare("INSERT OR IGNORE INTO collection_notices (loan_id, kind, state, created_at, updated_at) VALUES (?, ?, 'sending', ?, ?)").run(loanId, kind, at, at).changes) === 1;
+  }
+
+  collectionNotice(loanId: string, kind: 'reminder' | 'final'): { state: 'sending' | 'accepted' | 'failed'; provider_message_id: string | null; error: string } | null {
+    return this.db.prepare('SELECT state, provider_message_id, error FROM collection_notices WHERE loan_id = ? AND kind = ?').get(loanId, kind) as { state: 'sending' | 'accepted' | 'failed'; provider_message_id: string | null; error: string } | undefined ?? null;
+  }
+
+  finishCollectionNotice(loanId: string, kind: 'reminder' | 'final', result: { providerMessageId: string } | { error: string }): void {
+    const accepted = 'providerMessageId' in result;
+    if (accepted && !result.providerMessageId) throw new Error('A notice needs a provider message ID');
+    this.db.prepare("UPDATE collection_notices SET state = ?, provider_message_id = ?, error = ?, updated_at = ? WHERE loan_id = ? AND kind = ? AND state = 'sending'")
+      .run(accepted ? 'accepted' : 'failed', accepted ? result.providerMessageId : null, accepted ? '' : result.error, this.#now(), loanId, kind);
+  }
+
+  collectionNoticesNeedingReview(): number {
+    return Number((this.db.prepare("SELECT COUNT(*) n FROM collection_notices WHERE state <> 'accepted'").get() as { n: number }).n);
+  }
+
   /** `EPP-2026-0007` — sequential within the year the contract is issued. */
   nextContractNumber(year: number): string {
     const row = this.db
@@ -1640,3 +1661,4 @@ function migrate(db: DatabaseSync): void {
     }
   }
 }
+
