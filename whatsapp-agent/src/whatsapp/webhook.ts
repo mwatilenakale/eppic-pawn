@@ -132,3 +132,15 @@ export function parseWebhookPayload(payload: unknown): InboundEvent[] {
 function isKnownType(type: string | undefined): type is InboundEvent['type'] {
   return type === 'text' || type === 'image' || type === 'document' || type === 'audio' || type === 'video';
 }
+
+/**
+ * Meta sends `timestamp` as Unix seconds in a string. Null for anything that
+ * is not one, because a wrong time here is worse than no time: an unknown
+ * window reads as shut, which costs a template, while a wrong one reads as
+ * open and costs a message nobody receives.
+ */
+export function metaTimestampToIso(timestamp: string | undefined): string | null {
+  if (!timestamp || !/^\d{9,11}$/.test(timestamp)) return null;
+  const date = new Date(Number(timestamp) * 1000);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}

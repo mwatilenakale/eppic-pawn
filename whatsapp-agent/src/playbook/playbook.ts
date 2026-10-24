@@ -120,6 +120,17 @@ export interface Playbook {
      * extension to be allowed at all.
      */
     extensionCeilingPct: number;
+    /**
+     * Section 8 step 2: days before the due date a reminder goes out. One
+     * message, that many days out.
+     */
+    reminderDaysBeforeDue: number;
+    /**
+     * Section 8 step 2: whether the system keeps chasing after grace ends.
+     * False means one notice and then it stops — who gets a phone call after
+     * that is Lukas's decision about that person.
+     */
+    chaseAfterGrace: boolean;
   };
   /** Documents the customer brings in (section 5). */
   requirements: string[];
@@ -445,7 +456,42 @@ function readCollections(path: string, block: string): Playbook['collections'] {
     );
   }
 
-  return { marginThresholdPct, extensionCeilingPct };
+  // Section 8 step 2, the outreach cadence. Lukas's decision, 25 October
+  // 2026; before that the document said "direct outreach" and never said when,
+  // which is a rule nobody should be inventing in a transport.
+  const reminderLine = block
+    .split('\n')
+    .map(plain)
+    .find((line) => /reminder before the due date/i.test(line));
+  const reminderDaysBeforeDue = reminderLine ? dayCount(reminderLine) : null;
+  if (reminderDaysBeforeDue === null) {
+    throw new PlaybookError(
+      path,
+      `section ${SECTIONS.collections} does not say how many days before the due date a reminder goes out`,
+    );
+  }
+
+  // "one message, then it is Lukas's" — the absence of chasing is the rule,
+  // so it is read rather than assumed.
+  const afterGrace = block
+    .split('\n')
+    .map(plain)
+    .find((line) => /after grace runs out/i.test(line));
+  if (!afterGrace) {
+    throw new PlaybookError(
+      path,
+      `section ${SECTIONS.collections} does not say what happens after grace runs out`,
+    );
+  }
+  const chaseAfterGrace = !/one message/i.test(afterGrace);
+
+  return { marginThresholdPct, extensionCeilingPct, reminderDaysBeforeDue, chaseAfterGrace };
+}
+
+/** `Reminder before the due date: 3 days.` -> 3 */
+function dayCount(line: string): number | null {
+  const match = /(\d+)\s*days?/i.exec(line);
+  return match ? Number(match[1]) : null;
 }
 
 function readScreening(block: string): Map<string, ChecklistItem[]> {

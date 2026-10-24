@@ -30,7 +30,7 @@ import {
   renderCustomerChoices,
   type BookCommand,
 } from './book/index.ts';
-import { samePhone, type InboundEvent } from './whatsapp/webhook.ts';
+import { metaTimestampToIso, samePhone, type InboundEvent } from './whatsapp/webhook.ts';
 import { can } from './staff/access.ts';
 import type { WhatsAppTransport } from './whatsapp/transport.ts';
 import { QuoteService } from './valuator/quotes.ts';
@@ -125,6 +125,15 @@ export class AgentRouter {
 
   async handle(event: InboundEvent): Promise<void> {
     try {
+      // Meta's 24-hour window, for every number without exception.
+      //
+      // The shop sending to anybody — customer, hire, or Lukas himself — is
+      // subject to the same rule, and only an inbound message from them opens
+      // it. Recording this on the customer path alone meant the system could
+      // not tell whether the approval request would be delivered at all, and
+      // that is the message every decision in this project depends on.
+      this.#store.noteInbound(event.from, metaTimestampToIso(event.timestamp));
+
       if (samePhone(event.from, this.#ownerPhone)) {
         await this.#handleOwner(event);
         return;
@@ -168,6 +177,7 @@ export class AgentRouter {
     const outcome = this.#intake.handle(event.from, {
       text: event.text,
       providerMessageId: event.messageId,
+      at: metaTimestampToIso(event.timestamp),
       media: media ? { content: media.content, extension: media.extension } : undefined,
     });
 
@@ -302,6 +312,7 @@ export class AgentRouter {
         conversationId: conversation.id,
         providerMessageId: event.messageId,
         body: event.text ?? (event.mediaId ? '[photo]' : ''),
+        at: metaTimestampToIso(event.timestamp),
       });
       return true;
     }
@@ -312,6 +323,7 @@ export class AgentRouter {
       conversationId: conversation.id,
       providerMessageId: event.messageId,
       body: event.text ?? '',
+      at: metaTimestampToIso(event.timestamp),
     });
 
     const message = this.#desk.escalate(conversation, handover, customer!.name, event.from);

@@ -588,7 +588,62 @@ export class Store {
    * Records an inbound message. Returns null when WhatsApp redelivers a
    * message we already handled, so retries never double-run the intake step.
    */
-  recordInbound(message: { conversationId: string; providerMessageId?: string | null; body?: string; mediaId?: string | null }): string | null {
+  // --- Meta's 24-hour window (migration 14) --------------------------------
+
+  /**
+   * Notes that this number messaged us, and when.
+   *
+   * Called for **every** inbound message from every number — customer, owner
+   * and staff alike — because the shop's number sending to any of them is
+   * subject to the same 24-hour rule, and the approval request to Lukas is the
+   * message this whole project depends on.
+   *
+   * `at` is Meta's own send time when we have it. Only ever moves forward: a
+   * webhook redelivered out of order must not wind somebody's window back.
+   */
+  noteInbound(phone: string, at?: string | null): void {
+    const tail = phone.replace(/\D/g, '').slice(-9);
+    if (tail.length < 9) return;
+
+    const source = at ? 'meta' : 'received';
+    const when = at ?? this.#now();
+
+    this.db
+      .prepare(
+        'INSERT INTO inbound_windows (phone, last_inbound_at, source, updated_at) VALUES (?, ?, ?, ?)' +
+          ' ON CONFLICT(phone) DO UPDATE SET' +
+          '   last_inbound_at = CASE WHEN excluded.last_inbound_at > last_inbound_at THEN excluded.last_inbound_at ELSE last_inbound_at END,' +
+          '   source = CASE WHEN excluded.last_inbound_at > last_inbound_at THEN excluded.source ELSE source END,' +
+          '   updated_at = excluded.updated_at',
+      )
+      .run(tail, when, source, this.#now());
+  }
+
+  /**
+   * When this number last messaged us, or null if we have never heard from
+   * them — which a caller must read as "the window is shut", not as "no
+   * restriction". Guessing the window is open costs a message nobody
+   * receives; guessing it is shut costs the price of a template.
+   */
+  lastInboundAt(phone: string): { at: string; source: 'meta' | 'received' } | null {
+    const tail = phone.replace(/\D/g, '').slice(-9);
+    if (tail.length < 9) return null;
+
+    const row = this.db
+      .prepare('SELECT last_inbound_at, source FROM inbound_windows WHERE phone = ?')
+      .get(tail) as { last_inbound_at: string; source: 'meta' | 'received' } | undefined;
+
+    return row ? { at: row.last_inbound_at, source: row.source } : null;
+  }
+
+  recordInbound(message: {
+    conversationId: string;
+    providerMessageId?: string | null;
+    body?: string;
+    mediaId?: string | null;
+    /** Meta's own send time, where the webhook gave us one. */
+    at?: string | null;
+  }): string | null {
     if (message.providerMessageId) {
       const seen = this.db
         .prepare('SELECT id FROM messages WHERE provider_message_id = ?')
@@ -599,7 +654,17 @@ export class Store {
     const id = randomUUID();
     this.db
       .prepare("INSERT INTO messages (id, conversation_id, direction, provider_message_id, body, media_id, created_at) VALUES (?, ?, 'in', ?, ?, ?, ?)")
-      .run(id, message.conversationId, message.providerMessageId ?? null, message.body ?? '', message.mediaId ?? null, this.#now());
+      .run(
+        id,
+        message.conversationId,
+        message.providerMessageId ?? null,
+        message.body ?? '',
+        message.mediaId ?? null,
+        // Meta's send time where we have it. Using our receipt time instead
+        // made a webhook delivered after an outage look freshly arrived, which
+        // would reopen a 24-hour window that had closed days earlier.
+        message.at ?? this.#now(),
+      );
     return id;
   }
 

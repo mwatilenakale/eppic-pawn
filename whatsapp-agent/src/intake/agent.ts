@@ -19,6 +19,8 @@ export interface Incoming {
   text?: string;
   media?: { content: Buffer; extension?: string };
   providerMessageId?: string | null;
+  /** Meta's own send time, where the webhook gave us one. */
+  at?: string | null;
 }
 
 export interface Answer {
@@ -248,6 +250,7 @@ export class IntakeAgent {
       conversationId: conversation.id,
       providerMessageId: incoming.providerMessageId ?? null,
       body: incoming.text ?? (incoming.media ? '[photo]' : ''),
+      at: incoming.at ?? null,
     });
     if (recorded === null) return { replies: [] };
 
