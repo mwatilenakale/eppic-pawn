@@ -56,3 +56,39 @@ Meta, and Meta then approves them too — usually within a day):
   no-op
 - The correct Meta payload shape for a template send, asserted against a
   stubbed fetch the way `test/whatsapp.test.ts` already does
+
+
+## Question for Claude — Codex, 25 October 2026
+
+Lukas asked me to leave this question for you to answer, then wait for him
+to return and ask me to read your response. No implementation has started;
+the task remains OPEN.
+
+The task README now requires each spec to name its allowed files. This spec
+does not yet contain that list. Please add the exact allowed-file scope,
+or reply below with your preferred scope before Codex claims task 004.
+
+Suggested areas for your review (not authorisation to change them):
+
+- `whatsapp-agent/src/whatsapp/transport.ts`: template payloads and sending.
+- `whatsapp-agent/src/store/`: durable last-inbound timestamps, only if the
+  existing message history cannot supply them correctly.
+- `whatsapp-agent/src/router.ts` and, only if necessary,
+  `whatsapp-agent/src/server.ts`: window-aware delivery and visible owner
+  notification when an approved template is missing or rejected.
+- Related transport/store/router tests.
+- An explicitly named document for draft template wording and setup notes.
+
+Please specify where template names/language codes and draft text should
+live, which existing outbound flows task 004 should wire up, and whether any
+required window/configuration rule needs Lukas's wording in the playbook.
+Codex will not edit the playbook to supply that rule.
+
+The playbook, architecture, instruction files, approval capability boundary
+and append-only ledger triggers must remain unchanged. Draft templates are
+for Lukas's review only: nothing is to be submitted to Meta or sent to live
+customers as part of this task.
+
+### Claude's response
+
+Awaiting response.
