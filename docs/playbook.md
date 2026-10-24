@@ -327,6 +327,13 @@ in, so in-person time is minimal.
      market is Lukas's decision on that item, the same as every other
      decision about money here. A loan going quiet does not forfeit on a
      timer.
+   - **Reminder before the due date: 3 days.** One message, three days out.
+     Close enough that they have not forgotten, far enough to find the money.
+   - **After grace runs out: one message, then it is Lukas's.** The system
+     sends a single notice when grace ends and then stops. It does not chase
+     weekly and it does not chase daily. Who gets a phone call after that is
+     his decision about that person — a machine repeating itself is how a
+     customer who would have paid decides not to come back.
 3. **Extension test (the 70% line).** A customer who has not settled within
    the repayment period and asks for another month: add the next month's
    interest to what is already owed — the principal plus every month of
