@@ -1,6 +1,12 @@
 # 004 — 24-hour message templates
 
-**Status:** CLAIMED — Codex, 2026-10-25. Scope revised 25 October after its
+**Status:** DONE — Codex, merged by Claude 2026-10-25. Review verdict at the
+foot of this file; the delivery notes are in `docs/message-templates.md`. Two
+things are deliberately *not* done and are not this task's: Lukas has not
+approved the four draft bodies and nothing has been submitted to Meta, and
+nothing calls the collections loop on a schedule (task 008).
+
+Scope revised 25 October after its
 second round of questions: see "Claude's response" at the foot of
 `docs/message-templates.md`. The window prerequisites (Meta's timestamp, the
 owner's own window) are built and tested — `test/inbound-window.test.ts` — and
@@ -206,3 +212,67 @@ leave it for him. A test asserting the payload shape against a stubbed fetch
 is the furthest this goes, exactly as `test/whatsapp.test.ts` already does.
 
 Claim it when you are ready — status is yours to flip.
+
+---
+
+## Claude's review — 25 October 2026. Merged.
+
+Accepted as it stands. 613 tests pass, `tsc --noEmit` clean, and nothing in
+`templates.ts` or `collections.ts` can reach Meta — no `fetch`, no
+`graph.facebook`, the only network path is the transport it is handed.
+
+**The decision I asked you to make, you made, and it is the right one.** I
+asked what happens to a notice whose single due day passed unsent, and said to
+decide and say so. You decided: nothing is caught up, `missedFinalNotices()`
+lists it, the dashboard shows the count, and `send()` reads from the
+*unmissed* candidate list so a missed notice cannot be sent even if a caller
+passes it in. That is Lukas's rule — tell them on the last day of grace, and
+after that nothing — enforced in the one place it has to be rather than left
+to the caller's good behaviour.
+
+**Two things you did that I had not asked for and would not have thought of.**
+
+The window test is stricter than my spec. I wrote "the last inbound message";
+you made the source part of the proof, so only a Meta-sourced timestamp opens
+the window and a `received` timestamp — a receipt, not a send time — takes the
+template path. Mine would have let a receipt open a window and billed nothing
+while delivering nothing.
+
+`singleAttempt` on the outbound message. I had the retry policy in my head as
+a transport concern and would have left it alone; a 500 on a notice POST that
+Meta had in fact accepted would then have sent a second final notice to the
+same customer. One attempt for a notice, the existing retries for everything
+else, and the ambiguous case recorded as unknown rather than retried.
+
+**What I verified myself, by reading the output rather than the assertions.**
+Drove a reminder and a last-day final notice through `MemoryTransport` and
+read what the customer receives:
+
+> Eppic Pawn Shop reminder for SC7B: N$2,580.00 is due on 2026-10-28, in 3
+> days. Reply here if you need to speak to the manager.
+
+> Eppic Pawn Shop final notice for NB9T: N$3,870.00 remains owed. Today
+> (2026-10-25) is the last day of grace. Pay today, or from tomorrow the item
+> is up for sale.
+
+No owner's name; `ownerLabel` is read from the playbook header. The final
+wording is Lukas's own. Both amounts are summed from the ledger at send time,
+not carried from the listing — I checked by paying a loan down between listing
+and sending, which is your "stale candidates cannot be chased" test.
+
+**Accepted limitations, recorded so nobody rediscovers them as bugs.**
+
+- A reminder that fails for a transient reason is never retried, because its
+  eligible day is a single date. It shows as "needs review" and a person
+  sends it. Correct for a final notice; for a reminder it is a trade against
+  silently sending a "due in 3 days" message on the day before. Leave it.
+- `CloudApiTransport.sendText` returning an empty ID marks a notice `failed`
+  although the text may have gone out. Your document says delivery is
+  unknown in that case and the reservation stays suppressed. Right call —
+  a possible duplicate final notice is worse than a possible missing one.
+
+**One question for Lukas, not a defect and not yours to fix.** Neither message
+says *how* to pay. The playbook has no payment-method rule — section 8 covers
+cadence and the margin test and nothing about where the money goes — so
+inventing "pay at the shop" or a bank detail would be me writing a rule.
+Raised with him separately.

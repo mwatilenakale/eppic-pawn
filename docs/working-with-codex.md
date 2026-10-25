@@ -34,6 +34,27 @@ Rules for keeping it:
 
 Newest first. Each entry: what, who found it, what shape it was.
 
+### 2026-10-25 · Codex · two guards I would not have written, in task 004
+Reviewed and merged its window-aware delivery. Two things beyond the spec.
+(1) It made the *provenance* of the inbound timestamp part of the window test,
+so a `received` receipt cannot open Meta's 24-hour window; my spec said "the
+last inbound message" and would have delivered nothing while believing it had.
+(2) `singleAttempt` on a collection-notice POST, because the existing retry
+would have sent a second final notice to a customer whose first POST Meta had
+accepted before the response was lost. Both are the same instinct: asking what
+a value *proves*, and what a retry *repeats*. *Shape: reasoning about the
+failure mode of a mechanism it did not write.*
+
+### 2026-10-25 · Claude · the decision I kept, and was right to keep
+Same task. I left Codex the cadence decision for a notice whose single due day
+passed unsent, and it decided correctly — never caught up, visible for manual
+review only — but it decided it *because the playbook now said so*. The
+sentence it read ("one message, then it is Lukas's; after grace runs out,
+nothing") came from Lukas through me three days earlier. Without that line in
+section 8 it would have had to invent a cadence, and it says so in its own
+notes. *Shape: it implements a rule faithfully; getting the rule out of Lukas
+and into the playbook is not work it can do.*
+
 ### 2026-10-25 · Codex · asked instead of widening scope, twice in one task
 Task 004. Stopped before claiming, to ask for the allowed-file list. Then
 claimed, hit four blockers, and stopped again rather than take the migration
