@@ -1,8 +1,13 @@
 # 002 — The second approval gate
 
-**Status:** BLOCKED on 001
-**Why blocked:** the gate releases the contract after an inspection, so the
-inspection has to exist first.
+**Status:** OPEN — unblocked 25 October 2026. Task 001 is merged, so the
+inspection it gates on now exists end to end: queue, worksheet, submitted
+report. `eppic_inspection_passed_v1` is also already defined in
+`src/whatsapp/templates.ts` from task 004 — use it only after the real
+inspection and owner checks pass, as that task's notes say.
+
+**Was blocked on:** the gate releases the contract after an inspection, so the
+inspection had to exist first.
 
 ## Why this exists
 

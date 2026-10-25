@@ -1,6 +1,8 @@
 # 001 — The inspection worksheet page
 
-**Status:** READY FOR REVIEW — Codex, 2026-10-21
+**Status:** DONE — Codex, reviewed and merged by Claude 2026-10-25. Five
+faults fixed on review; see "Claude's review" at the foot of this file. Task
+002 (the second approval gate) is no longer blocked.
 **Depends on:** nothing — `src/inspection/queue.ts` is built and tested.
 
 ## Implementation scope and handoff — Codex
@@ -166,3 +168,113 @@ assertion.
 Do not fix it by editing `docs/playbook.md`. The document is Lukas's; the
 parser is ours.
 
+
+---
+
+## Claude's review — 25 October 2026. Merged, with five fixes.
+
+Merged. 633 tests pass, `tsc --noEmit` clean. The page, the routes, the queue
+discipline and the clause fix are all sound, and one of its findings is better
+than my spec was.
+
+### What it got right that I had wrong
+
+**The money leak is in the prose, not in the fields.** My constraint said no
+figure can reach this page because `queue.ts` cannot return one. That is true
+of the fields and false of the text: the car checklist says "customer covers
+the N$50 inspection fee" in the check itself, and a customer's own description
+— "Dell Latitude 7420, I paid N$14,500" — arrives verbatim and lands at the
+top of the worksheet. An inspector who can see what the customer is hoping for
+is the exact situation the money-blind rule exists to prevent, and I had
+written a test (`blind()`) that would have caught it if the fixture
+descriptions had ever contained a price. Its fixtures did.
+
+**Scope, again.** Routes, page, HTTP module, the clause fix I pointed it at,
+and nothing else. The CSRF token in the POST body as well as the URL was not
+asked for and is right. It flagged the remote-vs-in-person classification as
+questionable rather than changing it, which is what the brief wanted — and
+that flag turned out to be the most valuable sentence in its report. See
+below.
+
+### The five fixes
+
+**1. The redaction destroyed evidence.** It redacted the inspector's own note
+and findings along with the documents' text, and those round-trip through a
+textarea. The note came back as "[amount withheld]"; the moment the inspector
+added a word and saved, that string was what got stored. Reproduced:
+
+```
+stored note     : Customer says he paid N$12,000; the receipt says N$9,500.
+rendered to hire: Customer says he paid [amount withheld]; the receipt says [amount withheld]
+after one edit  : Customer says he paid [amount withheld]; the receipt says [amount withheld] Screen has a scratch.
+```
+
+A claimed price that does not match the receipt is the most useful thing an
+inspector can notice, and Lukas would have read two placeholders. Withholding
+a figure from the person who typed it protects nobody. Split: the documents'
+text and the customer's words are withheld; the inspector's own words are
+shown as written and stored as typed. The restore hack went with it, and
+`blind()` now strips the inspector's regions rather than policing them, so the
+assertion stays strict on everything else.
+
+**2 and 3. The classification flag it raised was a live defect, both ways.**
+A laptop intake asked the customer, mandatorily: *"Can you confirm: BIOS
+serial?"*, *"battery health?"*, *"drive health?"*, *"restart + battery-only
+test?"* — none of them answerable by a person about their own machine, and a
+"yes" to them means nothing. The same cause left a laptop worksheet with one
+line on it while the bench checks sat in the chat. Architecture section 2.3 is
+the shop's verification list and says so in its own words — "model and storage
+verified inside settings (**not just asked**)". It goes to the worksheet.
+Laptops 1 → 10 lines, TVs 1 → 2, iPhone 4 → 11, Android 3 → 12.
+
+**4. A lock was asked once and believed.** This is the one that costs money:
+
+```
+laptops   asked of the customer only: passwords/accounts removed?
+                                      BIOS-locked laptops unlocked before accepting?
+          re-checked on the worksheet: none
+phones    asked of the customer only: Activation Lock removed?
+                                      Apple ID signed out?
+          re-checked on the worksheet: device reset in front of staff
+```
+
+That is the Spectra case as a code path — the financed S25 Ultra, bricked
+remotely weeks after handover. A lock is the one answer a customer can get
+wrong in their own favour and have it stay invisible until resale. Both lists
+now: asked early, where a "no" ends it before the customer has photographed
+their ID, and on the worksheet, because section 7 calls the visit
+"confirmation, not data collection" and confirmation was the missing half.
+The line is control state, not provenance — a measurement stays staff-only.
+
+**5. The same check appeared twice.** A console sheet asked for the 20-30
+minute load test twice and a TV sheet twice for the account removal. The
+documents mark their own cross-references — "(already in the playbook)",
+"(per playbook)" — so those are not separate lines. Also stripped the raw
+`[decide, draft proposed]` marker, which the page was already rendering a
+second time as "(proposed rule)".
+
+Plus two small ones: the dark `color-scheme` and `robots` metas the dashboard
+already has — without `color-scheme` the native radios and the note box render
+light, so on a cheap Android the hire types dark text into a dark field — and
+the splitter's aside sentinel, which was a literal NUL byte and made the file
+"binary" to `grep`.
+
+### Two things left open, deliberately
+
+**Record-a-value checks.** "BIOS serial", "Exact model", "IMEI recorded" are
+things to *write down*, and a pass/fail against them records nothing. The note
+field holds them for now. A third control type is a real feature and belongs
+in its own task, not smuggled into a review.
+
+**For Lukas.** A console customer is no longer asked to remove their account
+before coming in — that check is in section 2.3, so it is now the shop's to do
+with them standing there. Cheap either way; say if you would rather they were
+told in advance.
+
+### Note on the scope sentence
+
+Its notes say "Lukas authorised defining the necessary file scope on 21
+October 2026." It was this spec that did — "Suggested routes, but use your
+judgement", and it named `questions.ts` directly. The file set is squarely
+inside it, so nothing was overstepped; the attribution is just slightly off,
+and it matters only because `AGENTS.md` rule 0 turns on who authorised what.

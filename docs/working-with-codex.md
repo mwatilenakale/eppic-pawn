@@ -34,6 +34,41 @@ Rules for keeping it:
 
 Newest first. Each entry: what, who found it, what shape it was.
 
+### 2026-10-25 · Codex · the constraint was right about fields, wrong about prose
+Task 001. My spec said no figure can reach the inspection page because
+`queue.ts` cannot return one. Codex pointed out the figures arrive in the
+*text* — the car checklist says "customer covers the N$50 inspection fee" in
+the check itself, and the customer's own description lands at the top of the
+worksheet. I had even written the assertion that would have caught it; my
+fixtures never contained a price and its did. *Shape: reading a constraint
+literally and asking what else satisfies the words.*
+
+### 2026-10-25 · Claude · the redaction it built destroyed evidence
+Same change. It redacted the inspector's own note and findings too, and those
+round-trip through a textarea: the note came back as "[amount withheld]" and
+one added word stored that string, so "he says he paid N$12,000, the receipt
+says N$9,500" reached Lukas as two placeholders. Found by typing a note,
+editing it and printing what came out — not by any assertion; its own test
+asserted the restore worked, and it did, for exactly the unchanged case. Also
+worth noting what the guard protected against: an amount the inspector typed
+themselves. *Shape: a mechanism correct for the case it was tested on, and
+harmful one keystroke outside it — and the matching gap in my review, which
+is that I accept a guard more readily than a change.*
+
+### 2026-10-25 · Codex · it flagged the thing it was right not to fix
+Same task, and the most valuable sentence in its report: "Existing
+remote-vs-in-person classification still puts some hardware checks in remote
+confirmations; reconsider that separately if desired." Followed it and found
+the WhatsApp agent asking customers "Can you confirm: BIOS serial?", "battery
+health?", "drive health?" — and, the other way round, a laptop worksheet with
+one line on it while the bench checks sat in the chat. And a lock asked once
+of the person who wants the loan and never checked with the device in hand,
+which is the Spectra case as a code path. It was told to report, not fix, and
+the report was worth more than a fix would have been: the correct fix needed a
+rule about *which* checks belong to whom, which is a judgement call about the
+shop. *Shape: report-only paying off exactly as the routing table claims — but
+only because somebody then followed the flag.*
+
 ### 2026-10-25 · Codex · two guards I would not have written, in task 004
 Reviewed and merged its window-aware delivery. Two things beyond the spec.
 (1) It made the *provenance* of the inbound timestamp part of the window test,
