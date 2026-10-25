@@ -91,6 +91,12 @@ ${section(
 </div>
 
 ${canSeeTotals ? book(dashboard) : ''}
+
+<div class="section"><h2>Collection messages</h2>
+<p>${dashboard.collectionNotices.reminders} reminders waiting to go · ${dashboard.collectionNotices.final} final notices waiting to go today</p>
+<p>${dashboard.collectionNotices.missedFinal} final-notice dates missed; manual review only, no late messages.</p>
+<p>${dashboard.collectionNotices.needsReview} sends need review (failed or delivery unknown).</p>
+<p class="muted">Not automatic yet: the scheduler is a separate task. Refreshing this page sends nothing.</p></div>
 `,
   );
 }
@@ -233,3 +239,4 @@ Approvals and prices are Lukas's, and are made over WhatsApp.</footer>
 </div></body>
 </html>`;
 }
+

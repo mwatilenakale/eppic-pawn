@@ -534,4 +534,20 @@ export const MIGRATIONS: string[] = [
     updated_at      TEXT NOT NULL
   );
   `,
+
+  // 15 — reserve before sending: no duplicate notice after a crash/restart.
+  // 'sending' after restart means unknown delivery, not permission to retry.
+  `
+  CREATE TABLE collection_notices (
+    loan_id TEXT NOT NULL REFERENCES loans(id),
+    kind TEXT NOT NULL CHECK (kind IN ('reminder', 'final')),
+    state TEXT NOT NULL CHECK (state IN ('sending', 'accepted', 'failed')),
+    provider_message_id TEXT,
+    error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (loan_id, kind)
+  );
+  `,
 ];
+
