@@ -66,6 +66,51 @@ const IN_PERSON_ONLY = [
   /inspected by/i,
 ];
 
+/**
+ * "Is anyone else still in control of this?" — asked remotely **and**
+ * re-checked with the item in hand.
+ *
+ * Every other check sits on one side of the line. These sit on both, and they
+ * are the ones that cost money when they do not.
+ *
+ * A lock is the one kind of answer a customer can get wrong in their own
+ * favour and have it stay invisible until the shop tries to sell the thing.
+ * That is the Spectra case in playbook section 5 — a financed S25 Ultra,
+ * bricked remotely weeks after handover — and it is why the shop's own list
+ * in architecture section 2.3 names Activation Lock, FRP, Knox Guard, device
+ * administrators and the "managed by your organisation" notice separately: a
+ * third party holding the device is the whole risk.
+ *
+ * Both halves earn their place. Asked remotely, a "no, it is still on an
+ * account" ends the conversation before the customer has been made to
+ * photograph their ID, and playbook section 7 wants as much settled as
+ * possible before anyone walks in. Checked again in the shop, because that
+ * same section calls the visit "confirmation, not data collection" — and
+ * confirmation was the missing half: the answer was collected and believed.
+ *
+ * The line this draws is control state, not which document the check came
+ * from. A measurement or a recording — BIOS serial, battery health, drive
+ * health, IMEI recorded, model verified inside settings — is staff-only,
+ * because a customer cannot answer it and a "yes" to it means nothing.
+ */
+const CONTROLLED_BY_SOMEBODY_ELSE = [
+  /unlock(ed)?|bios[- ]lock/i,
+  /signed out|sign[- ]?out/i,
+  /account(s)? removed|login removed|profile removed|removed\b.*account/i,
+  /activation lock|factory reset protection|frp\b/i,
+  /bypass(ed)?/i,
+  /passwords?\b.*removed|removed\b.*passwords?/i,
+  /under finance|still on an account|paid off|settlement letter/i,
+  // Enrolment locks: a third party can reclaim or brick the device.
+  /knox guard|device administrator|managed by your organisation/i,
+  /mdm|school-management|organisation enrolment|find my/i,
+  /factory reset/i,
+];
+
+function alsoCheckedInPerson(text: string): boolean {
+  return CONTROLLED_BY_SOMEBODY_ELSE.some((pattern) => pattern.test(text));
+}
+
 /** Checks best answered with a picture, and what the picture should show. */
 const PHOTO_CHECKS: { pattern: RegExp; photoKind: string; ask: string }[] = [
   { pattern: /box present|^box$/i, photoKind: 'box', ask: 'Please send a photo of the box (or reply "no box" if you do not have it).' },
@@ -148,10 +193,31 @@ export function buildQuestionPlan(
 
   const checklist = category ? rules.checklistFor(category.slug, variant) : [];
   for (const { check, inPerson } of checklist.flatMap(classifyClauses)) {
-    if (inPerson) {
+    // Architecture section 2.3 is the shop's own verification list, not a
+    // questionnaire. It says so in its own words — "model and storage
+    // verified inside settings (**not just asked**)" — and playbook section 7
+    // puts the same division the other way round: the pre-screen narrows
+    // things down, and the in-person visit is "confirmation, not data
+    // collection".
+    //
+    // Until now every clause of it that no phrase in `IN_PERSON_ONLY`
+    // happened to match became a mandatory yes/no to the customer, which
+    // produced a laptop intake that asked, in order: "Can you confirm: BIOS
+    // serial?", "Can you confirm: battery health?", "Can you confirm: drive
+    // health?", "Can you confirm: restart + battery-only test?". A customer
+    // cannot answer those, a "yes" to them means nothing, and they were the
+    // reason a laptop worksheet had one line on it while the bench checks sat
+    // in the chat.
+    // Both sides of the line: asked now, confirmed again with the item in
+    // hand. Tested before the staff-only rule below, so a lock the shop's own
+    // list names — Activation Lock, Knox Guard, a device administrator — is
+    // still put to the customer early, where a "no" ends it cheaply.
+    const bothSides = alsoCheckedInPerson(check.text);
+    if (inPerson || (check.source === 'fraud' && !bothSides)) {
       inPersonChecks.push(check);
       continue;
     }
+    if (bothSides) inPersonChecks.push(check);
     if (DOCUMENT_REQUESTS.some((request) => request.pattern.test(check.text))) {
       continue; // asked once in the documents block below
     }
@@ -227,7 +293,49 @@ export function buildQuestionPlan(
   // station for nothing.
   questions.sort((a, b) => Number(Boolean(a.unlessPhoto)) - Number(Boolean(b.unlessPhoto)));
 
-  return { categorySlug, variant, questions, inPersonChecks };
+  return { categorySlug, variant, questions, inPersonChecks: oneLineEach(inPersonChecks) };
+}
+
+/**
+ * Where the two documents cover the same ground, they say so.
+ *
+ * Architecture section 2.3 writes "20-30 minute load test (already in the
+ * playbook)" and "Smart TV only (per playbook)" — an explicit pointer at
+ * Lukas's own checklist, not a second check. The remote questions have
+ * deduplicated on wording for a while; the worksheet did not, so a console
+ * sheet asked for the 20-30 minute load test twice and a TV sheet asked
+ * twice whether the account had been removed. Asking the same thing twice on
+ * a form somebody signs teaches them that the form is not to be read.
+ */
+const CROSS_REFERENCE = /\((?:already )?(?:in|per) the playbook\)|\(per playbook\)/i;
+
+function oneLineEach(checks: ChecklistItem[]): ChecklistItem[] {
+  const kept: ChecklistItem[] = [];
+  for (const check of checks) {
+    if (CROSS_REFERENCE.test(check.text) && kept.length > 0) continue;
+    // Same wording, allowing for the documents' different phrasings —
+    // "account/login removed" and "Account removed".
+    if (kept.some((previous) => saysTheSameThing(previous.text, check.text))) continue;
+    kept.push({ ...check, text: asATickBox(check.text) });
+  }
+  return kept;
+}
+
+/**
+ * The check as a line somebody ticks.
+ *
+ * Drops the editorial marker Lukas writes on an unsettled rule — the console
+ * line reached the worksheet as "[decide, draft proposed] — run a demanding
+ * game…", and the page then appended "(proposed rule)" from the `provisional`
+ * flag, so the inspector read the same caveat twice in two notations and the
+ * instruction started four words in. The flag is the right way to carry it;
+ * the raw marker is not.
+ *
+ * Unlike `stripLeadIn`, no question mark is added. A worksheet line is an
+ * instruction with a pass/fail against it, not a question.
+ */
+function asATickBox(text: string): string {
+  return text.replace(/^\[[^\]]*\]\s*(—|-{1,2})?\s*/, '').trim();
 }
 
 function slug(text: string): string {
@@ -318,16 +426,27 @@ function saysTheSameThing(left: string, right: string): boolean {
  * bracketed asides left intact ("full hardware test (display, cameras, …)"
  * stays one check rather than becoming eight fragments).
  */
+/**
+ * Stands in for a bracketed aside while the bullet is split.
+ *
+ * Written as an escape rather than as a literal control character in the
+ * source. It used to be a raw NUL byte, which worked but made this file
+ * "binary" to grep, `file` and anything else that sniffs for one — so a
+ * search through the splitter silently returned "binary file matches" instead
+ * of the line somebody was looking for.
+ */
+const MASK = '\u0000';
+
 function splitIntoClauses(check: ChecklistItem): ChecklistItem[] {
   const asides: string[] = [];
   const masked = check.text.replace(/\([^)]*\)|\[[^\]]*\]/g, (aside) => {
     asides.push(aside);
-    return ` ${asides.length - 1} `;
+    return `${MASK}${asides.length - 1}${MASK}`;
   });
 
   const clauses = masked
     .split(/[;,?]/)
-    .map((clause) => clause.replace(/ (\d+) /g, (_, index: string) => asides[Number(index)]!).trim())
+    .map((clause) => clause.replace(new RegExp(`${MASK}(\\d+)${MASK}`, 'g'), (_, index: string) => asides[Number(index)]!).trim())
     .map((clause) => clause.replace(/^(and|then|plus)\s+/i, '').trim())
     // A clause that is nothing but a bracketed aside ("(still accepted without
     // one, priced significantly lower)") is context for staff, not a question.

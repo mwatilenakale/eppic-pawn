@@ -5,6 +5,7 @@ import { loadRules } from '../src/playbook/index.ts';
 import { InspectionQueue } from '../src/inspection/queue.ts';
 import { buildServer } from '../src/server.ts';
 import { MemoryTransport } from '../src/whatsapp/transport.ts';
+import { escapeHtml } from '../src/html.ts';
 
 const rules = loadRules();
 let store: Store;
@@ -46,10 +47,34 @@ async function post(path: string, fields: Record<string, string>, extraHeaders: 
 function complete() {
   return Object.fromEntries(queue.worksheet(jobId).flatMap((line) => [[`answer:${line.checkId}`, 'pass'], [`note:${line.checkId}`, 'Checked in person']]));
 }
+/**
+ * No figure the inspector did not type themselves.
+ *
+ * The spec's rule is "no money on this screen", and the leak it was written
+ * about is the shop's figure — the valuation, the loan, what the customer
+ * asked for. Those reach the page through the check text ("customer covers
+ * the N$50 inspection fee"), the customer's own description and the category
+ * label, and this assertion covers all of it.
+ *
+ * What it deliberately does not cover is the inspector's own note and
+ * findings. Redacting those destroyed evidence: the note came back into the
+ * textarea as "[amount withheld]" and the first edit stored that string, so
+ * "he says he paid N$12,000, the receipt says N$9,500" — the most useful
+ * thing an inspector can write down — reached Lukas as two placeholders.
+ * Withholding a figure from the person who typed it protects nobody, so those
+ * regions are stripped before asserting rather than being asserted on.
+ */
 function blind(html: string) {
-  assert.doesNotMatch(html, /N\$\s*\d|90,000|NAD\s*\d/i);
+  const notTheInspectors = html
+    .replace(/<textarea[^>]*>[\s\S]*?<\/textarea>/gi, '<textarea></textarea>')
+    .replace(/<(p|span) class="note">[\s\S]*?<\/\1>/gi, '');
+  assert.doesNotMatch(notTheInspectors, /N\$\s*\d|90,000|NAD\s*\d/i);
   assert.doesNotMatch(html, /<script|<iframe|https?:\/\/|@import/i);
   assert.match(html, /--accent-gold/);
+  // The theme is dark. Without this the browser draws the radios and the note
+  // box in light mode, which on a cheap Android is dark text in a dark field.
+  assert.match(html, /name="color-scheme" content="dark"/);
+  assert.match(html, /name="robots" content="noindex/);
 }
 
 test('staff can find the queue from the existing dashboard without replacing it', async () => {
@@ -101,15 +126,55 @@ test('a refused submission retains the inspector’s answers and findings withou
   assert.equal(queue.job(jobId)!.status, 'claimed');
 });
 
-test('redacting the display does not rewrite stored evidence on an unchanged save', async () => {
+/**
+ * The inspector's own evidence survives being edited.
+ *
+ * This replaces a test that asserted the opposite mechanism — that a note
+ * posted back as "[amount withheld]" was restored from the database. The
+ * restore only worked while the inspector changed nothing; one added word and
+ * the placeholder was what got stored. The figures in a note are the
+ * inspector's observation, so they are never redacted and there is nothing to
+ * restore.
+ */
+test('an edited note keeps the figures the inspector wrote down', async () => {
   queue.claim(jobId, staff);
   const lines = queue.worksheet(jobId);
-  queue.record(jobId, staff, lines.map((line) => ({ checkId: line.checkId, text: line.text, answer: 'pass', note: 'Quoted N$50 fee' })), 'Quoted N$50 fee');
-  const fields = Object.fromEntries(lines.flatMap((line) => [[`answer:${line.checkId}`, 'pass'], [`note:${line.checkId}`, 'Quoted [amount withheld] fee']]));
-  await post(`${root()}/job/${jobId}`, { ...fields, action: 'save', findings: 'Quoted [amount withheld] fee' });
-  assert.equal(queue.worksheet(jobId)[0]!.note, 'Quoted N$50 fee');
-  assert.equal(queue.job(jobId)!.findings, 'Quoted N$50 fee');
-  blind((await get(`${root()}/job/${jobId}`)).html);
+  const first = lines[0]!;
+  const evidence = 'He says he paid N$12,000; the receipt says N$9,500.';
+  queue.record(jobId, staff, [{ checkId: first.checkId, text: first.text, answer: 'pass', note: evidence }], evidence);
+
+  // What the page actually puts in the textarea, as the inspector sees it.
+  let page = await get(`${root()}/job/${jobId}`);
+  assert.ok(page.html.includes(escapeHtml(evidence)), 'his own note is shown to him as he wrote it');
+  blind(page.html);
+
+  // He appends a word and saves — the case that used to lose the figures.
+  const edited = `${evidence} Screen has a scratch.`;
+  await post(`${root()}/job/${jobId}`, { action: 'save', [`answer:${first.checkId}`]: 'pass', [`note:${first.checkId}`]: edited, findings: edited });
+  assert.equal(queue.worksheet(jobId)[0]!.note, edited);
+  assert.equal(queue.job(jobId)!.findings, edited);
+  assert.doesNotMatch(queue.worksheet(jobId)[0]!.note, /amount withheld/);
+
+  // And it is still in the report after submission, which is what Lukas reads.
+  await post(`${root()}/job/${jobId}`, { ...complete(), action: 'submit', findings: edited });
+  page = await get(`${root()}/job/${jobId}`);
+  assert.ok(page.html.includes(escapeHtml(edited)), 'the report carries the figures he observed');
+  blind(page.html);
+});
+
+/** The leak Codex found, which is in the prose rather than in any field. */
+test('amounts in the checklist text and the customer description are withheld', async () => {
+  const customer = store.upsertCustomer('+264811234599', 'Prose fixture');
+  const item = store.createItem({ customerId: customer.id, categorySlug: 'cars', description: 'Toyota Corolla, I paid N$85,000 for it' });
+  const job = queue.open({ itemId: item.id, actor: staff.id });
+  queue.claim(job.id, staff);
+  const { html } = await get(`${root()}/job/${job.id}`);
+  // The car checklist says "customer covers the N$50 inspection fee" in the
+  // check text itself, and the customer's description names what they paid.
+  assert.ok(queue.worksheet(job.id).some((line) => /N\$\s*50/.test(line.text)), 'the fixture still exercises a priced check');
+  assert.match(html, /amount withheld/);
+  assert.doesNotMatch(html, /85,000/);
+  blind(html);
 });
 
 test('every category renders document checks in order without leaking prices or fetching assets', async () => {

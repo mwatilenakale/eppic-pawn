@@ -3,7 +3,7 @@ import type { Store } from '../store/index.ts';
 import type { Rules } from '../playbook/index.ts';
 import { can } from '../staff/access.ts';
 import { InspectionQueue, InspectionError, type CheckResult, type WorksheetLine } from './queue.ts';
-import { inspectionQueuePage, inspectionWorksheetPage, inspectionText } from '../web/inspections.ts';
+import { inspectionQueuePage, inspectionWorksheetPage } from '../web/inspections.ts';
 
 /** Keep HTTP parsing separate from the queue contract; no direct job SQL. */
 export async function inspectionRequest(request: IncomingMessage, response: ServerResponse, url: URL, store: Store, rules: Rules,
@@ -52,14 +52,14 @@ export async function inspectionRequest(request: IncomingMessage, response: Serv
           const answer = form.get(`answer:${line.checkId}`);
           if (!answer) continue;
           if (answer !== 'pass' && answer !== 'fail' && answer !== 'na') throw new InspectionError('Invalid check answer.');
-          const note = form.get(`note:${line.checkId}`) ?? '';
-          // Rendering a withheld amount must not overwrite existing evidence
-          // merely because the inspector saved an otherwise unchanged form.
-          results.push({ checkId: line.checkId, text: line.text, answer, note: note === inspectionText(line.note) ? line.note : note });
+          // Stored as typed. The note is the inspector's own evidence and is
+          // never redacted on the way out, so there is nothing to restore on
+          // the way back in — the round-trip that used to be here is what
+          // turned a real figure into "[amount withheld]" on the first edit.
+          results.push({ checkId: line.checkId, text: line.text, answer, note: form.get(`note:${line.checkId}`) ?? '' });
         }
         draftLines = lines.map((line) => ({ ...line, answer: results.find((result) => result.checkId === line.checkId)?.answer ?? null, note: form.get(`note:${line.checkId}`) ?? '' }));
-        const findings = form.get('findings') ?? '';
-        draftFindings = findings === inspectionText(job.findings) ? job.findings : findings;
+        draftFindings = form.get('findings') ?? '';
         if (action === 'submit') queue.submit({ jobId: job.id, user, results, findings: draftFindings });
         else queue.record(job.id, user, results, draftFindings);
       }

@@ -706,3 +706,89 @@ describe('commentary in the playbook is not a rule', () => {
   });
 });
 
+
+/**
+ * Which side of the counter a check belongs on.
+ *
+ * Found by printing every category's worksheet and reading it as the person
+ * who has to sign it, which is what task 001 asked for. Two faults, opposite
+ * directions, same root: the split was decided by whether a phrase happened
+ * to appear in `IN_PERSON_ONLY`.
+ *
+ * The customer was asked, mandatorily, "Can you confirm: BIOS serial?",
+ * "battery health?", "drive health?", "restart + battery-only test?" — none
+ * of which a person can answer about their own laptop, and a "yes" to which
+ * means nothing. Meanwhile the laptop worksheet had a single line on it, so
+ * the bench checks were in the chat and not in the shop.
+ */
+describe('a check belongs to whoever can actually answer it', () => {
+  const sheet = (slug: string, variant: string | null = null) =>
+    buildQuestionPlan(rules, slug, variant).inPersonChecks.map((check) => check.text);
+  const asked = (slug: string, variant: string | null = null) =>
+    buildQuestionPlan(rules, slug, variant).questions.map((question) => question.ask).join('\n');
+
+  test('a measurement is never put to the customer', () => {
+    const laptops = asked('laptops');
+    for (const nonsense of [/bios serial/i, /battery health/i, /drive health/i, /battery-only test/i, /exact model/i]) {
+      assert.doesNotMatch(laptops, nonsense, 'the customer cannot answer this about their own machine');
+    }
+    assert.doesNotMatch(asked('consoles'), /serial and model verified against the box/i);
+    assert.doesNotMatch(asked('phones', 'android'), /verified inside settings/i);
+  });
+
+  test('the measurements are on the worksheet instead, where somebody holds the thing', () => {
+    const laptops = sheet('laptops');
+    for (const bench of [/bios serial/i, /bitlocker/i, /battery health/i, /drive health/i, /battery-only test/i]) {
+      assert.ok(laptops.some((line) => bench.test(line)), `missing from the laptop worksheet: ${bench}`);
+    }
+    // It had exactly one line before this change.
+    assert.ok(laptops.length >= 8, `a laptop inspection is more than ${laptops.length} lines`);
+  });
+
+  test('a lock is asked early and checked again in the shop', () => {
+    // Both halves matter. Asked remotely, a "no" ends it before the customer
+    // has photographed their ID; checked in person, because the Spectra
+    // handset was lost to an answer that was collected and believed.
+    for (const [slug, variant, lock] of [
+      ['laptops', null, /bios-locked laptops unlocked/i],
+      ['tvs', null, /account\/login removed/i],
+      ['phones', 'iphone', /activation lock/i],
+      ['phones', 'android', /factory reset protection/i],
+      ['phones', 'android', /knox guard/i],
+    ] as [string, string | null, RegExp][]) {
+      assert.match(asked(slug, variant), lock, `not asked: ${lock}`);
+      assert.ok(sheet(slug, variant).some((line) => lock.test(line)), `not re-checked in person: ${lock}`);
+    }
+  });
+
+  test('no check appears twice on one worksheet', () => {
+    // The documents cross-reference each other — "20-30 minute load test
+    // (already in the playbook)", "Smart TV only (per playbook)" — and a form
+    // that asks the same thing twice teaches the person not to read it.
+    for (const [slug, variant] of [['cars', null], ['phones', 'iphone'], ['phones', 'android'], ['laptops', null], ['tvs', null], ['consoles', null]] as [string, string | null][]) {
+      const lines = sheet(slug, variant);
+      assert.equal(new Set(lines).size, lines.length, `${slug} repeats a line verbatim`);
+      assert.doesNotMatch(lines.join('\n'), /already in the playbook|per playbook/i, `${slug} keeps a cross-reference as its own line`);
+    }
+    const loadTests = sheet('consoles').filter((line) => /20-30 minute|demanding game/i.test(line));
+    assert.equal(loadTests.length, 1, 'the console load test is one line, not two');
+    const tvAccount = sheet('tvs').filter((line) => /account/i.test(line));
+    assert.equal(tvAccount.length, 1, 'removing the TV account is one line, not two');
+  });
+
+  test('an unsettled rule carries its flag, not its raw marker', () => {
+    const consoles = buildQuestionPlan(rules, 'consoles').inPersonChecks;
+    const loadTest = consoles.find((check) => /demanding game/i.test(check.text))!;
+    assert.doesNotMatch(loadTest.text, /\[decide/i, 'the page shows "(proposed rule)" from the flag instead');
+    assert.ok(loadTest.text.startsWith('run a demanding game'), loadTest.text);
+    assert.equal(loadTest.provisional, true, 'and the flag is still set, so the caveat is not lost');
+  });
+
+  test('a worksheet line is an instruction, not a question', () => {
+    for (const [slug, variant] of [['cars', null], ['laptops', null], ['consoles', null]] as [string, string | null][]) {
+      for (const line of sheet(slug, variant)) {
+        assert.doesNotMatch(line, /^Can you confirm:/i, line);
+      }
+    }
+  });
+});
