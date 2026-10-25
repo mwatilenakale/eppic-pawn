@@ -24,6 +24,7 @@ import { can } from './staff/access.ts';
 import { evaluatePrecheck, precheckQuestions, type PrecheckQuote } from './web/precheck.ts';
 import { PriceMemory } from './valuator/memory.ts';
 import { QuoteService, missingPhoneDetails } from './valuator/quotes.ts';
+import { inspectionRequest } from './inspection/http.ts';
 
 export interface BuiltServer {
   server: Server;
@@ -113,6 +114,8 @@ async function handleRequest(
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
   const rules = getRules();
 
+  if (await inspectionRequest(request, response, url, store, rules, readBody, respondHtml)) return;
+
   if (request.method === 'GET' && url.pathname === '/health') {
     return respond(response, 200, 'ok');
   }
@@ -134,7 +137,7 @@ async function handleRequest(
     if (!user || !can(user, 'book.chase')) return respond(response, 404, 'Not found');
 
     const dashboard = new DashboardQuery(store, rules).read();
-    return respondHtml(response, 200, dashboardPage(dashboard, user.name, can(user, 'book.totals')));
+    return respondHtml(response, 200, dashboardPage(dashboard, user.name, can(user, 'book.totals'), can(user, 'inspections.work') ? `/staff/${staffLink[1]!}/inspections` : undefined));
   }
 
   if (request.method === 'GET' && url.pathname === '/apply') {
