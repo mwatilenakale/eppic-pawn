@@ -1,0 +1,11 @@
+.git
+**/node_modules
+**/.env
+**/.env.*
+**/data
+**/*.db
+**/*.db-*
+**/*.sqlite*
+**/*.xlsx
+work
+.DS_Store

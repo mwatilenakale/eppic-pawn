@@ -19,6 +19,7 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0"
+    "@anthropic-ai/sdk": "^0.115.0",
+    "twilio": "^6.2.0"
   }
 }

@@ -549,5 +549,15 @@ export const MIGRATIONS: string[] = [
     PRIMARY KEY (loan_id, kind)
   );
   `,
+  // 16 — deduplicate customer AND owner commands across Twilio retries/restarts.
+  // A processing/failed receipt must be reconciled, never blindly replayed.
+  `
+  CREATE TABLE twilio_receipts (
+    message_id TEXT PRIMARY KEY,
+    state TEXT NOT NULL CHECK (state IN ('processing', 'handled', 'failed')),
+    created_at TEXT NOT NULL
+  );
+  `,
 ];
+
 

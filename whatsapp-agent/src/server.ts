@@ -25,6 +25,7 @@ import { evaluatePrecheck, precheckQuestions, type PrecheckQuote } from './web/p
 import { PriceMemory } from './valuator/memory.ts';
 import { QuoteService, missingPhoneDetails } from './valuator/quotes.ts';
 import { inspectionRequest } from './inspection/http.ts';
+import { TwilioTransport, verifiedTwilioForm, dispatchTwilio } from './whatsapp/twilio.ts';
 
 export interface BuiltServer {
   server: Server;
@@ -32,19 +33,25 @@ export interface BuiltServer {
   router: AgentRouter;
   contracts: ContractService;
   config: Config;
+  /** Drain acknowledged webhook work before a cloud rolling restart. */
+  shutdown: () => Promise<void>;
 }
 
 export function buildServer(
   config: Config,
-  overrides: { transport?: WhatsAppTransport; store?: Store; valuator?: Valuator | null } = {},
+  overrides: { transport?: WhatsAppTransport; store?: Store; valuator?: Valuator | null; twilioFetch?: typeof globalThis.fetch } = {},
 ): BuiltServer {
   const rules = getRules();
   const store =
     overrides.store ??
     new Store(config.dbPath, { mediaDirectory: config.mediaDirectory, mediaKey: config.mediaKey });
 
+  const twilioTransport = config.messagingProvider === 'twilio'
+    ? new TwilioTransport(config.twilio ?? (() => { throw new Error('Missing Twilio configuration'); })(), overrides.twilioFetch)
+    : undefined;
   const transport =
     overrides.transport ??
+    twilioTransport ??
     new CloudApiTransport({ token: config.whatsapp.token, phoneNumberId: config.whatsapp.phoneNumberId });
 
   const memory = new PriceMemory(store, rules);
@@ -92,14 +99,22 @@ export function buildServer(
     }
   };
 
+  const inFlight = new Set<Promise<void>>();
   const server = createServer((request, response) => {
-    handleRequest(request, response, config, router, contracts, store, priceIt).catch((error) => {
+    const work = handleRequest(request, response, config, router, contracts, store, priceIt, twilioTransport).catch((error) => {
       console.error('[server]', error);
       if (!response.headersSent) respond(response, 500, 'Internal error');
     });
+    inFlight.add(work);
+    void work.finally(() => inFlight.delete(work));
   });
 
-  return { server, store, router, contracts, config };
+  const shutdown = async (): Promise<void> => {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await Promise.allSettled([...inFlight]);
+    store.close();
+  };
+  return { server, store, router, contracts, config, shutdown };
 }
 
 async function handleRequest(
@@ -110,6 +125,7 @@ async function handleRequest(
   contracts: ContractService,
   store: Store,
   priceIt: (categorySlug: string, variant: string | null, description: string) => Promise<PrecheckQuote | null>,
+  twilioTransport?: TwilioTransport,
 ): Promise<void> {
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
   const rules = getRules();
@@ -119,6 +135,35 @@ async function handleRequest(
   if (request.method === 'GET' && url.pathname === '/health') {
     return respond(response, 200, 'ok');
   }
+
+  if (url.pathname === '/webhooks/twilio' && request.method === 'POST' && twilioTransport && config.twilio) {
+    if (request.headers['content-type']?.split(';')[0]?.trim() !== 'application/x-www-form-urlencoded') {
+      return respond(response, 415, 'Expected form-encoded webhook');
+    }
+    // Use configured public origin, NEVER Host/X-Forwarded-* supplied by callers.
+    const signature = request.headers['x-twilio-signature'];
+    const form = verifiedTwilioForm((await readBody(request)).toString('utf8'),
+      typeof signature === 'string' ? signature : undefined,
+      `${config.publicBaseUrl}${url.pathname}${url.search}`, config.twilio.authToken);
+    if (!form) return respond(response, 401, 'Invalid signature');
+    if (store.db.prepare('SELECT 1 FROM twilio_receipts WHERE message_id = ?').get(form['MessageSid'] ?? '')) {
+      response.writeHead(200, { 'content-type': 'text/xml' }); response.end('<Response/>'); return;
+    }
+    let event;
+    try { event = await twilioTransport.inbound(form); }
+    catch (error) {
+      const status = error instanceof Error && 'status' in error && error.status === 400 ? 400 : 503;
+      return respond(response, status, 'Inbound verification unavailable or invalid');
+    }
+    // Always-on process, not a serverless handler. Reserve before the first await
+    // in router.handle so simultaneous retries cannot repeat owner commands.
+    const processing = dispatchTwilio(store.db, event, (inbound) => router.handle(inbound));
+    response.writeHead(200, { 'content-type': 'text/xml' }); response.end('<Response/>');
+    await processing;
+    return;
+  }
+
+  if (url.pathname === '/webhook' && config.messagingProvider === 'twilio') return respond(response, 404, 'Not found');
 
   // --- the public website (architecture step 6) ---------------------------
   if (request.method === 'GET' && url.pathname === '/') {
@@ -309,10 +354,20 @@ function respond(response: ServerResponse, status: number, body: string): void {
 /** `npm start` */
 if (import.meta.filename === process.argv[1]) {
   const config = loadConfig();
-  const { server, config: active } = buildServer(config);
+  const { server, config: active, shutdown } = buildServer(config);
+  let stopping = false;
+  const stop = (): void => {
+    if (stopping) return;
+    stopping = true;
+    // The host's termination grace period must exceed the longest agent task.
+    void shutdown().then(() => process.exit(0), () => process.exit(1));
+  };
+  process.once('SIGTERM', stop);
+  process.once('SIGINT', stop);
   server.listen(active.port, () => {
     console.log(`Eppic WhatsApp agent listening on :${active.port}`);
     console.log(`Rules: ${getRules().paths.playbook}`);
     console.log(`Owner: ${active.ownerName} ${active.ownerPhone}`);
   });
 }
+
