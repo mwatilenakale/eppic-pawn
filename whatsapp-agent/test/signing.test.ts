@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { loadRules } from '../src/playbook/index.ts';
 import { ContractError, Store, generateMediaKey, type Approval, type User } from '../src/store/index.ts';
 import { ContractService } from '../src/contract/index.ts';
+import { blankDataUrl, pngDataUrl, signatureDataUrl } from './support/png-fixture.ts';
 import { MemoryTransport } from '../src/whatsapp/transport.ts';
 import { buildServer } from '../src/server.ts';
 import { AgentRouter } from '../src/router.ts';
@@ -293,5 +294,63 @@ describe('approval sends the signing link', () => {
 
     assert.deepEqual(store.contractsForApproval(approval.id), []);
     assert.doesNotMatch(transport.to('+264813333333').join('\n'), /\/c\//);
+  });
+});
+
+/**
+ * A signed agreement has to have a signature on it.
+ *
+ * Codex's website audit, 30 October 2026, finding B. The checks on the posted
+ * image were checks on its *format* — a data URL, under a megabyte, starting
+ * with the PNG magic number — so a fully transparent PNG satisfied all three,
+ * created the loan and posted the principal and interest. The shop would have
+ * held a signed agreement with nothing drawn on it.
+ *
+ * It needed no crafted request. The pad's resize handler assigns
+ * `canvas.width`, which clears the canvas by specification, and did not reset
+ * the form's signed flag — so a customer who rotated their phone after signing
+ * submitted a blank image and got a thank-you page. The pad keeps its strokes
+ * and redraws them now, but the check belongs here as well: the browser is
+ * untrusted, and this is the one artefact a customer is later held to.
+ */
+describe('a blank signature is not a signature', () => {
+  const sign = (signatureDataUrl: string) =>
+    contracts.sign(issue().contract.token, { name: 'Test Customer', idNumber: '90010100123', signatureDataUrl });
+
+  test('an empty pad is refused, and leaves no loan behind', () => {
+    const loans = () => (store.db.prepare('SELECT COUNT(*) AS n FROM loans').get() as { n: number }).n;
+    const before = loans();
+    assert.throws(() => sign(blankDataUrl()), /sign in the box/i);
+    assert.equal(loans(), before, 'no loan, no ledger entry, nothing half-written');
+    assert.equal((store.db.prepare('SELECT COUNT(*) AS n FROM ledger_entries').get() as { n: number }).n, 0);
+  });
+
+  test('a stroke across the pad is accepted', () => {
+    const signed = sign(signatureDataUrl());
+    assert.ok(signed.contract.signed_at, 'a real signature still goes through');
+    assert.equal((store.db.prepare('SELECT COUNT(*) AS n FROM loans').get() as { n: number }).n, 1);
+  });
+
+  test('every row filter is handled, drawn and blank alike', () => {
+    // A decoder that forgets to reverse PNG filtering reads a blank image as
+    // marked, which would quietly undo the whole check.
+    for (const filter of [0, 1, 2, 3, 4] as const) {
+      assert.throws(() => sign(blankDataUrl({ filter })), /sign in the box/i, `blank, filter ${filter}`);
+      assert.ok(sign(signatureDataUrl({ filter })).contract.signed_at, `drawn, filter ${filter}`);
+    }
+  });
+
+  test('a pad with no alpha channel is judged on white, not on transparency', () => {
+    // RGB has no alpha, so "nothing drawn" arrives as white paper rather than
+    // as transparent pixels.
+    assert.throws(() => sign(blankDataUrl({ channels: 3 })), /sign in the box/i);
+    assert.ok(sign(signatureDataUrl({ channels: 3 })).contract.signed_at);
+  });
+
+  test('an image this code cannot read is refused rather than guessed at', () => {
+    // Interlacing is outside what a canvas produces, and the second is not a
+    // PNG at all. Refusing beats vouching for bytes we did not decode.
+    assert.throws(() => sign(pngDataUrl({ width: 8, height: 8, interlaced: true })), /sign in the box/i);
+    assert.throws(() => sign('data:image/png;base64,aGVsbG8='), /sign in the box/i);
   });
 });

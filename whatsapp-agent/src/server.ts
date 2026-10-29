@@ -224,7 +224,7 @@ async function handleRequest(
     if (category && description.trim() && missing.length) {
       return respondHtml(response, 200, questionsPage(rules, category, form.get('variant'),
         precheckQuestions(rules, category.slug, form.get('variant')),
-        { description, error: `Before estimating this item, please add its ${missing.join(' and ')}.` }));
+        { description, answers, error: `Before estimating this item, please add its ${missing.join(' and ')}.` }));
     }
 
     // Step 3 of the design — the research the loader stands for. Lukas's own

@@ -226,3 +226,53 @@ describe('the staff link', () => {
     }
   });
 });
+
+/**
+ * Answers survive being corrected, and the page does not claim research.
+ *
+ * Codex's website audit, findings E and D. The form re-rendered every radio
+ * with "not sure" checked, so a customer corrected on their description got
+ * eight answers silently reset — and re-submitting recorded "not sure"
+ * against questions they had answered yes, which tells the shop something
+ * untrue about the item rather than merely annoying the customer.
+ */
+describe('a corrected form keeps what the customer already said', () => {
+  test('eight answers survive a description correction', async () => {
+    const form = await get('/apply?category=phones&variant=iphone');
+    const ids = [...new Set([...form.html.matchAll(/<input type="radio" name="([^"]+)" value="yes"/g)].map((m) => m[1]!))];
+    assert.ok(ids.length >= 5, `expected the screening questions, found ${ids.length}`);
+
+    // "iPhone 13 Pro, good condition" has no storage size, which is what
+    // trips the correction.
+    const fields: Record<string, string> = {
+      category: 'phones', variant: 'iphone', description: 'iPhone 13 Pro, good condition',
+    };
+    for (const id of ids) fields[id] = 'yes';
+    const corrected = await post('/apply', fields);
+
+    assert.match(corrected.html, /please add its/i, 'it is the correction page');
+    assert.match(corrected.html, /value="iPhone 13 Pro, good condition"/, 'the description is kept');
+    assert.equal(
+      [...corrected.html.matchAll(/value="yes" checked/g)].length,
+      ids.length,
+      'every answer is still yes',
+    );
+    assert.equal([...corrected.html.matchAll(/value="not sure" checked/g)].length, 0);
+  });
+
+  test('a first visit still defaults to "not sure"', async () => {
+    const page = await get('/apply?category=phones&variant=iphone');
+    assert.ok([...page.html.matchAll(/value="not sure" checked/g)].length >= 5);
+    assert.equal([...page.html.matchAll(/value="yes" checked/g)].length, 0);
+  });
+
+  test('the page does not claim to have researched a market price', async () => {
+    // The valuator sends a description to a model against a fixed schema. It
+    // retrieves no listings, and the page shows no sources, comparables or
+    // dates — so "Research market value" promised evidence that does not
+    // exist behind the figure.
+    const page = await get('/apply?category=phones&variant=iphone');
+    assert.doesNotMatch(page.html, /research/i);
+    assert.match(page.html, /Work out an estimate/);
+  });
+});

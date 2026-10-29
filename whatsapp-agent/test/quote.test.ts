@@ -161,7 +161,9 @@ describe('the design system is actually applied', () => {
   test('the four steps are shown, with the right one active', async () => {
     const { html } = await apply({ category: 'phones', variant: 'iphone', description: PHONE_DESCRIPTION });
 
-    for (const label of ['Item', 'Details', 'Research', 'Quote']) assert.match(html, new RegExp(label));
+    // "Estimate", not "Research": nothing behind the figure is retrieved, so
+    // the step no longer claims it was (Codex's website audit, finding D).
+    for (const label of ['Item', 'Details', 'Estimate', 'Quote']) assert.match(html, new RegExp(label));
     assert.match(html, /step-number active">4</, 'the quote step is the active one');
     assert.match(html, /step-number completed/, 'the earlier ones are done');
   });

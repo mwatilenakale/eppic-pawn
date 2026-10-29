@@ -56,42 +56,90 @@ const SIGNATURE_SCRIPT = `
   const submit = document.getElementById('submit');
   let drawing = false, signed = false;
 
+  // Every stroke, in CSS pixels, so the drawing can be put back after a
+  // resize. Assigning canvas.width clears the canvas by specification, and a
+  // phone rotating is an ordinary thing for a customer to do — this used to
+  // wipe the ink while leaving the form's "signed" flag true, so they
+  // submitted a blank image and got a thank-you page.
+  const strokes = [];
+
+  function style() {
+    context.lineWidth = 2.5;
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+    context.strokeStyle = '#1a1a1a';
+  }
+
+  function redraw() {
+    for (const stroke of strokes) {
+      if (stroke.length === 0) continue;
+      context.beginPath();
+      context.moveTo(stroke[0][0], stroke[0][1]);
+      for (const [x, y] of stroke.slice(1)) context.lineTo(x, y);
+      // A single dot would otherwise leave no mark at all on redraw.
+      if (stroke.length === 1) context.lineTo(stroke[0][0] + 0.01, stroke[0][1]);
+      context.stroke();
+    }
+  }
+
   function resize() {
     const ratio = window.devicePixelRatio || 1;
     const { width, height } = canvas.getBoundingClientRect();
     canvas.width = width * ratio;
     canvas.height = height * ratio;
     context.scale(ratio, ratio);
-    context.lineWidth = 2.5;
-    context.lineCap = 'round';
-    context.lineJoin = 'round';
-    context.strokeStyle = '#1a1a1a';
+    style();
+    redraw();
   }
   resize();
   window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', resize);
+
+  /** Enough movement to be a signature rather than a tap on the glass. */
+  function meaningful() {
+    let travelled = 0;
+    for (const stroke of strokes) {
+      for (let i = 1; i < stroke.length; i += 1) {
+        travelled += Math.hypot(stroke[i][0] - stroke[i - 1][0], stroke[i][1] - stroke[i - 1][1]);
+      }
+    }
+    return travelled >= 24;
+  }
+
+  function refresh() {
+    signed = meaningful();
+    submit.disabled = !signed;
+  }
 
   function position(event) {
     const box = canvas.getBoundingClientRect();
     return [event.clientX - box.left, event.clientY - box.top];
   }
   canvas.addEventListener('pointerdown', (event) => {
-    drawing = true; signed = true; submit.disabled = false;
+    drawing = true;
     canvas.setPointerCapture(event.pointerId);
     const [x, y] = position(event);
+    strokes.push([[x, y]]);
     context.beginPath(); context.moveTo(x, y);
+    // Deliberately not enabling Submit here. Touching the pad is not signing
+    // it, and a single tap used to be accepted as a signature.
+    refresh();
   });
   canvas.addEventListener('pointermove', (event) => {
     if (!drawing) return;
     const [x, y] = position(event);
+    strokes[strokes.length - 1].push([x, y]);
     context.lineTo(x, y); context.stroke();
+    refresh();
   });
   for (const type of ['pointerup', 'pointercancel', 'pointerleave']) {
-    canvas.addEventListener(type, () => { drawing = false; });
+    canvas.addEventListener(type, () => { drawing = false; refresh(); });
   }
 
   document.getElementById('clear').addEventListener('click', () => {
     context.clearRect(0, 0, canvas.width, canvas.height);
-    signed = false; submit.disabled = true;
+    strokes.length = 0;
+    refresh();
   });
 
   document.getElementById('form').addEventListener('submit', (event) => {

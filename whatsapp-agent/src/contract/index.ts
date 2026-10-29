@@ -12,6 +12,7 @@ import { randomBytes } from 'node:crypto';
 import { formatAmount } from '../money.ts';
 import type { Rules } from '../playbook/index.ts';
 import { ContractError, type Contract, type Store } from '../store/index.ts';
+import { inflateSync } from 'node:zlib';
 import { addDays } from '../valuation.ts';
 import { buildContract, type ContractDocument } from './document.ts';
 
@@ -20,6 +21,16 @@ export { signingPage, signedPage, contractErrorPage } from './page.ts';
 
 /** A signature bigger than this is not a signature. */
 const MAX_SIGNATURE_BYTES = 1_000_000;
+
+/**
+ * Below this alpha a pixel is not a mark.
+ *
+ * Not zero, because the pad draws with a round cap and anti-aliases, so the
+ * faintest edge of a stroke is a handful of alpha. A stray almost-invisible
+ * pixel should not count as a signature either, so this sits just above the
+ * noise floor rather than at it.
+ */
+const MIN_VISIBLE_ALPHA = 8;
 
 /** How long a signing link stays valid. */
 const DEFAULT_VALID_DAYS = 7;
@@ -271,5 +282,111 @@ function readSignatureImage(dataUrl: string): Buffer | null {
   if (image.length === 0 || image.length > MAX_SIGNATURE_BYTES) return null;
   // PNG magic number — the pad produces one; anything else is not from it.
   if (!image.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return null;
+  // And something has to have been drawn on it. See `hasInk`.
+  if (!hasInk(image)) return null;
   return image;
+}
+
+/**
+ * Is there anything actually drawn on this?
+ *
+ * Found by Codex's website audit, 30 October 2026, and confirmed: the checks
+ * above are checks on the *format*, so a fully transparent PNG passed them,
+ * created the loan and posted N$3,750 principal with N$1,087.50 interest. The
+ * shop would have held a signed agreement with nothing on it.
+ *
+ * It is reachable through ordinary use, not only by a crafted request. The
+ * pad's resize handler assigns `canvas.width`, which by specification clears
+ * the canvas, and it did not reset the "signed" flag — so a customer who
+ * rotated their phone after signing submitted a blank image and got a
+ * thank-you page. That half is fixed in `page.ts` too, but the client is not
+ * where this belongs: the browser is untrusted, and a signature is the one
+ * thing in this system a person is later held to.
+ *
+ * So the bytes are decoded here. Only the subset `canvas.toDataURL()` emits is
+ * accepted — 8 bits per channel, RGB or RGBA, no interlacing — and anything
+ * else is refused rather than guessed at, because an image this function
+ * cannot read is not an image it can vouch for.
+ */
+function hasInk(png: Buffer): boolean {
+  try {
+    let width = 0, height = 0, channels = 0;
+    const data: Buffer[] = [];
+
+    // Walk the chunks. Length, type, payload, CRC — repeat to IEND.
+    for (let at = 8; at + 8 <= png.length; ) {
+      const length = png.readUInt32BE(at);
+      const type = png.toString('ascii', at + 4, at + 8);
+      const body = png.subarray(at + 8, at + 8 + length);
+      if (at + 12 + length > png.length) return false;
+
+      if (type === 'IHDR') {
+        width = body.readUInt32BE(0);
+        height = body.readUInt32BE(4);
+        const depth = body[8], colour = body[9], interlace = body[12];
+        if (depth !== 8 || interlace !== 0) return false;
+        if (colour === 6) channels = 4;
+        else if (colour === 2) channels = 3;
+        else return false;
+      } else if (type === 'IDAT') {
+        data.push(body);
+      } else if (type === 'IEND') break;
+
+      at += 12 + length;
+    }
+
+    if (width <= 0 || height <= 0 || channels === 0 || data.length === 0) return false;
+    const raw = inflateSync(Buffer.concat(data));
+    const stride = width * channels;
+    if (raw.length < (stride + 1) * height) return false;
+
+    // Un-filter, one scanline at a time, keeping the previous line for the
+    // filters that refer to it. Doing this properly matters: a transparent
+    // image can still have non-zero bytes on the wire, so looking at the raw
+    // deflate output without reversing the filters would be a guess.
+    const previous = Buffer.alloc(stride);
+    const current = Buffer.alloc(stride);
+    for (let row = 0; row < height; row += 1) {
+      const start = row * (stride + 1);
+      const filter = raw[start]!;
+      raw.copy(current, 0, start + 1, start + 1 + stride);
+
+      for (let i = 0; i < stride; i += 1) {
+        const left = i >= channels ? current[i - channels]! : 0;
+        const up = previous[i]!;
+        const upLeft = i >= channels ? previous[i - channels]! : 0;
+        let add = 0;
+        if (filter === 1) add = left;
+        else if (filter === 2) add = up;
+        else if (filter === 3) add = (left + up) >> 1;
+        else if (filter === 4) {
+          // Paeth: whichever of the three neighbours the gradient is nearest.
+          const estimate = left + up - upLeft;
+          const dLeft = Math.abs(estimate - left);
+          const dUp = Math.abs(estimate - up);
+          const dUpLeft = Math.abs(estimate - upLeft);
+          add = dLeft <= dUp && dLeft <= dUpLeft ? left : dUp <= dUpLeft ? up : upLeft;
+        } else if (filter !== 0) return false;
+        current[i] = (current[i]! + add) & 0xff;
+      }
+
+      for (let x = 0; x < width; x += 1) {
+        const pixel = x * channels;
+        // RGBA: anything not fully transparent is a mark. RGB: anything not
+        // white, since a pad with no alpha channel comes back as white paper.
+        if (channels === 4) {
+          if (current[pixel + 3]! > MIN_VISIBLE_ALPHA) return true;
+        } else if (current[pixel]! < 250 || current[pixel + 1]! < 250 || current[pixel + 2]! < 250) {
+          return true;
+        }
+      }
+
+      current.copy(previous);
+    }
+
+    return false;
+  } catch {
+    // Unreadable is not signed.
+    return false;
+  }
 }

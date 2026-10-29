@@ -20,7 +20,23 @@ import type { Question } from '../intake/questions.ts';
 import { THEME, iconFor } from './theme.ts';
 import { whatsappLink, type PrecheckOutcome, type PrecheckQuote } from './precheck.ts';
 
-const STEPS = ['Item', 'Details', 'Research', 'Quote'] as const;
+// "Estimate", not "Research": there is no retrieval step behind it. See the
+// comment on the submit button below (Codex's website audit, finding D).
+/**
+ * The submit label.
+ *
+ * Deliberately not "Research market value". The valuator sends the
+ * description to a model against a fixed schema; it retrieves no listings,
+ * and the page shows no sources, comparables or dates that would back such a
+ * claim. Codex's website audit, finding D.
+ *
+ * A TypeScript comment and not an HTML one, which is where this started: an
+ * HTML comment is served to the browser, so the word stayed on the page and
+ * the test that forbids it kept failing — correctly.
+ */
+const ESTIMATE_BUTTON = 'Work out an estimate &rarr;';
+
+const STEPS = ['Item', 'Details', 'Estimate', 'Quote'] as const;
 
 /** "the manager" → "The manager", for a heading or the start of a sentence. */
 function capitalise(text: string): string {
@@ -47,7 +63,7 @@ WhatsApp ${escapeHtml(whatsapp)}</footer>
 </html>`;
 }
 
-/** 1 Item → 2 Details → 3 Research → 4 Quote. */
+/** 1 Item → 2 Details → 3 Estimate → 4 Quote. */
 function stepBar(current: number): string {
   return `<div class="step-bar">${STEPS.map((label, index) => {
     const number = index + 1;
@@ -141,7 +157,7 @@ export function questionsPage(
   category: { slug: string; label: string },
   variant: string | null,
   questions: Question[],
-  options: { description?: string; error?: string } = {},
+  options: { description?: string; error?: string; answers?: Record<string, string> } = {},
 ): string {
   const variants = rules.variantsFor(category.slug);
 
@@ -171,7 +187,17 @@ export function questionsPage(
         <div class="choices">
           ${['yes', 'no', 'not sure']
             .map(
-              (choice) => `<label><input type="radio" name="${escapeHtml(question.id)}" value="${choice}"${choice === 'not sure' ? ' checked' : ''}><span>${choice}</span></label>`,
+              // Whatever they already chose stays chosen. This used to check
+              // "not sure" unconditionally, so a customer corrected on their
+              // description — "please add its storage size" — got the form
+              // back with all eight answers reset. Re-submitting then recorded
+              // "not sure" against questions they had answered yes, which is
+              // the shop being told something untrue about the item, not just
+              // an annoyance. Falls back to "not sure" only when there is no
+              // previous answer, which is the first visit.
+              (choice) => `<label><input type="radio" name="${escapeHtml(question.id)}" value="${choice}"${
+                choice === (options.answers?.[question.id] ?? 'not sure') ? ' checked' : ''
+              }><span>${choice}</span></label>`,
             )
             .join('')}
         </div>
@@ -198,7 +224,7 @@ export function questionsPage(
       </div>
 
       ${fields}
-      <button class="btn btn-primary" type="submit">Research market value &rarr;</button>
+      <button class="btn btn-primary" type="submit">${ESTIMATE_BUTTON}</button>
     </form>
 
     <p class="muted">We don't ask for your name or number here, and nothing you enter is an application.</p>`,
@@ -320,7 +346,8 @@ function verificationBanner(ownerLabel: string): string {
     <span class="verification-icon" aria-hidden="true">&#9888;</span>
     <h2>This is an estimate, not an offer</h2>
     <p class="lead" style="margin-top:var(--space-2)">
-      Every figure here is worked out from what the item is worth second-hand. ${escapeHtml(capitalise(ownerLabel))} confirms the final
+      Every figure here is worked out from an automated guess at what the item is worth second-hand. It is
+      not a checked selling price, and nobody has seen your item yet. ${escapeHtml(capitalise(ownerLabel))} confirms the final
       amount once the item and the photos have been seen — it can go up or down.
     </p>
   </div>`;

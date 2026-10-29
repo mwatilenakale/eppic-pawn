@@ -161,11 +161,25 @@ function buildSections(input: ContractInput, rules: Rules, terms: LoanTerms, dat
       ],
     },
     {
+      // What this section promised had fallen behind the playbook, found by
+      // Codex's website audit (finding K) and confirmed. It told the customer
+      // the shop "will contact the customer directly" once grace ends, which
+      // is the opposite of the rule Lukas gave on 25 October — a reminder
+      // three days before the due date, a final notice on the last day of
+      // grace, and nothing after that. It also described extension through
+      // the margin check alone, when section 8 now makes the
+      // 70%-of-market-value test the one that governs.
+      //
+      // The figures and the lead time are read from the parsed rules, never
+      // written in here, so the agreement cannot drift from section 8 again
+      // without the document changing too.
       heading: 'If the loan is not repaid',
       bullets: [
-        `Once the grace period ends on ${dates.graceEndsDate}, Eppic Pawn Shop will contact the customer directly.`,
-        `Eppic Pawn Shop then compares what is owed against what the item will sell for. While roughly ${playbook.collections.marginThresholdPct}% or more of that value is still left over after what is owed, the loan may be extended by a further month instead of the item being sold.`,
-        'Once that margin is gone, the item is sold to recover the loan and the interest owed. It is priced to sell quickly rather than for the highest possible price.',
+        `Eppic Pawn Shop sends a reminder ${playbook.collections.reminderDaysBeforeDue} days before the due date, and a final notice on ${dates.graceEndsDate}, the last day of the grace period.`,
+        'After that day the shop does not chase the loan. The customer has been told everything there is to tell, and whether anyone makes further contact is the manager\'s decision in that particular case.',
+        `If the customer asks for more time, the manager may extend the loan by a further month — but only while everything that would then be owed stays at or below ${playbook.collections.extensionCeilingPct}% of what the item is currently worth. Eppic Pawn Shop also checks that roughly ${playbook.collections.marginThresholdPct}% of the item's value would still be left over after what is owed. Where the two disagree, the stricter one applies.`,
+        'An extension is never automatic. Nothing in this agreement obliges Eppic Pawn Shop to grant one.',
+        'Once there is no longer enough value left in the item, it may be sold to recover the loan and the interest owed. It is priced to sell quickly rather than for the highest possible price. Sending an item to market is the manager\'s decision; it does not happen on a timer.',
         'The customer may redeem the item at any point before it is sold, by paying everything then owed.',
       ],
     },
