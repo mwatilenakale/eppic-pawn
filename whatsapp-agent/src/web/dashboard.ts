@@ -93,6 +93,8 @@ ${section(
 
 ${canSeeTotals ? book(dashboard) : ''}
 
+${unhandledInbound(dashboard)}
+
 <div class="section"><h2>Collection messages</h2>
 <p>${dashboard.collectionNotices.reminders} reminders waiting to go · ${dashboard.collectionNotices.final} final notices waiting to go today</p>
 <p>${dashboard.collectionNotices.missedFinal} final-notice dates missed; manual review only, no late messages.</p>
@@ -103,6 +105,39 @@ ${canSeeTotals ? book(dashboard) : ''}
 }
 
 // --- the pieces ------------------------------------------------------------
+
+/**
+ * Messages that came in and were not handled.
+ *
+ * Shown only when there are any, because the normal state is none and a
+ * permanent zero is a line people stop reading. Nothing retries these: the
+ * dispatch is at-most-once on purpose, since replaying a message could repeat
+ * a money command. So this is the only place it surfaces, and the reason it
+ * is near the top of the page rather than at the bottom is the case that
+ * matters — Lukas types *APPROVE*, it fails, and without this he has no way
+ * to know the customer was never approved.
+ */
+function unhandledInbound(dashboard: Dashboard): string {
+  const { failed, unfinished } = dashboard.inboundNeedingReview;
+  if (failed + unfinished === 0) return '';
+
+  const parts = [
+    failed > 0 ? `${failed} failed` : '',
+    unfinished > 0 ? `${unfinished} interrupted, outcome unknown` : '',
+  ].filter(Boolean);
+
+  return `<div class="section">
+  <h2>Messages that did not go through<span class="count count-urgent">${failed + unfinished}</span></h2>
+  <div class="rows"><div class="row row-bad">
+    <div class="row-top"><span class="row-who">${escapeHtml(parts.join(' · '))}</span></div>
+    <div class="row-what">Somebody messaged the shop and the agent did not finish with it.
+      If one of these was your own <span class="ref">APPROVE</span>, <span class="ref">DECLINE</span>
+      or <span class="ref">PAID</span>, it did not take effect.</div>
+    <div class="row-meta">Nothing is retried automatically — repeating a message could repeat a payment
+      or an approval. Check against the Twilio log and the audit trail, then send the command again if it never landed.</div>
+  </div></div>
+</div>`;
+}
 
 function tile(value: number, label: string, urgent: boolean): string {
   return `<div class="tile">

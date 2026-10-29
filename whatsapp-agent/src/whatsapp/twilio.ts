@@ -1,7 +1,7 @@
 /** Twilio is an edge adapter only. Intake, permissions and money stay in AgentRouter.
  * Review notes and cloud setup: docs/twilio-cloud.md.
  */
-import twilio from 'twilio';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { InboundEvent } from './webhook.ts';
 import { WhatsAppError, type WhatsAppTransport, type OutboundMessage, type DownloadedMedia } from './transport.ts';
@@ -17,6 +17,50 @@ export interface TwilioOptions {
 const messageSid = /^(?:SM|MM)[0-9a-f]{32}$/i;
 const whatsappNumber = /^whatsapp:\+[1-9]\d{7,14}$/;
 
+/**
+ * Twilio's documented request signature.
+ *
+ * https://www.twilio.com/docs/usage/security — append the POST fields to the
+ * exact URL Twilio was configured with, sorted by field name, then HMAC-SHA1
+ * with the auth token and base64 the result. SHA1 is Twilio's protocol, not a
+ * choice here.
+ *
+ * Hand-written rather than taken from the `twilio` package, which this
+ * replaced. The package was pulled in for this one function and brought 55
+ * transitive packages with it — axios, jsonwebtoken, eight lodash
+ * micro-packages, 21 MB — none of which this code calls, in a repository that
+ * holds customers' ID photos and the loan ledger. AGENTS.md sets the
+ * precedent: the OpenAI client and the .xlsx reader were both written against
+ * the standard library instead of taking a dependency.
+ *
+ * It is also stricter than the package, which was the one real difference
+ * between them. `validateRequest` tries six spellings of the URL — with the
+ * port, without it, URL-normalised, and two legacy query-string forms — so it
+ * accepts a signature computed for `https://host:443/path` on a request to
+ * `https://host/path`. That is a compatibility fallback for back ends of
+ * unknown shape, not a security measure, and this deployment pins one exact
+ * origin: `loadConfig` requires PUBLIC_BASE_URL to be an HTTPS origin equal to
+ * its own `new URL(...).origin`, which rules the port spelling out. One
+ * comparison against one URL is the tighter check.
+ *
+ * The cost of that strictness is one failure mode worth naming: if the URL in
+ * the Twilio console is not character-for-character `PUBLIC_BASE_URL` plus the
+ * path — a port, a trailing slash, http instead of https, a proxy rewriting
+ * the path — every webhook fails signature verification and the agent goes
+ * deaf with 401s in the log. That is the right way to fail, but it has to be
+ * diagnosable, hence this note.
+ *
+ * `test/twilio.test.ts` holds known-answer vectors generated from the official
+ * package before it was removed, covering unicode, newlines, ampersands,
+ * empty values, a field name that is a prefix of another, and key ordering.
+ */
+export function expectedTwilioSignature(token: string, url: string, params: Record<string, string>): string {
+  const data = Object.keys(params)
+    .sort()
+    .reduce((accumulated, key) => accumulated + key + params[key], url);
+  return createHmac('sha1', token).update(Buffer.from(data, 'utf8')).digest('base64');
+}
+
 /** Reject ambiguous duplicate parameters, but include ALL supplied fields in validation. */
 export function verifiedTwilioForm(raw: string, signature: string | undefined, publicUrl: string, token: string): Record<string, string> | null {
   if (!signature || !token) return null;
@@ -26,7 +70,12 @@ export function verifiedTwilioForm(raw: string, signature: string | undefined, p
     if (Object.hasOwn(params, key)) return null;
     params[key] = value;
   }
-  return twilio.validateRequest(token, signature, publicUrl, params) ? params : null;
+  const provided = Buffer.from(signature, 'utf8');
+  const expected = Buffer.from(expectedTwilioSignature(token, publicUrl, params), 'utf8');
+  // Length first: timingSafeEqual throws on a mismatch, and the signature's
+  // length is fixed by the algorithm, so returning early leaks nothing.
+  if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) return null;
+  return params;
 }
 
 export class TwilioTransport implements WhatsAppTransport {

@@ -78,6 +78,11 @@ export interface Today {
 
 export interface Dashboard {
   collectionNotices: { reminders: number; final: number; missedFinal: number; needsReview: number };
+  /**
+   * Inbound messages taken in and not handled. Dispatch is at-most-once by
+   * design, so nothing retries these — this count is how anyone finds out.
+   */
+  inboundNeedingReview: { failed: number; unfinished: number };
   today: Today;
 
   /** Applications waiting on Lukas's yes or no. The first thing he wants. */
@@ -137,6 +142,7 @@ export class DashboardQuery {
     const collections = new Collections(this.#store, this.#rules, null, { clock: this.#now });
     return {
       collectionNotices: { reminders: collections.reminders().length, final: collections.finalNotices().length, missedFinal: collections.missedFinalNotices().length, needsReview: this.#store.collectionNoticesNeedingReview() },
+      inboundNeedingReview: this.#store.inboundNeedingReview(),
       today: this.#today(),
       awaitingDecision: this.#awaitingDecision(),
       awaitingCategoryAnswer: this.#categoryQuestions(),

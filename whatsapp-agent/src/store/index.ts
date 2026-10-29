@@ -1366,6 +1366,29 @@ export class Store {
     return Number((this.db.prepare("SELECT COUNT(*) n FROM collection_notices WHERE state <> 'accepted'").get() as { n: number }).n);
   }
 
+  /**
+   * Inbound WhatsApp messages that were taken in and not handled.
+   *
+   * Dispatch is deliberately at-most-once: a message that fails is never
+   * replayed, because replaying it could repeat a money command. That policy
+   * is right, and it makes this count the only way anyone learns it happened.
+   * Without it a failed receipt lived in stderr and in a hand-written SQL
+   * query — and the case that matters is Lukas's own: he types *APPROVE A1B2*,
+   * handling throws, the row is marked failed, and he is told nothing, so he
+   * believes a customer has been approved who has not.
+   *
+   * `processing` counts too. After a restart it means the outcome is unknown,
+   * not that the work is still running.
+   */
+  inboundNeedingReview(): { failed: number; unfinished: number } {
+    const row = this.db
+      .prepare(
+        "SELECT SUM(state = 'failed') AS failed, SUM(state = 'processing') AS unfinished FROM twilio_receipts",
+      )
+      .get() as { failed: number | null; unfinished: number | null };
+    return { failed: Number(row.failed ?? 0), unfinished: Number(row.unfinished ?? 0) };
+  }
+
   /** `EPP-2026-0007` — sequential within the year the contract is issued. */
   nextContractNumber(year: number): string {
     const row = this.db

@@ -45,6 +45,10 @@ export function buildServer(
   const store =
     overrides.store ??
     new Store(config.dbPath, { mediaDirectory: config.mediaDirectory, mediaKey: config.mediaKey });
+  // `shutdown` closes the database, so it must only close one it opened. A
+  // caller that passed its own store still owns it — closing that on their
+  // behalf is how a test ends up reading from a closed handle.
+  const ownsStore = overrides.store === undefined;
 
   const twilioTransport = config.messagingProvider === 'twilio'
     ? new TwilioTransport(config.twilio ?? (() => { throw new Error('Missing Twilio configuration'); })(), overrides.twilioFetch)
@@ -112,7 +116,7 @@ export function buildServer(
   const shutdown = async (): Promise<void> => {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await Promise.allSettled([...inFlight]);
-    store.close();
+    if (ownsStore) store.close();
   };
   return { server, store, router, contracts, config, shutdown };
 }
