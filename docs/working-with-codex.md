@@ -34,6 +34,40 @@ Rules for keeping it:
 
 Newest first. Each entry: what, who found it, what shape it was.
 
+### 2026-10-29 · Codex · three attack surfaces I was not thinking about
+Twilio adapter, which no spec of mine asked for. It refused to fetch the
+webhook's own `MediaUrl0` (the obvious implementation is an SSRF hole), fetched
+the authoritative send time from the API rather than trusting the webhook's
+timestamp field, and rejected duplicate form fields before signature
+validation. All three are "what can the other end of this lie about?", and
+none of them are things I had asked. *Shape: adversarial reasoning about an
+untrusted boundary — the same strength as its adversarial input testing, aimed
+at a protocol instead of an enum.*
+
+### 2026-10-29 · Claude · a security argument that inverted on inspection
+Same branch. It took the `twilio` package as a second runtime dependency — 55
+transitive packages for one function — and justified it as using "the
+provider-maintained validator rather than a hand-written signing variant",
+which sounds right and is the kind of argument I am inclined to accept.
+Reading `validateRequest` showed it tries six URL spellings to work with back
+ends of unknown shape, so it is deliberately *more permissive* than a single
+comparison against one pinned origin. The hand-written version is 10 lines and
+strictly stricter. Checked it against the package on 13 edge cases before
+removing it, and kept the package's own answers as vectors. *Shape: a
+plausible security-flavoured rationale for a dependency, where reading the
+dependency's source reverses the conclusion. Also: my own bias — I accept a
+guard more readily than a change, noted here for the second time.*
+
+### 2026-10-29 · Codex · "visible" meaning visible in SQL
+Same branch, and the same shape as the gap it closed for me on collections,
+pointing the other way. Its receipt table recorded a failed inbound, its test
+was named "failed processing is visible", and its deployment notes told an
+operator to run a `SELECT` by hand — nothing in the product read the state. So
+Lukas sends `APPROVE`, it fails, nothing retries it (correctly), and nobody
+tells him. It had built exactly this surfacing for collection notices three
+days earlier. *Shape: a record kept and never surfaced — the declared-but-
+unreached family, except the unreached consumer is a person.*
+
 ### 2026-10-25 · Codex · the constraint was right about fields, wrong about prose
 Task 001. My spec said no figure can reach the inspection page because
 `queue.ts` cannot return one. Codex pointed out the figures arrive in the
@@ -202,6 +236,12 @@ wrote. `approved-by-client` is not a string I would have thought to try.
 - **Scope discipline.** It has now stopped four times to ask rather than widen
   its allowed files, including twice when the change it wanted was obviously
   correct. The second time caught my own mistake.
+- **Adversarial reasoning about an untrusted boundary.** Not just invalid
+  inputs — whole protocols. On the Twilio adapter it refused to fetch the
+  webhook's own media URL, refused to trust the webhook's timestamp, and
+  rejected duplicate form fields before validating the signature, none of
+  which any spec asked for. "What can the other end lie about?" is a question
+  it asks by habit and I ask when prompted.
 - **Not claiming green.** Its twenty-scenario report led with "18 passed, 2
   failed. This is an audit with unresolved findings, not an implementation
   handoff claiming every check is green." That is the right instinct and it is
@@ -259,9 +299,15 @@ rules for keeping an evidence log — not this project's anecdotes. Draft shape:
   a spec names its allowed files; the rules file is not the worker's to edit;
   report before fixing when the finding is worth more than the fix; an
   evidence log kept at the time, in both directions
-- **What it must not claim:** that one agent is better. Two entries in this
-  log have me catching Codex and five have Codex catching me, and the useful
-  content is the *shapes*, not the score.
+- **What it must not claim:** that one agent is better. The log runs both ways
+  and the useful content is the *shapes*, not the score.
+- **One asymmetry worth carrying into the skill**, because it has now appeared
+  twice: I accept a *guard* more readily than a *change*. A redaction that
+  destroyed evidence and a dependency justified on security grounds both got
+  less scrutiny from me than an equivalent-sized feature would have, because
+  both were framed as protection. Review anything presented as a safety
+  measure as hard as anything presented as a feature — and read the
+  dependency's source before accepting "the provider maintains it".
 
 Do not write it from memory at the end. Write it from this log.
 

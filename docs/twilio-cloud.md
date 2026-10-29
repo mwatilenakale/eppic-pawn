@@ -1,6 +1,9 @@
 # Twilio WhatsApp — cloud deployment and Claude review
 
-Status: implementation for review, NOT deployed. No live account settings changed.
+Status: **reviewed and merged, 29 October 2026. NOT deployed.** No live account
+settings changed, no provider chosen, no templates submitted. Claude's review
+verdict is at the foot of this file, including the two changes made on merge
+and the three things still open before this can carry a real customer.
 User-authorised scope: Twilio messaging adapter, configuration, signed webhook,
 receipt migration, tests, environment example, and container packaging. No changes
 to playbook, architecture, approval capabilities or ledger triggers.
@@ -87,10 +90,13 @@ delivery failures. Status-callback tracking is not added by this branch.
 
 ## Reliability and security — review before going live
 
-- Official Twilio SDK validates the signature across all form fields against
-  PUBLIC_BASE_URL + request path/query, never a caller-supplied forwarding header.
-  The second runtime dependency is deliberate: security canonicalisation uses
-  the provider-maintained validator rather than a hand-written signing variant.
+- The signature is validated across all form fields against PUBLIC_BASE_URL +
+  request path/query, never a caller-supplied forwarding header. **Amended on
+  review:** this no longer uses the `twilio` package. The validator is ~10 lines
+  of `node:crypto` implementing Twilio's documented algorithm, checked against
+  the package's own output before the package was removed, and pinned by
+  known-answer vectors in `test/twilio.test.ts`. It is stricter than the
+  package, which tries six URL spellings. See the review verdict below.
 - Account, recipient, sender, message SID and inbound direction are cross-checked
   with Twilio. Failed metadata lookups return 503 before dispatch. Configure and
   verify Twilio's webhook retry policy for HTTP 5xx responses; do not assume every
@@ -106,6 +112,9 @@ delivery failures. Status-callback tracking is not added by this branch.
   with an authorised operator. Reconcile against Twilio Message logs and the
   business audit/ledger before requesting a new command. Do not delete receipts
   or auto-replay financial commands. A handled receipt does not prove delivery.
+  **Amended on review:** the counts are now on the staff dashboard under
+  "Messages that did not go through", so the SQL above is for digging into a
+  case rather than for discovering there is one.
 - REST sends make a single attempt: an ambiguous timeout must not duplicate a
   financial notification. Media is resolved by SID under this account, never by
   trusting webhook MediaUrl0. Native fetch removes Basic auth on cross-origin
@@ -140,3 +149,133 @@ Official references:
 [Twilio request security](https://www.twilio.com/docs/usage/security),
 [Message resource](https://www.twilio.com/docs/messaging/api/message-resource),
 [Media resource](https://www.twilio.com/docs/messaging/api/media-resource).
+
+---
+
+## Claude's review — 29 October 2026. Merged, with two changes.
+
+Merged. 664 tests pass, `tsc --noEmit` clean. This is the best-reasoned branch
+Codex has produced on this project, and most of what makes it good was not in
+any spec I wrote — I never asked for a Twilio adapter at all.
+
+### What it got right, unprompted
+
+**It refuses to fetch `MediaUrl0`.** The webhook hands you a URL and the
+obvious implementation downloads it. That is a server-side request forgery
+hole: whatever is on the other end of that URL gets fetched by a process that
+can reach the database and the media directory. It resolves media by SID under
+the fixed account path instead and says why in a comment.
+
+**It does not trust the webhook's timestamp.** It fetches Twilio's Message
+resource for the authoritative send time, because a retry or a forged field
+could otherwise reopen a customer's 24-hour window — which is the same insight
+it had on task 004, applied again without being told.
+
+**It rejects duplicate form fields before validating.** A signature checked
+over a `Record<string, string>` cannot see that the body sent `Body` twice;
+refusing the request outright closes that off.
+
+**Single-attempt sends, and a receipt reserved before acknowledgement.** Same
+reasoning as the collection notices: an ambiguous POST must not duplicate a
+money message, and a restart must not replay Lukas's `APPROVE`. The receipt
+table is reserved synchronously, before the empty TwiML goes back, so a Twilio
+retry arriving mid-flight is deduplicated rather than racing.
+
+**It told the truth about what it had not done.** No host chosen, no account
+touched, no templates submitted, Docker not even installed in its environment —
+and it said so rather than claiming a working deployment.
+
+### The two changes
+
+**1. The second runtime dependency is gone.** It was there for one function,
+`twilio.validateRequest`, and brought 55 transitive packages — axios,
+jsonwebtoken, eight lodash micro-packages, 21 MB — none of which this code
+calls, into a repository holding customers' ID photos and the loan ledger.
+
+Its argument was that canonicalisation should come from the provider rather
+than a hand-written variant. That inverts here. `validateRequest` tries six
+spellings of the URL — with the default port, without it, URL-normalised, and
+two legacy query-string forms — because it must work for back ends of unknown
+shape. This deployment pins one exact origin, which `loadConfig` already
+enforces, so one comparison is strictly tighter: the package accepts a
+signature computed for `https://host:443/path` on a request to
+`https://host/path`; the replacement refuses it.
+
+Hand-rolling a signature validator is the riskiest thing in this review, so it
+was not taken on trust. The replacement was run against the package on 13
+cases — unicode above the BMP, CRLF, ampersands and equals signs,
+percent-encoding, an empty value, an empty form, a field name that is a prefix
+of another, numeric field names that do not sort numerically, 40 fields, a
+query string, a trailing slash — and agreed on all of them, accepting every
+valid signature and refusing every tampered one. Ten are now known-answer
+vectors in `test/twilio.test.ts`, generated by the package itself, so the
+algorithm stays pinned without it. Both comparisons are timing-safe.
+
+The cost is one failure mode worth knowing: the URL in the Twilio console must
+be character-for-character `PUBLIC_BASE_URL` plus the path. A port, a trailing
+slash, or a proxy rewriting the path and every webhook 401s. That is the right
+way to fail, and it is now documented in the code.
+
+**2. A message that did not go through was invisible.** At-most-once dispatch
+is correct and stays. But nothing read the receipt state, and this document
+told an operator to run SQL by hand to find out. The case that matters is
+Lukas's own:
+
+```
+dispatch threw: Twilio inbound handling failed
+receipt: { message_id: SM..., state: 'failed' }
+dashboard mentions it: no
+```
+
+He sends `APPROVE`, it fails, nothing retries it, and nobody tells him — so he
+believes a customer was approved who was not. `Store.inboundNeedingReview()`
+now counts failed and interrupted receipts and the dashboard shows them near
+the top, in terms of what it means for him. `processing` counts as unknown
+rather than as still running, and the section is absent when there is nothing
+to report.
+
+Also fixed: `shutdown()` closed the database even when the caller passed its
+own store.
+
+### Verified by driving it, not only by the assertions
+
+Over real HTTP: an unsigned forgery and one signed with the wrong token both
+get 401; a correctly signed enquiry is routed and answered; a Twilio retry of
+the same `MessageSid` sends nothing further; `/webhook` is 404 in Twilio mode.
+
+Separately, the day-one case — a fresh deployment with `TWILIO_CONTENT_SIDS`
+still empty and a customer whose window has shut:
+
+```
+refused, as it should be: No approved Twilio Content SID/parameters for
+                          eppic_outcome_v1; message not sent
+HTTP posts made to Twilio: 0
+failure handler fired: true
+inside the window, free-form: sent
+```
+
+No free-form fallback, no HTTP call attempted, the error names the template
+that needs mapping, and Lukas gets the alert. That is the right behaviour, and
+it means the shop can run on the sandbox for in-window conversations before any
+template is approved — but **an approval decided overnight will not reach the
+customer until the templates exist.** Plan the template approvals before
+relying on it.
+
+### Still open before this carries a real customer
+
+1. **Hosting is still Lukas's decision and still unmade.** The checklist above
+   names the requirements correctly — one always-on instance, a persistent disk,
+   no scale-to-zero, no multiple replicas — and deliberately picks no provider.
+   Nothing in this branch decides it, and nothing should be deployed until it is
+   decided together with the backup arrangement, because an ephemeral filesystem
+   loses the loan ledger and the encrypted ID photos on the first restart.
+2. **Multiple attachments on one message are dropped silently.** `NumMedia`
+   above 1 returns 400, Twilio does not retry a 4xx, and the customer gets no
+   reply at all. WhatsApp sends one media per message, so this should not
+   happen in practice — but if Twilio ever changes that, a customer's photo
+   disappears with nothing said. Left alone deliberately: fixing it properly
+   means touching media handling on both providers, which is its own task.
+3. **`inbound_windows.source = 'meta'` now means "verified platform time",
+   including Twilio.** The document says so, which is the honest short-term
+   answer, but the column name is now wrong and will mislead whoever reads it
+   next. Worth renaming when something else touches that table.
