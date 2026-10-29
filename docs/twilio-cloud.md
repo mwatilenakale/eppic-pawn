@@ -269,12 +269,14 @@ relying on it.
    Nothing in this branch decides it, and nothing should be deployed until it is
    decided together with the backup arrangement, because an ephemeral filesystem
    loses the loan ledger and the encrypted ID photos on the first restart.
-2. **Multiple attachments on one message are dropped silently.** `NumMedia`
-   above 1 returns 400, Twilio does not retry a 4xx, and the customer gets no
-   reply at all. WhatsApp sends one media per message, so this should not
-   happen in practice — but if Twilio ever changes that, a customer's photo
-   disappears with nothing said. Left alone deliberately: fixing it properly
-   means touching media handling on both providers, which is its own task.
+2. ~~**Multiple attachments on one message are dropped silently.**~~ **Fixed
+   29 October**, after Lukas pointed out that several pictures per item is the
+   normal case rather than an edge case — the back of a TV, a phone's battery
+   screenshot, a laptop's system information. A message with more than one
+   attachment now keeps the first and is handled, instead of returning a 400
+   that Twilio never retries. The larger half of that fix was in the intake,
+   not here: see the "Detail photos" subsection of playbook section 6, which
+   is where the pictures are now asked for by name.
 3. **`inbound_windows.source = 'meta'` now means "verified platform time",
    including Twilio.** The document says so, which is the honest short-term
    answer, but the column name is now wrong and will mislead whoever reads it
