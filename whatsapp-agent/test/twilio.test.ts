@@ -102,13 +102,24 @@ test('wrong account, sender or message direction is rejected before routing', as
     await assert.rejects(new TwilioTransport(options, mockFetch(() => Response.json(record(patch)))).inbound(form));
   }
 });
-test('single attachments map into the existing image/document intake and multiple attachments fail visibly', async () => {
+test('attachments map into the existing image/document intake, and a second one does not lose the message', async () => {
   const transport = new TwilioTransport(options, mockFetch(() => Response.json(record())));
   for (const [mime, type] of [['image/jpeg', 'image'], ['application/pdf', 'document'], ['audio/ogg', 'audio'], ['video/mp4', 'video'], ['unknown', 'unsupported']]) {
     const event = await transport.inbound({ ...form, NumMedia: '1', MediaContentType0: mime!, MediaUrl0: 'http://127.0.0.1/private' });
     assert.equal(event.type, type); assert.equal(event.mediaId, sid);
   }
-  await assert.rejects(transport.inbound({ ...form, NumMedia: '2' }), /media count/);
+
+  // WhatsApp carries one attachment per message, so this is a safety net. It
+  // used to throw, which became a 400 — and Twilio does not retry a 4xx, so
+  // the customer's picture was gone and nobody was told. Pictures are the
+  // point of the intake, so the first is kept and the message is handled.
+  const several = await transport.inbound({ ...form, NumMedia: '2', MediaContentType0: 'image/jpeg' });
+  assert.equal(several.type, 'image');
+  assert.equal(several.mediaId, sid, 'the message still reaches the agent with a picture on it');
+
+  // A count that is not a number is Twilio sending something unrecognised.
+  await assert.rejects(transport.inbound({ ...form, NumMedia: 'lots' }), /media count/);
+  await assert.rejects(transport.inbound({ ...form, NumMedia: '-1' }), /media count/);
 });
 test('Twilio MMS-style message identifiers and date-created fallback are supported', async () => {
   const mm = `MM${'5'.repeat(32)}`;

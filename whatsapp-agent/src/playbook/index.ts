@@ -16,6 +16,7 @@ import {
   loadPlaybook,
   type Category,
   type ChecklistItem,
+  type DetailPhoto,
   type Playbook,
   type RateRule,
 } from './playbook.ts';
@@ -44,6 +45,14 @@ export interface Rules {
   variantFrom(categorySlug: string, text: string): string | null;
   /** Playbook screening questions plus fraud checks, in that order. */
   checklistFor(categorySlug: string, variant?: string | null): ChecklistItem[];
+  /**
+   * Pictures this category is asked for by name (playbook section 6).
+   * Empty for a category the document says nothing about, and for a one-off
+   * item outside the five categories — the agent cannot know what the
+   * details of an unfamiliar thing are, so it asks for the general photo and
+   * Lukas looks at it himself.
+   */
+  detailPhotosFor(categorySlug: string): DetailPhoto[];
   rate(id: string): RateRule | null;
 }
 
@@ -101,6 +110,10 @@ export function loadRules(paths: RulesPaths = defaultRulesPaths()): Rules {
       const groups = fraudChecks.get(categorySlug) ?? [];
       const relevant = groups.filter((group) => group.variant === null || !variant || group.variant === variant);
       return [...screening, ...relevant.flatMap((group) => group.checks)];
+    },
+
+    detailPhotosFor(categorySlug: string): DetailPhoto[] {
+      return playbook.detailPhotos.get(categorySlug) ?? [];
     },
 
     rate(id: string): RateRule | null {

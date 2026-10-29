@@ -136,14 +136,26 @@ export class TwilioTransport implements WhatsAppTransport {
         record.to !== this.#options.from || record.direction !== 'inbound') throw new WhatsAppError('Twilio message identity mismatch', 400);
     const at = Date.parse(record.date_sent ?? record.date_created ?? '');
     if (!Number.isFinite(at) || at <= 0 || at > Date.now()) throw new WhatsAppError('Twilio message has no valid platform timestamp', 502);
+    // WhatsApp carries one attachment per message, so this is a safety net
+    // rather than a path that runs. It used to refuse anything above one with
+    // a 400 — and Twilio does not retry a 4xx, so the customer's picture was
+    // gone and they were told nothing. Pictures are the point of the intake
+    // (playbook section 6, "Detail photos"), so the first attachment is taken
+    // and the message is handled; losing one of several beats losing all of
+    // them and the message with them. A count that is not a number at all is
+    // still refused, because that is Twilio sending something unrecognised.
     const count = params['NumMedia'] ?? '0';
-    if (!/^[01]$/.test(count)) throw new WhatsAppError('Unsupported Twilio media count', 400);
+    if (!/^\d{1,3}$/.test(count)) throw new WhatsAppError('Unsupported Twilio media count', 400);
+    if (Number(count) > 1) {
+      console.warn(`[twilio] ${params['MessageSid']} carried ${count} attachments; keeping the first`);
+    }
+    const attachments = Number(count);
     const mime = params['MediaContentType0'] ?? '';
-    const type: InboundEvent['type'] = count === '0' ? 'text' : mime.startsWith('image/') ? 'image' :
+    const type: InboundEvent['type'] = attachments === 0 ? 'text' : mime.startsWith('image/') ? 'image' :
       mime === 'application/pdf' ? 'document' : mime.startsWith('audio/') ? 'audio' : mime.startsWith('video/') ? 'video' : 'unsupported';
     return { from: params['From']!.slice('whatsapp:'.length), messageId: id, type,
       text: params['Body'], profileName: params['ProfileName'], timestamp: String(Math.floor(at / 1000)),
-      mediaId: count === '1' ? id : undefined };
+      mediaId: attachments > 0 ? id : undefined };
   }
 
   async downloadMedia(id: string): Promise<DownloadedMedia> {
@@ -153,7 +165,10 @@ export class TwilioTransport implements WhatsAppTransport {
       media_list?: { sid: string; content_type: string }[];
     };
     const media = listing.media_list?.[0];
-    if (!media || listing.media_list?.length !== 1 || !/^ME[0-9a-f]{32}$/i.test(media.sid)) throw new WhatsAppError('Expected exactly one Twilio media attachment');
+    // The first attachment, under this account's own path. Not "exactly one":
+    // a message that arrived with two used to fail here as well as in
+    // `inbound`, which threw the customer's picture away entirely.
+    if (!media || !/^ME[0-9a-f]{32}$/i.test(media.sid)) throw new WhatsAppError('No usable Twilio media attachment');
     const response = await this.#request(`/Messages/${id}/Media/${media.sid}`);
     const chunks: Buffer[] = []; let size = 0;
     if (!response.body) throw new WhatsAppError('Empty Twilio media response');

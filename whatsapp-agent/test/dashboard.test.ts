@@ -203,7 +203,13 @@ describe('still missing documents', () => {
     await startedButStalled('+264811000033', 'Maria Kandjou', 'MacBook Pro 2021 M1, 512GB');
     const before = dash.read().missingDocuments[0]!.unansweredQuestions;
 
-    await say('+264811000033', undefined, `md${++counter}`); // the item photo
+    // The item photo, then the two laptop detail photos the playbook asks
+    // for by name (the system-information screenshot and the underside
+    // label), then the confirmations. These used to be two `yes` answers,
+    // because a laptop was asked for one photo and nothing else.
+    await say('+264811000033', undefined, `md${++counter}`);
+    await say('+264811000033', undefined, `md${++counter}`);
+    await say('+264811000033', undefined, `md${++counter}`);
     await say('+264811000033', 'yes');
     await say('+264811000033', 'yes');
 

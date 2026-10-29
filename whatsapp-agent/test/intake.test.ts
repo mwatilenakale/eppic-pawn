@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { loadRules } from '../src/playbook/index.ts';
 import { Store, generateMediaKey } from '../src/store/index.ts';
 import { IntakeAgent, type IntakeSubmission } from '../src/intake/agent.ts';
-import { buildQuestionPlan, readConfirmation } from '../src/intake/questions.ts';
+import { buildQuestionPlan, readConfirmation, OTHER } from '../src/intake/questions.ts';
 
 test('mechanic context is one check rather than dependent sentence fragments', () => {
   const plan = buildQuestionPlan(loadRules(), 'cars');
@@ -65,7 +65,11 @@ function runFullIntake(opts: { category?: string; variant?: string; withoutDocum
     const last = transcript.filter((line) => line.from === 'agent').at(-1)!.text;
     const outcome = /police declaration/i.test(last) && opts.withoutDocument
       ? say("I haven't been to the police station yet")
-      : /send (me )?a (clear )?photo|photo of/i.test(last)
+      // "screenshot" matters: the detail photos the playbook asks for by name
+      // are screenshots of a battery-health or system-information screen, and
+      // a helper that only looked for the word "photo" answered those with
+      // the item description instead of a picture.
+      : /send (me )?a (clear )?photo|photo of|screenshot|send the/i.test(last)
       ? say(undefined, photo())
       : /how much are you hoping/i.test(last)
         ? say('3000')
@@ -790,5 +794,130 @@ describe('a check belongs to whoever can actually answer it', () => {
         assert.doesNotMatch(line, /^Can you confirm:/i, line);
       }
     }
+  });
+});
+
+/**
+ * The pictures Lukas asked for, 29 October 2026.
+ *
+ * "People are going to send multiple pictures about phones and so on. We need
+ * to get those pictures... especially for the back of the TV. And some
+ * pictures for the phones — screenshots showing battery life."
+ *
+ * Before this, every category asked for the same single "clear photo of the
+ * item itself" and nothing else. Worse, a customer who sent four pictures of
+ * a TV had the second one — the back label carrying the model and serial —
+ * stored as the **box** photo, because the agent hands any incoming photo to
+ * whichever photo question is pending. Nothing was lost and the labels were
+ * wrong, which is the worse failure: the approval message and the "ready for
+ * the office" list both count photos by kind, so an item with no box photo
+ * looked complete.
+ */
+describe('detail photos are asked for by name', () => {
+  const photoKinds = (slug: string, variant: string | null = null) =>
+    buildQuestionPlan(rules, slug, variant).questions.filter((q) => q.kind === 'photo').map((q) => q.photoKind);
+
+  test('the playbook supplies them per category', () => {
+    assert.deepEqual(rules.detailPhotosFor('tvs').map((p) => p.kind), ['back-label', 'screen-on']);
+    assert.deepEqual(rules.detailPhotosFor('laptops').map((p) => p.kind), ['specs-screen', 'underside-label']);
+    assert.ok(rules.detailPhotosFor('phones').some((p) => p.kind === 'battery'), 'the battery screenshot he named');
+    assert.match(rules.detailPhotosFor('tvs')[0]!.ask, /back of the TV/i);
+    assert.match(rules.detailPhotosFor('phones').find((p) => p.kind === 'battery')!.ask, /battery health/i);
+  });
+
+  test('they are asked after the item photo and before the documents', () => {
+    // The customer is still holding the item when asked about the item; the
+    // ID and the receipt are a different errand.
+    const kinds = photoKinds('tvs');
+    assert.deepEqual(kinds.slice(0, 3), ['item', 'back-label', 'screen-on']);
+    assert.ok(kinds.indexOf('back-label') < kinds.indexOf('id'));
+    assert.ok(kinds.indexOf('screen-on') < kinds.indexOf('ownership'));
+  });
+
+  test('a one-off outside the five categories is asked for none', () => {
+    // The agent cannot know what the details of an unfamiliar thing are, so
+    // it takes the general photo and Lukas looks at it himself.
+    assert.deepEqual(rules.detailPhotosFor(OTHER), []);
+    const generic = ['item', 'box', 'id', 'ownership', 'police-declaration'];
+    assert.deepEqual(photoKinds(OTHER).filter((kind) => !generic.includes(kind ?? '')), []);
+  });
+
+  test('the detail-photo subsection does not become screening checks', () => {
+    // It is written in section 6 in exactly the shape the checklist parser
+    // reads — a bold category heading with bullets under it. Without the cut
+    // at the first `###`, "send a screenshot of the battery health screen"
+    // becomes a worksheet line for the hire and a yes/no question to the
+    // customer about a photo they had already sent.
+    for (const slug of ['tvs', 'laptops', 'phones', 'consoles', 'cars']) {
+      const checks = rules.checklistFor(slug).map((c) => c.text).join('\n');
+      assert.doesNotMatch(checks, /screenshot|back-label|specs-screen|underside-label|odometer|vin-plate/i, slug);
+    }
+    const asked = buildQuestionPlan(rules, 'tvs').questions.filter((q) => q.kind === 'confirm').map((q) => q.ask).join('\n');
+    assert.doesNotMatch(asked, /screenshot|back of the TV/i);
+  });
+});
+
+describe('several pictures in a row', () => {
+  let n = 0;
+  const send = (text?: string, withPhoto = false) =>
+    agent.handle(CUSTOMER, { text, providerMessageId: `wamid.burst-${++n}`,
+      ...(withPhoto ? { media: { content: photo() } } : {}) });
+  const kinds = () => {
+    const item = store.db.prepare('SELECT id FROM items ORDER BY created_at DESC LIMIT 1').get() as { id: string };
+    return store.photos(item.id).map((p) => p.kind);
+  };
+
+  const startATv = () => {
+    send('hello');
+    send('Aina');
+    send('I want to pawn my TV');
+    send('Samsung 55 inch 4K Smart TV, model UA55AU8000, good condition');
+  };
+
+  test('the back label is stored as the back label, not as the box', () => {
+    startATv();
+    // Front, back label, screen. The agent asks for each by name in between,
+    // so these land where they belong.
+    send(undefined, true);
+    send(undefined, true);
+    send(undefined, true);
+    assert.deepEqual(kinds(), ['item', 'back-label', 'screen-on']);
+    // The bug this replaces: the second picture became the box photo, so an
+    // item with no box looked like an item with one.
+    assert.ok(!kinds().includes('box'), 'no box photo was sent, so none is recorded');
+  });
+
+  test('pictures beyond the ones asked for are kept as extras, never relabelled', () => {
+    startATv();
+    for (let i = 0; i < 6; i += 1) send(undefined, true);
+    const stored = kinds();
+    // item, back-label, screen-on, box are real slots; the rest are extras.
+    assert.deepEqual(stored.slice(0, 4), ['item', 'back-label', 'screen-on', 'box']);
+    assert.ok(stored.slice(4).every((kind) => kind === 'extra'), stored.join(', '));
+    assert.equal(stored.filter((kind) => kind === 'item').length, 1, 'only the photo actually asked for is the item');
+  });
+
+  test('an extra picture never leaves the customer without a prompt', () => {
+    // The whole point. An earlier version of this acknowledged extras and
+    // said nothing else, so a customer sending a burst was left with no idea
+    // what was wanted next — worse than repeating a prompt they have read.
+    startATv();
+    for (let i = 0; i < 4; i += 1) send(undefined, true);
+    for (let i = 0; i < 8; i += 1) {
+      const out = send(undefined, true);
+      assert.ok(out.replies.length > 0, 'something comes back');
+      assert.match(out.replies.join('\n'), /confirm|send|photo of|hoping to borrow/i,
+        `reply ${i} carries the pending question: ${out.replies.join(' | ')}`);
+    }
+  });
+
+  test('extras are bounded, and the conversation still moves afterwards', () => {
+    startATv();
+    for (let i = 0; i < 40; i += 1) send(undefined, true);
+    const extras = kinds().filter((kind) => kind === 'extra').length;
+    assert.ok(extras <= 12, `kept ${extras} extras; a customer holding down send must not fill the disk`);
+    const out = send(undefined, true);
+    assert.match(out.replies.join('\n'), /plenty of pictures/i);
+    assert.match(out.replies.join('\n'), /confirm|send|photo of|hoping to borrow/i, 'and still says what is needed');
   });
 });

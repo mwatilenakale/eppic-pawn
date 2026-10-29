@@ -56,6 +56,11 @@ export interface IntakeState {
   unusableAnswers?: string[];
   /** Times each document has been asked for, so we ask twice and move on. */
   photoAsks?: Record<string, number>;
+  /**
+   * Pictures sent beyond what was asked for, kept as `extra`. Counted only so
+   * the pending question is repeated once rather than after every one.
+   */
+  extraPhotos?: number;
   /** The last thing we asked, and how many times running we have asked it. */
   lastAsk?: string;
   repeatedAsk?: number;
@@ -118,6 +123,15 @@ function whichCategory(categories: string[]): string {
     .map((label) => `• ${label}`)
     .join('\n')}\n\nWhich one do you have?`;
 }
+
+/**
+ * Pictures beyond the ones asked for that are kept per conversation.
+ *
+ * A bound on disk, not a judgement about photographs. Each one is encrypted
+ * and written to the media directory, and nothing else stops a customer
+ * sending hundreds.
+ */
+const MOST_EXTRA_PHOTOS = 12;
 
 const copy = {
   greeting: GREETING,
@@ -195,6 +209,14 @@ const copy = {
   photoExpected: (ask: string) => `I still need that as a photo. ${ask}`,
   confirmExpected: (ask: string) => `Sorry, I didn't catch that. ${ask}`,
   photoReceived: 'Got the photo, thank you.',
+  /**
+   * More pictures than were asked for. They are kept and Lukas sees them —
+   * extra pictures of the item are useful, not a mistake — so this says
+   * thank you rather than correcting anybody, and carries the pending
+   * question so the conversation can still move.
+   */
+  moreThanAsked: (ask: string) => `Got that one too, thank you — I'll keep it with the others.\n\n${ask}`,
+  enoughPictures: "That's plenty of pictures, thank you — I have what I need for now.",
   askAmount: (owner: string) =>
     'Last question: how much are you hoping to borrow? Give me a figure if you have one, or reply *not sure*.\n\n' +
     `(This is not an offer — ${owner} sets the final amount.)`,
@@ -572,9 +594,41 @@ export class IntakeAgent {
     }
 
     if (incoming.media) {
-      // A photo arrived while a written answer was expected — keep it anyway.
-      this.#storePhoto(customer, conversationId, state, { ...question, photoKind: 'item' }, incoming.media);
-      return { replies: [copy.photoReceived, question.ask] };
+      // A photo arrived while a written answer was expected — keep it, but do
+      // not pretend to know what it is of.
+      //
+      // People send several pictures in a row, which is the behaviour the
+      // detail-photo list in playbook section 6 is there to use. The ones
+      // beyond what was asked for land here, and filing them as `item` was a
+      // small lie that the rest of the system then believed: the approval
+      // message and the "ready for the office" list count photos by kind. So
+      // they are stored as `extra` — an unlabelled picture of this item,
+      // which is exactly what it is, there for Lukas to look at.
+      const extras = (state.extraPhotos ?? 0) + 1;
+      state.extraPhotos = extras;
+
+      // Bounded. Each picture is encrypted and written to disk, and nothing
+      // else here limits how many one conversation can send — a customer
+      // holding down the send button should not be able to fill the media
+      // directory. A technical limit, not a business rule, so it lives here
+      // rather than in the playbook: the same reasoning as the 20 MB download
+      // cap in the Twilio adapter.
+      if (extras <= MOST_EXTRA_PHOTOS) {
+        this.#storePhoto(customer, conversationId, state, { ...question, photoKind: 'extra' }, incoming.media);
+      }
+
+      // The pending question goes out every time, which is the part that
+      // matters. An earlier version of this acknowledged the extras and said
+      // nothing else, and a customer sending a burst of pictures was left
+      // with no idea what was wanted next — a conversation that cannot move
+      // is worse than a prompt they have already read.
+      //
+      // What changes with a burst is only the wording, because four identical
+      // "Can you confirm: Must be a Smart TV?" replies in a row read like a
+      // broken machine rather than a shop.
+      if (extras === 1) return { replies: [copy.photoReceived, question.ask] };
+      if (extras > MOST_EXTRA_PHOTOS) return { replies: [copy.enoughPictures, question.ask] };
+      return { replies: [copy.moreThanAsked(question.ask)] };
     }
 
     if (!text) return { replies: [copy.confirmExpected(question.ask)] };

@@ -302,6 +302,61 @@ So the two ends are deliberately different, and that is the point:
   20-30 minutes, watching for fan noise/grinding, thermal shutdown,
   freezing, disc-read errors. Check ports for damage. Clean run = pass.
 
+### Detail photos — asked for by name, per category
+
+Lukas, 29 October 2026: *"People are going to send multiple pictures about
+phones and so on. We need to get those pictures. We need to get pictures with
+the details, especially for the back of the TV. And some pictures for the
+phones — screenshots showing battery life and all of that. Pictures showing
+details. Laptop details as well."*
+
+One photo of the item is not a pre-screen. The checks in architecture section
+2.3 that the shop has to *record* rather than tick — exact model, serial,
+battery health — are recorded by a picture, and asking for them by name is
+what makes section 7's "the in-person visit becomes confirmation, not data
+collection" true.
+
+Each line below is `kind: what the customer is asked to send`. The agent asks
+for them one at a time, after the general photo of the item and before the
+documents. They are not optional in the sense of being skippable silently —
+the same ask-twice-then-carry-the-gap rule applies as for any document.
+
+**Cars**
+- odometer: a photo of the dashboard with the ignition on, showing the mileage
+- vin-plate: a photo of the VIN plate or sticker (usually the door frame or
+  windscreen)
+
+**Phones (iPhone / Android)**
+- battery: a screenshot of the battery health screen — on an iPhone,
+  Settings > Battery > Battery Health; on Android, the battery section in
+  Settings or the phone's own diagnostics
+- model-screen: a screenshot of the settings screen showing the exact model
+  and the storage size
+- imei: a photo of the IMEI — dial `*#06#` and photograph what comes up
+
+**TVs**
+- back-label: a photo of the back of the TV, close enough to read the model
+  and serial number on the label
+- screen-on: a photo of the screen switched on and showing a picture, taken
+  straight on
+
+**Laptops**
+- specs-screen: a screenshot of the system information — model, processor,
+  memory and storage
+- underside-label: a photo of the label underneath the laptop showing the
+  model and serial number
+
+**Consoles**
+- back-label: a photo of the label on the back or underneath, showing the
+  model and serial number
+- storage-screen: a photo of the storage/system information screen
+
+**[decide]** — the TV and phone lines are Lukas's own words. The rest (cars,
+consoles, the IMEI line, and which of these the shop can realistically expect
+a customer to manage on a cheap Android) are inferred from section 2.3 and
+need his confirmation or his cuts. Nothing below the shop actually needs
+should stay in the list: every extra ask is a customer who gives up partway.
+
 ## 7. Intake process (moving toward remote pre-screening)
 
 Goal: as much of the checklist above happens *before* the customer walks

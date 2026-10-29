@@ -187,6 +187,34 @@ export function buildQuestionPlan(
     },
   ];
 
+  // The named detail pictures, straight after the general photo and before
+  // any document (playbook section 6, "Detail photos").
+  //
+  // Asked by name because the agent cannot tell what a picture is of. Before
+  // this, a customer who sent four pictures of a TV had the second one — the
+  // back label with the model and serial on it — filed as the *box* photo,
+  // because the next pending photo question happened to be the box, and the
+  // third and fourth came back as `item` while the agent re-asked the same
+  // confirmation question each time. Nothing was lost and everything was
+  // mislabelled, which is worse: the approval message and the "ready for the
+  // office" list both count photos by kind, so an item with no box photo
+  // looked complete.
+  //
+  // Ordered before the documents on purpose. These are about the item and
+  // the customer is still holding it; the ID and the receipt are a different
+  // errand, and asking for the hard ones first means a customer who gives up
+  // has at least given the shop the item details.
+  for (const photo of category ? rules.detailPhotosFor(category.slug) : []) {
+    questions.push({
+      id: `photo-${photo.kind}`,
+      kind: 'photo',
+      photoKind: photo.kind,
+      ask: `Please send ${photo.ask}`,
+      source: 'playbook',
+      optional: false,
+    });
+  }
+
   const inPersonChecks: ChecklistItem[] = [];
 
   const asked: string[] = [];

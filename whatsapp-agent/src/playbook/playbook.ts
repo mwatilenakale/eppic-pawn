@@ -155,6 +155,26 @@ export interface Playbook {
   proofOfPurchaseAboveCents: number;
   /** Screening bullets per category slug (section 6). */
   screening: Map<string, ChecklistItem[]>;
+  /**
+   * Named detail photos per category slug (section 6, "Detail photos").
+   *
+   * One photo of the item is not a pre-screen. These are the pictures the
+   * shop has to *have* rather than tick — the back of the TV with its serial,
+   * a screenshot of a phone's battery health — and each one is asked for by
+   * name so it arrives under a known kind instead of being filed as whatever
+   * photo question happened to be pending.
+   */
+  detailPhotos: Map<string, DetailPhoto[]>;
+}
+
+/** A picture the customer is asked for by name (section 6). */
+export interface DetailPhoto {
+  /** Stored as `item_photos.kind`, so it must stay stable once in use. */
+  kind: string;
+  /** What the customer is asked to send, in the document's words. */
+  ask: string;
+  /** Marked `[decide]` in the document — inferred, not yet Lukas's word. */
+  provisional: boolean;
 }
 
 export function loadPlaybook(path: string): Playbook {
@@ -187,6 +207,7 @@ export function loadPlaybook(path: string): Playbook {
     collections: readCollections(path, need(SECTIONS.collections, 'default & collections')),
     ...readRequirements(path, need(SECTIONS.requirements, 'requirements')),
     screening,
+    detailPhotos: readDetailPhotos(path, need(SECTIONS.screening, 'item screening checklists')),
   };
 }
 
@@ -517,7 +538,14 @@ function readScreening(block: string): Map<string, ChecklistItem[]> {
   // Section 6 introduces each category with a bold heading on its own line;
   // bullets underneath belong to it, even when a bullet itself starts bold
   // (e.g. the consoles `**[decide, draft proposed]**` item).
-  for (const { label, body } of labelledBlocks(block, { inlineBullets: false })) {
+  //
+  // Cut at the first `###`, the same as section 5. The detail-photo
+  // subsection is written in exactly this shape — a bold category heading
+  // with bullets under it — so without the cut every "send a screenshot of
+  // the battery health screen" would also become a screening check, which
+  // means a worksheet line for the hire and a yes/no question for the
+  // customer about a photo they had already sent.
+  for (const { label, body } of labelledBlocks(untilSubsection(block), { inlineBullets: false })) {
     const slug = slugify(label);
     const items = bullets(body).map(plain).map((text, index) => ({
       id: `${slug}-${index + 1}`,
@@ -529,4 +557,55 @@ function readScreening(block: string): Map<string, ChecklistItem[]> {
   }
 
   return screening;
+}
+
+/**
+ * The detail photos, out of section 6's `### Detail photos` subsection.
+ *
+ * Each bullet is `kind: what to ask the customer`. The kind is stored on the
+ * photo row, so it is read from the document rather than derived from the
+ * text — the wording of an ask will be reworded, and a reworded ask must not
+ * silently become a different kind and leave the old pictures orphaned.
+ *
+ * Returns an empty map when the subsection is absent. That is deliberate and
+ * is the one place in this file that does not throw: the rest of section 6 is
+ * a rule the shop cannot operate without, whereas no detail photos simply
+ * means the intake asks what it asked before. A malformed *bullet* inside the
+ * subsection does throw, because that is a typo in a rule rather than its
+ * absence.
+ */
+function readDetailPhotos(path: string, block: string): Map<string, DetailPhoto[]> {
+  const photos = new Map<string, DetailPhoto[]>();
+  const heading = /^###\s+Detail photos.*$/im.exec(block);
+  if (!heading) return photos;
+
+  // From that heading to the next `###`, or the end of the section.
+  const after = block.slice(heading.index + heading[0].length);
+  const next = /^###\s/m.exec(after);
+  const body = next ? after.slice(0, next.index) : after;
+
+  for (const { label, body: lines } of labelledBlocks(body, { inlineBullets: false })) {
+    const slug = slugify(label);
+    const entries: DetailPhoto[] = [];
+    for (const bullet of bullets(lines)) {
+      const text = plain(bullet);
+      // A `[decide]` note addressed to Lukas, not a photo to ask for.
+      if (/^\*{0,2}\[decide/i.test(text)) continue;
+      const match = /^([a-z][a-z0-9-]*)\s*:\s*(.+)$/is.exec(text);
+      if (!match) {
+        throw new PlaybookError(
+          path,
+          `section ${SECTIONS.screening} detail photo "${text.slice(0, 60)}" is not written as "kind: what to ask"`,
+        );
+      }
+      entries.push({
+        kind: match[1]!.toLowerCase(),
+        ask: match[2]!.replace(/\s+/g, ' ').trim(),
+        provisional: /\[decide/i.test(text),
+      });
+    }
+    if (entries.length > 0) photos.set(slug, entries);
+  }
+
+  return photos;
 }
