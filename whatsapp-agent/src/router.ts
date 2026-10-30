@@ -32,6 +32,7 @@ import {
 } from './book/index.ts';
 import { metaTimestampToIso, samePhone, type InboundEvent } from './whatsapp/webhook.ts';
 import { can } from './staff/access.ts';
+import { parseReceivedCommand, recordReceipt } from './intake/received.ts';
 import { WindowAwareTransport, type WhatsAppTransport, type OutboundMessage } from './whatsapp/transport.ts';
 import { Collections } from './book/collections.ts';
 import { QuoteService } from './valuator/quotes.ts';
@@ -233,6 +234,9 @@ export class AgentRouter {
    * totals, who is due, who is past grace, and one customer's history.
    */
   async #handleStaff(event: InboundEvent, staff: User): Promise<void> {
+    // The hire is usually the one who takes the item in, so this comes first.
+    if (await this.#runReceived(event, staff)) return;
+
     const query = parseBookCommand(event.text ?? '');
     if (query) {
       await this.#transport.sendText({ to: event.from, body: this.#answer(query, staff) });
@@ -384,6 +388,11 @@ export class AgentRouter {
     // TAKE / SAY / BACK / WAITING — talking to a customer by hand. Before the
     // approval parser: "BACK" must not be read as anything about money.
     if (await this.#runHandover(event, this.#owner)) return;
+
+    // RECEIVED marks an item as physically in the shop, which is what lets the
+    // customer sign at all. Before the book commands: it is the thing that
+    // happens at the counter first, and it moves no money.
+    if (await this.#runReceived(event, this.#owner)) return;
 
     // PAID records money coming back. First of the book commands, because it
     // is the one that happens most and the one he will be typing at a counter
@@ -554,6 +563,35 @@ export class AgentRouter {
     } catch (error) {
       this.#onError(error, { from: to, messageId: '', type: 'text' });
     }
+  }
+
+  /**
+   * *RECEIVED <ref>* — the item is in the shop.
+   *
+   * Reachable from both the owner path and the staff path, because either of
+   * them may be the one standing at the counter when a customer walks in. It
+   * is not an approval: nothing about the money changes, and what it unlocks
+   * is only the customer's ability to sign (playbook section 7).
+   */
+  async #runReceived(event: InboundEvent, actor: User): Promise<boolean> {
+    const command = parseReceivedCommand(event.text ?? '');
+    if (!command) return false;
+
+    const result = recordReceipt(this.#store, command, actor, {
+      signingUrlFor: (approvalId) => {
+        const contract = this.#store.db
+          .prepare("SELECT token FROM contracts WHERE approval_id = ? AND status <> 'void' ORDER BY created_at DESC LIMIT 1")
+          .get(approvalId) as { token: string } | undefined;
+        return contract && this.#contracts ? this.#contracts.signingUrl(contract.token) : null;
+      },
+      ownerLabel: this.#ownerLabel,
+    });
+
+    await this.#transport.sendText({ to: event.from, body: result.reply });
+    if (result.customerMessage && result.customerPhone) {
+      await this.#safeSend(result.customerPhone, result.customerMessage);
+    }
+    return true;
   }
 
   async #deliveryFailure(message: OutboundMessage, error: Error): Promise<void> {

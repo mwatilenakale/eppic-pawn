@@ -44,12 +44,28 @@ function approvedApplication(amountCents = 375_000): Approval {
     variant: 'iphone',
     description: 'iPhone 13 Pro, 256GB',
   });
+  // The customer cannot sign until the item is in the shop, so every fixture
+  // that goes on to sign has to put it there first (playbook section 7).
+  // `notYetReceived()` below is the one that deliberately does not.
+  store.markItemReceived(item.id, lukas.id);
   const approval = store.createApproval({ itemId: item.id, suggestedLoanCents: amountCents });
   return store.decideApproval({
     approvalId: approval.id,
     status: 'approved',
     approvedLoanCents: amountCents,
     decidedBy: lukas.id,
+  });
+}
+
+/** An approved application whose item has not arrived yet. */
+function notYetReceived(amountCents = 375_000): Approval {
+  const customer = store.upsertCustomer('+264811999888', 'Not Here Yet');
+  const item = store.createItem({
+    customerId: customer.id, categorySlug: 'phones', variant: 'iphone', description: 'iPhone 13 Pro, 256GB',
+  });
+  const approval = store.createApproval({ itemId: item.id, suggestedLoanCents: amountCents });
+  return store.decideApproval({
+    approvalId: approval.id, status: 'approved', approvedLoanCents: amountCents, decidedBy: lukas.id,
   });
 }
 
@@ -187,6 +203,9 @@ describe('the signing page over HTTP', () => {
     const owner = httpStore.ensureUser({ name: 'Lukas', phone: OWNER, role: 'owner' });
     const customer = httpStore.upsertCustomer(CUSTOMER, 'Test Customer');
     const item = httpStore.createItem({ customerId: customer.id, categorySlug: 'tvs', description: 'Samsung 55" Smart TV' });
+    // The TV is in the shop; the customer is at the counter signing. Nothing
+    // can be signed before that (playbook section 7).
+    httpStore.markItemReceived(item.id, owner.id);
     const approval = httpStore.createApproval({ itemId: item.id, suggestedLoanCents: 200_000 });
     httpStore.decideApproval({ approvalId: approval.id, status: 'approved', approvedLoanCents: 200_000, decidedBy: owner.id });
     const issued = built.contracts.issueForApproval(approval.id, { actor: owner.id });
@@ -352,5 +371,67 @@ describe('a blank signature is not a signature', () => {
     // PNG at all. Refusing beats vouching for bytes we did not decode.
     assert.throws(() => sign(pngDataUrl({ width: 8, height: 8, interlaced: true })), /sign in the box/i);
     assert.throws(() => sign('data:image/png;base64,aGVsbG8='), /sign in the box/i);
+  });
+});
+
+/**
+ * Nobody signs before the item is in the shop.
+ *
+ * Lukas, 30 October 2026: "They can't sign until the item has been received,
+ * so when they sign it is assumed that the item has been received by our
+ * staff and is in the possession of the pawn shop."
+ *
+ * Codex's website audit, finding A, was that the pages promise the loan
+ * starts at handover while signing starts it. His answer resolves it the
+ * other way round from the way I expected: starting the loan at signing is
+ * correct, and the fault was that nothing stopped a customer signing at home
+ * days before travelling in — owing interest on an item still in their own
+ * house, and burning days of their month getting to Windhoek.
+ */
+describe('the item has to be here first', () => {
+  test('signing is refused until the item is recorded as received', () => {
+    const issued = contracts.issueForApproval(notYetReceived().id, { actor: lukas.id });
+    const loans = () => (store.db.prepare('SELECT COUNT(*) AS n FROM loans').get() as { n: number }).n;
+
+    assert.throws(
+      () => contracts.sign(issued.contract.token, { ...submission, name: 'Not Here Yet' }),
+      /only be signed at the shop/i,
+    );
+    assert.equal(loans(), 0, 'and no loan, no ledger, no clock started');
+    assert.equal((store.db.prepare('SELECT COUNT(*) AS n FROM ledger_entries').get() as { n: number }).n, 0);
+  });
+
+  test('once it is received, the same link signs normally', () => {
+    const approval = notYetReceived();
+    const issued = contracts.issueForApproval(approval.id, { actor: lukas.id });
+
+    store.markItemReceived(issued.contract.item_id, lukas.id);
+    const signed = contracts.sign(issued.contract.token, { ...submission, name: 'Not Here Yet' });
+
+    assert.ok(signed.contract.signed_at);
+    assert.equal((store.db.prepare('SELECT COUNT(*) AS n FROM loans').get() as { n: number }).n, 1);
+  });
+
+  test('the link opened early explains itself rather than looking broken', () => {
+    // The agreement is genuinely ready; it is the signing that waits. A
+    // customer who taps the link from home should learn that in one sentence.
+    const issued = contracts.issueForApproval(notYetReceived().id, { actor: lukas.id });
+    const contract = contracts.openForSigning(issued.contract.token);
+    assert.equal(contract.status, 'pending', 'the link itself stays valid, it is signing that waits');
+    assert.notEqual(contract.status, 'void');
+  });
+
+  test('receipt is recorded once, by whoever was at the counter', () => {
+    const issued = contracts.issueForApproval(notYetReceived().id, { actor: lukas.id });
+    const hire = store.ensureUser({ name: 'Petrus Haufiku', phone: '+264811112222', role: 'inspector' });
+
+    const first = store.markItemReceived(issued.contract.item_id, hire.id)!;
+    assert.ok(first.received_at, 'the hire can take an item in — it is not an approval');
+    assert.equal(first.received_by, hire.id);
+
+    // Saying it again does not rewrite who took it in.
+    const again = store.markItemReceived(issued.contract.item_id, lukas.id)!;
+    assert.equal(again.received_by, hire.id, 'the first person to say so is the record');
+    assert.equal(again.received_at, first.received_at);
   });
 });

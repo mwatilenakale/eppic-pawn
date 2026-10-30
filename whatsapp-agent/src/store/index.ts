@@ -64,6 +64,13 @@ export interface Item {
   description: string;
   declared_details: string;
   status: string;
+  /**
+   * When the item physically arrived at the shop, and who recorded it.
+   * Null until somebody says it is here — and nobody can sign before that
+   * (playbook section 7, "The item has to be here first").
+   */
+  received_at?: string | null;
+  received_by?: string | null;
 }
 export interface Valuation {
   id: string;
@@ -731,6 +738,21 @@ export class Store {
 
   item(itemId: string): Item | null {
     return (this.db.prepare('SELECT * FROM items WHERE id = ?').get(itemId) as unknown as Item) ?? null;
+  }
+
+  /**
+   * Records that the item is physically in the shop.
+   *
+   * Idempotent on purpose: the first person to say so is the one recorded,
+   * and saying it twice is a thing people do. Not an approval — the hire
+   * takes items in, and this writes no money.
+   */
+  markItemReceived(itemId: string, actor: string): Item | null {
+    this.db
+      .prepare('UPDATE items SET received_at = ?, received_by = ?, updated_at = ? WHERE id = ? AND received_at IS NULL')
+      .run(this.#now(), actor, this.#now(), itemId);
+    this.audit({ actor, action: 'item.received', entity: 'item', entityId: itemId });
+    return this.item(itemId);
   }
 
   /** Stores a photo encrypted on disk and links it to the item. */

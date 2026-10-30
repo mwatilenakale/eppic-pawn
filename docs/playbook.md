@@ -357,6 +357,36 @@ a customer to manage on a cheap Android) are inferred from section 2.3 and
 need his confirmation or his cuts. Nothing below the shop actually needs
 should stay in the list: every extra ask is a customer who gives up partway.
 
+### The item has to be here first
+
+Lukas, 30 October 2026: *"They can't sign until the item has been received, so
+when they sign, it is assumed that the item has been received by our staff and
+is in the possession of the pawn shop."*
+
+So the order is fixed: **approved → item brought in and received → signed →
+loan starts.** Signing happens at the shop, with the item already in the
+shop's hands, and it is the moment the month begins and interest starts
+running.
+
+This is the rule the rest of the arithmetic depends on. Signing is what creates
+the loan, posts the principal and the first month's interest, and starts the
+30-day clock. The agreement also tells the customer the loan starts when the
+item is handed over. Those are the same moment — but only because signing
+cannot happen before the handover. Without this rule they are two different
+days, and a customer who signed at home on the Monday and travelled in on the
+Thursday would have spent three days of their month and owed three days of
+interest on an item still in their own house.
+
+- **Recording receipt is not an approval.** Whoever is at the counter does it,
+  Lukas or the hire. It moves no money and decides nothing; it records where
+  an object is. What it unlocks is only the customer's ability to sign.
+- **The signing link is safe to send early.** It is sent with the approval, as
+  before. Opened before the item arrives, it says the agreement is ready and
+  can be signed at the shop — it does not let anyone sign, and it does not
+  look broken.
+- **Nobody can start a loan by accident.** A customer cannot bring the clock
+  forward, and neither can the shop.
+
 ### "Not sure" is not a no
 
 Lukas, 30 October 2026: *"If they are not sure, most of this can be verified,

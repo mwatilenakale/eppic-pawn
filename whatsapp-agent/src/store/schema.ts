@@ -558,6 +558,27 @@ export const MIGRATIONS: string[] = [
     created_at TEXT NOT NULL
   );
   `,
+  // 17 — when the item physically arrived, and who says so.
+  //
+  // Lukas, 30 October 2026: "They can't sign until the item has been
+  // received, so when they sign it is assumed that the item has been
+  // received by our staff and is in the possession of the pawn shop."
+  //
+  // That rule is what makes the rest of the accounting correct. Signing
+  // creates the loan, posts the principal and the interest and starts the
+  // 30-day clock — which is right *only* if signing cannot happen before the
+  // item is in the shop. Nothing enforced that: the signing link went out by
+  // WhatsApp and a customer could open it at home days before travelling in,
+  // owing interest on an item still in their kitchen, while the agreement
+  // told them the loan started at handover.
+  //
+  // Recording receipt is not an approval and is not withheld from staff —
+  // the hire takes the item in and inspects it. Deciding the money stays
+  // Lukas's and is unaffected.
+  `
+  ALTER TABLE items ADD COLUMN received_at TEXT;
+  ALTER TABLE items ADD COLUMN received_by TEXT REFERENCES users(id);
+  `,
 ];
 
 

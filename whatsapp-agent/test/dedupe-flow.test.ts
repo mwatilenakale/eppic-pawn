@@ -50,6 +50,8 @@ afterEach(() => store.close());
 function signedLoanFor(phone: string, name: string, idNumber: string) {
   const customer = store.upsertCustomer(phone, name);
   const item = store.createItem({ customerId: customer.id, categorySlug: 'phones', description: 'iPhone 13 Pro' });
+  // Signing requires the item to be in the shop (playbook section 7).
+  store.markItemReceived(item.id, lukas.id);
   const approval = store.createApproval({ itemId: item.id, suggestedLoanCents: 375_000 });
   store.decideApproval({ approvalId: approval.id, status: 'approved', approvedLoanCents: 375_000, decidedBy: lukas.id });
 

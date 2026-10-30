@@ -177,6 +177,24 @@ export class ContractService {
     const contract = this.openForSigning(token);
     if (contract.status === 'signed') throw new ContractError(`Contract ${contract.number} is already signed`);
 
+    // The item has to be in the shop before anyone signs.
+    //
+    // Lukas, 30 October 2026: "They can't sign until the item has been
+    // received, so when they sign it is assumed that the item has been
+    // received by our staff and is in the possession of the pawn shop."
+    //
+    // This is what makes everything below correct. Signing creates the loan,
+    // posts the principal and the interest, and starts the clock, and the
+    // agreement tells the customer the loan starts at handover — all true
+    // together only if signing cannot happen first. Nothing enforced it, so a
+    // customer could open the link at home and start owing interest on an
+    // item still in their kitchen (Codex's website audit, finding A).
+    if (!this.#store.item(contract.item_id)?.received_at) {
+      throw new ContractError(
+        'This agreement can only be signed at the shop, once the item is with us. Bring it in and you can sign here.',
+      );
+    }
+
     const name = submission.name.trim();
     const idNumber = submission.idNumber.trim();
     if (name.length < 3) throw new ContractError('Please enter your full name as it appears on your ID');

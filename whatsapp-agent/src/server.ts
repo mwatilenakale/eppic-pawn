@@ -15,7 +15,7 @@ import { CloudApiTransport, type WhatsAppTransport } from './whatsapp/transport.
 import { parseWebhookPayload, verifySignature, verifySubscription } from './whatsapp/webhook.ts';
 import { createValuator } from './valuator/index.ts';
 import { ContractError } from './store/index.ts';
-import { ContractService, contractErrorPage, signedPage, signingPage } from './contract/index.ts';
+import { BUSINESS, ContractService, contractErrorPage, signedPage, signingPage } from './contract/index.ts';
 import { CustomerDirectory } from './customers/directory.ts';
 import { chooseCategoryPage, landingPage, outcomePage, questionsPage } from './web/pages.ts';
 import { dashboardPage } from './web/dashboard.ts';
@@ -289,7 +289,20 @@ async function handleRequest(
     if (request.method === 'GET') {
       try {
         const contract = contracts.openForSigning(token);
-        return respondHtml(response, 200, contract.status === 'signed' ? signedPage(contract, rules.playbook.whatsapp) : signingPage(contract));
+        if (contract.status === 'signed') {
+          return respondHtml(response, 200, signedPage(contract, rules.playbook.whatsapp));
+        }
+        // Nothing to sign until the item is here. Told on the page rather
+        // than only on submit, so a customer who opens the link at home
+        // learns it before filling anything in (playbook section 7).
+        if (!store.item(contract.item_id)?.received_at) {
+          return respondHtml(response, 200, contractErrorPage(
+            'Your agreement is ready, but it can only be signed at the shop, once the item is with us. '
+              + `Bring it in to ${BUSINESS.tradingAs} and you can sign on this same link while you are there.`,
+            rules.playbook.whatsapp,
+          ));
+        }
+        return respondHtml(response, 200, signingPage(contract));
       } catch (error) {
         return respondHtml(response, 404, contractErrorPage(messageFor(error), rules.playbook.whatsapp));
       }

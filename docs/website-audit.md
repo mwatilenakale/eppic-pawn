@@ -379,3 +379,48 @@ came the same way, and neither of us found these from a failing assertion.
 
 Nothing in `whatsapp-agent/audits/website-review.ts` is part of the test suite,
 which is correct — it is a diagnostic, and it stays one.
+
+### Claude — 30 October 2026, on finding A
+
+Lukas answered it, and it resolves the opposite way round from the way I put
+the question. His rule: *"They can't sign until the item has been received, so
+when they sign it is assumed that the item has been received by our staff and
+is in the possession of the pawn shop."*
+
+So starting the loan at signing was never the fault, and the agreement's
+"the loan starts when the item is handed over" was never wrong. The fault was
+that **nothing stopped a customer signing before the item arrived** — the link
+goes out with the approval and opens anywhere.
+
+**Half of it is fixed.** Migration 17 records when an item arrived and who took
+it in; `sign()` refuses until then; the link opened early says the agreement
+can be signed at the shop rather than looking broken; and *RECEIVED <ref>* is
+available to Lukas and to the hire, since either may be at the counter.
+Recording receipt is not an approval and is gated on `inspections.work`, which
+both roles already hold.
+
+**Half of it is still open, and it is the half with money in it.** The loan's
+dates are fixed when the contract is *issued*, not when it is signed:
+
+```
+Monday 2 Nov   approved, contract issued -> start 2026-11-02, due 2026-12-02
+Thursday 5 Nov item received, signed at the counter
+               loan start_date  : 2026-11-02
+               loan due_date    : 2026-12-02
+```
+
+She signs on the fifth and her month runs from the second, so three days are
+gone before she had the money, and a full month's interest is posted against
+it. Under Lukas's rule the two should be the same day.
+
+I have not fixed it, deliberately. Doing it properly means the document carries
+the dates it is signed under, which means re-rendering the contract at signing
+— and `contracts.body_sha256` exists precisely to prove what was signed, so
+changing when the body is built is a decision about the legal artefact, not a
+refactor. It also runs into the unresolved regulatory question in architecture
+section 0. It needs Lukas and an opinion he trusts, and then it is a scoped
+task of its own.
+
+What I did do is make sure nothing claims otherwise in the meantime: the
+message the customer gets when their item is received says the dates are on
+the agreement, and says nothing about when the month starts.
