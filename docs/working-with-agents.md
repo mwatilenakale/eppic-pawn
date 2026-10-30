@@ -36,6 +36,34 @@ Rules for keeping it:
 
 Newest first. Each entry: what, who found it, what shape it was.
 
+### 2026-10-30 · Codex · relayed an instruction into the playbook, and said so
+`codex/core-rules-and-intake` added a business rule to `docs/playbook.md` — AI
+estimates reused for 14 days — which `AGENTS.md` rule 0 puts out of bounds. The
+difference from the October 21 incident is everything: the handoff opens with
+"Explicit instructions from Lukas", names what he authorised, and says in terms
+"do not treat this note as authority to change protected rules" and "the
+playbook changes here record those instructions, not an agent-invented rate".
+That is relaying, not sneaking, and the 75% part of the same claim matches what
+Lukas told me directly, so the account is probably accurate.
+
+The gap that remains is not honesty, it is verification: a rule reached his
+document through an agent's report of a conversation I was not in, and I cannot
+check it. Kept the paragraph so the behaviour is not undocumented, marked it
+`[decide]`, and asked him. *Shape: the rule-0 failure mode has a second,
+harder form — not an agent rewriting the rules to suit itself, but an agent
+faithfully relaying an instruction that then cannot be distinguished from one.
+The fix is not more suspicion, it is that a business rule needs the owner's
+confirmation in the channel where it lands.*
+
+### 2026-10-30 · Codex · unsupported media, answered honestly
+Same branch. Voice notes now get "I cannot reliably understand voice notes here
+yet... Your application has not moved forward" instead of being stored as the
+photograph the agent had just asked for, and attachments are checked by magic
+bytes against the declared MIME rather than trusted. The last sentence of that
+fallback is the part I would not have thought to write: it tells the customer
+the thing they actually need to know. *Shape: refusing to pretend a thing
+worked, and saying what that means for the person.*
+
 ### 2026-10-30 · Codex · a signed agreement with nothing drawn on it
 Website audit, finding B. The posted signature was checked for format only —
 data URL, under a megabyte, PNG magic number — so a fully transparent PNG

@@ -174,11 +174,20 @@ from scratch again. His correction is better information than the
 estimate was. After 14 days it expires — second-hand prices move, and a
 stale correction is worse than a fresh estimate.
 
-AI estimates are also reused for the same **14 days**, separately from owner
-corrections. Match the item's specifications and condition, not just its model.
-Owner corrections take precedence; neither kind of remembered price approves a
-deal. A major market change or a new product release permits revaluation: record
-the reason and invalidate the old price before generating a replacement.
+**[decide]** AI estimates are also reused for the same **14 days**, separately
+from owner corrections. Match the item's specifications and condition, not just
+its model. Owner corrections take precedence; neither kind of remembered price
+approves a deal. A major market change or a new product release permits
+revaluation: record the reason and invalidate the old price before generating a
+replacement.
+
+*Marked for Lukas's confirmation, 30 October 2026.* Codex reports that he
+authorised this in a conversation Claude was not part of, and the behaviour is
+built and tested. The paragraph stays so the behaviour is not undocumented, and
+the marker stays until he says the fourteen days is his number — because a rule
+reaching this document on an agent's account of what he said is exactly the
+thing `AGENTS.md` rule 0 exists to prevent, however accurate the account turns
+out to be.
 
 ## 4. Interest rates & terms
 
