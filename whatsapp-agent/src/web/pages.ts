@@ -267,6 +267,22 @@ export function outcomePage(outcome: PrecheckOutcome, whatsapp: string, ownerLab
     </div>
 
     ${
+      outcome.weWillCheck.length
+        ? `<div class="card">
+             <h2>You weren't sure about ${outcome.weWillCheck.length === 1 ? 'one thing' : `${outcome.weWillCheck.length} things`} — that's fine</h2>
+             <p class="muted">Here is where to look, if you want to. If you still can't tell, bring the
+             item anyway: we check ${outcome.weWillCheck.length === 1 ? 'it' : 'these'} ourselves when you come in. The estimate above stands,
+             and ${escapeHtml(ownerLabel)} gives you the firm amount once ${outcome.weWillCheck.length === 1 ? 'that is' : 'those are'} checked.</p>
+             <ul class="plain">${outcome.weWillCheck
+               .map((entry) => `<li><strong>${escapeHtml(entry.question)}</strong>${
+                 entry.howToCheck ? `<br><span class="muted">${escapeHtml(entry.howToCheck)}</span>` : ''
+               }</li>`)
+               .join('')}</ul>
+           </div>`
+        : ''
+    }
+
+    ${
       outcome.verifiedInPerson.length
         ? `<div class="card">
              <h2>Checked when you bring it in</h2>

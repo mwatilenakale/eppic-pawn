@@ -93,7 +93,7 @@ describe('a pre-check with a problem', () => {
     assert.ok(outcome.whatsappText.length > 0, 'the conversation is still offered');
   });
 
-  test('other unanswered points are listed for Lukas, without blocking', () => {
+  test('a point they could not answer is carried, with where to look', () => {
     const questions = precheckQuestions(rules, 'phones', 'iphone');
     const optional = questions.find((question) => !/signed out|must be/i.test(question.ask))!;
 
@@ -104,13 +104,52 @@ describe('a pre-check with a problem', () => {
     });
 
     assert.equal(outcome.status, 'ready');
-    assert.match(outcome.notes.join(' '), /The manager will want to go through/);
+    assert.equal(outcome.weWillCheck.length, 1);
+    assert.ok(outcome.weWillCheck[0]!.question.length > 0);
   });
 
-  test('an unanswered form is treated as unsure, never as yes', () => {
+  test('"not sure" on a must-have no longer blocks, but "no" still does', () => {
+    // Lukas, 30 October 2026: "If they are not sure, most of this can be
+    // verified, or they can be guided how to check. If they still can't, then
+    // we can just give an estimated value, and then we'll say we'll give a
+    // solid amount when you come, after we've checked that particular thing."
+    //
+    // Before this both answers blocked, so a customer who simply did not know
+    // whether Activation Lock was off was told "there is something to sort out
+    // first" and shown no estimate at all.
+    const questions = precheckQuestions(rules, 'phones', 'iphone');
+    const mustHave = questions.find((question) => /signed out/i.test(question.ask))!;
+    const base = { category: 'phone', variant: 'iphone' };
+
+    const unsure = evaluatePrecheck(rules, {
+      ...base,
+      answers: { ...answerAll('phones', 'iphone', 'yes'), [mustHave.id]: 'not sure' },
+    });
+    assert.equal(unsure.status, 'ready', 'not knowing is not an obstacle');
+    assert.ok(unsure.weWillCheck.some((entry) => /signed out/i.test(entry.question)));
+    // And it says where to look, from the playbook's own hint list.
+    assert.match(
+      unsure.weWillCheck.find((entry) => /signed out/i.test(entry.question))!.howToCheck ?? '',
+      /settings/i,
+    );
+
+    const said_no = evaluatePrecheck(rules, {
+      ...base,
+      answers: { ...answerAll('phones', 'iphone', 'yes'), [mustHave.id]: 'no' },
+    });
+    assert.equal(said_no.status, 'needs-attention', 'a "no" is something real to work through');
+    assert.match(said_no.notes.join(' '), /condition of taking the item in/i);
+  });
+
+  test('an unanswered form is still never read as yes', () => {
+    // The status is no longer "needs-attention" — under the rule above an
+    // unanswered point is checked in person rather than held against anyone —
+    // but silence must still not become confirmation, and every question has
+    // to show up as something the shop will check.
     const outcome = evaluatePrecheck(rules, { category: 'phone', variant: 'iphone', answers: {} });
     assert.ok(outcome.answers.every((answer) => answer.answer === 'unsure'));
-    assert.equal(outcome.status, 'needs-attention', 'silence is not confirmation');
+    assert.ok(!outcome.answers.some((answer) => answer.answer === 'yes'), 'silence is not confirmation');
+    assert.equal(outcome.weWillCheck.length, outcome.answers.length, 'all of it is carried, none of it assumed');
   });
 });
 

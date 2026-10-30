@@ -169,7 +169,11 @@ export class Extensions {
     // answer, not the agent's: it is a rule, and Lukas changes it by editing
     // the document rather than by overriding it on his phone.
     if (test.allowed === false) {
-      return { ownerMessage: refusedMessage(this.#store, this.#rules, line, test) };
+      return {
+        ownerMessage: refusedMessage(this.#store, this.#rules, line, test),
+        customerPhone: line.customer?.phone,
+        customerMessage: line.customer ? refusedCustomerMessage(this.#rules, line) : undefined,
+      };
     }
     if (test.allowed === null) {
       return { ownerMessage: cannotTellMessage(line, test) };
@@ -267,6 +271,37 @@ function refusedMessage(store: Store, rules: Rules, line: LoanLine, test: Extens
     `${marginLine(margin)}\n\n` +
     `The playbook sends it to market instead: *SELL ${referenceFor(line.loan.id)}*. ` +
     'If you want to extend it anyway, that is a change to section 8, not an override here — edit the document.'
+  );
+}
+
+/**
+ * What the borrower is told when the extension cannot be granted.
+ *
+ * Lukas, 30 October 2026: *"If we can't extend, we tell them we can't extend
+ * and that we have to sell the item to recover our money."* Before this only
+ * he was told — the customer asked for another month and heard nothing back,
+ * which is the worst of both: no extension and no answer.
+ *
+ * This does not skip his decision, and it is not the agent deciding anything.
+ * The refusal is section 8's arithmetic, and it is the direct answer to a
+ * *EXTEND* command he typed himself, so he is in the loop by construction —
+ * the same shape as the final notice he approved on 25 October.
+ *
+ * What it deliberately does not say: when the item will be sold, or that it
+ * has been. Sending something to market stays his decision on that item
+ * (*SELL <ref>*), so promising a date here would commit him to something he
+ * has not done. It does say they can still collect it by paying, because that
+ * stays true right up until it is sold and it is the one useful thing left to
+ * tell them.
+ */
+function refusedCustomerMessage(rules: Rules, line: LoanLine): string {
+  const owed = formatAmount(line.owedCents);
+  return (
+    `We can't extend your loan for another month, I'm sorry.\n\n` +
+    `What is owed has reached the point where ${rules.playbook.ownerLabel} can no longer lend against the item, ` +
+    'so it now has to be sold for the shop to recover its money.\n\n' +
+    `You can still collect it at any time before it is sold, by paying the ${owed} owed. ` +
+    `If you can do that, message here and ${rules.playbook.ownerLabel} will arrange it with you.`
   );
 }
 

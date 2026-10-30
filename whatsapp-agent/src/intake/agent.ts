@@ -57,6 +57,11 @@ export interface IntakeState {
   /** Times each document has been asked for, so we ask twice and move on. */
   photoAsks?: Record<string, number>;
   /**
+   * Questions we have already told them how to check. One hint each: a
+   * person who still cannot tell is not helped by the same hint again.
+   */
+  unsureAsks?: Record<string, number>;
+  /**
    * Pictures sent beyond what was asked for, kept as `extra`. Counted only so
    * the pending question is repeated once rather than after every one.
    */
@@ -209,6 +214,14 @@ const copy = {
   photoExpected: (ask: string) => `I still need that as a photo. ${ask}`,
   confirmExpected: (ask: string) => `Sorry, I didn't catch that. ${ask}`,
   photoReceived: 'Got the photo, thank you.',
+  /**
+   * Where to look, for a customer who said they were not sure. The hint
+   * first, then the question again — and only once, after which the answer
+   * is carried as unknown rather than asked for a third time.
+   */
+  whereToLook: (advice: string, ask: string) =>
+    `No problem — here is how to check.\n\n${advice}\n\n${ask}\n\n` +
+    "If you still can't tell, reply *not sure* again and we'll check it for you when you bring the item in.",
   /**
    * More pictures than were asked for. They are kept and Lukas sees them —
    * extra pictures of the item are useful, not a mistake — so this says
@@ -638,6 +651,27 @@ export class IntakeAgent {
       if (confirmation === null) {
         return { replies: [copy.confirmExpected(question.ask)] };
       }
+
+      // "Not sure" gets told where to look, once.
+      //
+      // Lukas, 30 October 2026: "If they are not sure, most of this can be
+      // verified, or they can be guided how to check. If they still can't,
+      // then we can just give an estimated value." Most of these questions
+      // have an answer the customer can find in a minute if somebody says
+      // where to look — the hints are in playbook section 6, "How to check".
+      //
+      // Asked once more and then carried, the same shape as a document the
+      // customer does not have yet: a person who genuinely cannot tell must
+      // not be asked a third time, and the gap goes to Lukas instead.
+      if (confirmation === 'unsure') {
+        const advice = this.#adviceFor(question.ask);
+        const asked = (state.unsureAsks ??= {});
+        if (advice && !asked[question.id]) {
+          asked[question.id] = 1;
+          return { replies: [copy.whereToLook(advice, question.ask)] };
+        }
+      }
+
       this.#record(state, question, text, confirmation === 'yes' ? true : confirmation === 'no' ? false : null);
       return { replies: this.#nextPrompt(customer, conversationId, state) };
     }
@@ -736,6 +770,19 @@ export class IntakeAgent {
     });
     state.itemId = item.id;
     return item;
+  }
+
+  /**
+   * Where to look, for a question the customer could not answer.
+   *
+   * The hints live in playbook section 6 so Lukas can reword them, matched
+   * on a phrase in the question so a reworded question keeps its hint. No
+   * hint means the question is simply carried, which is what happened to all
+   * of them before this existed.
+   */
+  #adviceFor(ask: string): string | null {
+    const asked = ask.toLowerCase();
+    return this.#rules.playbook.howToCheck.find((hint) => asked.includes(hint.phrase))?.advice ?? null;
   }
 
   #storePhoto(

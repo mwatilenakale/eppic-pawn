@@ -76,6 +76,12 @@ export interface PrecheckOutcome {
   bring: string[];
   /** What still gets checked with the item in hand. */
   verifiedInPerson: string[];
+  /**
+   * Points the customer could not answer. Not obstacles: the shop checks
+   * these when the item arrives, and the estimate still stands in the
+   * meantime (playbook section 6, "'Not sure' is not a no").
+   */
+  weWillCheck: { question: string; howToCheck: string | null }[];
   /** Prefilled WhatsApp handoff — the real intake still runs from scratch. */
   whatsappText: string;
   /** Null when no market estimate could be had; then the owner is asked instead. */
@@ -89,6 +95,19 @@ export function precheckQuestions(rules: Rules, categorySlug: string, variant: s
   return buildQuestionPlan(rules, categorySlug, variant)
     .questions.filter((question) => question.kind === 'confirm')
     .slice(0, MAX_QUESTIONS);
+}
+
+/**
+ * Where to look, for a point the customer could not answer.
+ *
+ * The hints come from playbook section 6 so Lukas can reword them, and the
+ * first phrase that appears in the question wins. A question with no hint
+ * gets none — it still goes on the list the shop checks, which is the part
+ * that matters.
+ */
+function adviceFor(rules: Rules, question: string): string | null {
+  const asked = question.toLowerCase();
+  return rules.playbook.howToCheck.find((hint) => asked.includes(hint.phrase))?.advice ?? null;
 }
 
 export function isMustHave(question: Question): boolean {
@@ -119,6 +138,7 @@ export function evaluatePrecheck(rules: Rules, submission: PrecheckSubmission): 
       bring: [],
       proofOfPurchase: proofOfPurchaseFor(rules, null),
       verifiedInPerson: [],
+      weWillCheck: [],
       whatsappText: 'Hello, I would like to ask about pawning an item.',
       quote: null,
     };
@@ -138,16 +158,27 @@ export function evaluatePrecheck(rules: Rules, submission: PrecheckSubmission): 
     };
   });
 
-  const blocking = answers.filter((answer) => answer.mustHave && answer.answer !== 'yes');
-  const unsure = answers.filter((answer) => !answer.mustHave && answer.answer !== 'yes');
+  // A "no" and a "not sure" are different things, and until Lukas said so on
+  // 30 October they were treated the same: both blocked, so a customer who
+  // simply did not know whether Activation Lock was off was told "there is
+  // something to sort out first" and shown no estimate.
+  //
+  // Someone who says the handset *is* still on finance has told the shop
+  // something real. Someone who does not know has told it nothing yet — and
+  // the shop is going to check that itself anyway when the item is in front
+  // of it. So only an actual "no" is an obstacle.
+  const blocking = answers.filter((answer) => answer.mustHave && answer.answer === 'no');
+  const unanswered = answers.filter((answer) => answer.answer === 'unsure');
 
   const notes: string[] = [];
   for (const answer of blocking) {
     notes.push(`The playbook treats this as a condition of taking the item in: ${answer.question}`);
   }
-  if (unsure.length > 0) {
-    notes.push(`${owner.charAt(0).toUpperCase()}${owner.slice(1)} will want to go through ${unsure.length === 1 ? 'one other point' : `${unsure.length} other points`} with you: ${unsure.map((answer) => answer.question).join('; ')}`);
-  }
+
+  const weWillCheck = unanswered.map((answer) => ({
+    question: answer.question,
+    howToCheck: adviceFor(rules, answer.question),
+  }));
 
   // Playbook section 5: above the threshold the proof has to be the receipt or
   // a settlement letter. The website is the one channel that already knows the
@@ -181,6 +212,7 @@ export function evaluatePrecheck(rules: Rules, submission: PrecheckSubmission): 
       : rules.playbook.requirements,
     proofOfPurchase: proof,
     verifiedInPerson: plan.inPersonChecks.map((check) => check.text),
+    weWillCheck,
     whatsappText: composeHandoff(category.label, submission.description ?? '', blocking.length > 0),
     quote: submission.quote ?? null,
   };

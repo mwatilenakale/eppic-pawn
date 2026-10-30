@@ -921,3 +921,73 @@ describe('several pictures in a row', () => {
     assert.match(out.replies.join('\n'), /confirm|send|photo of|hoping to borrow/i, 'and still says what is needed');
   });
 });
+
+/**
+ * "Not sure" is told where to look, once.
+ *
+ * Lukas, 30 October 2026: "If they are not sure, most of this can be
+ * verified, or they can be guided how to check. If they still can't, then we
+ * can just give an estimated value, and then we'll say we'll give a solid
+ * amount when you come, after we've checked that particular thing."
+ *
+ * The hints are in playbook section 6 so he can reword them. Asked once more
+ * and then carried — the same shape as a document the customer does not have
+ * yet, because somebody who genuinely cannot tell is not helped by being
+ * asked a third time.
+ */
+describe('a customer who does not know', () => {
+  let n = 0;
+  const send = (text?: string, withPhoto = false) =>
+    agent.handle(CUSTOMER, { text, providerMessageId: `wamid.unsure-${++n}`,
+      ...(withPhoto ? { media: { content: photo() } } : {}) });
+
+  /** Drives the conversation to a named confirm question and stops there. */
+  function upTo(pattern: RegExp): string {
+    send('hello');
+    send('Aina');
+    send('iPhone');
+    let last = send('iPhone 13 Pro, 256GB, good condition');
+    for (let turn = 0; turn < 20; turn += 1) {
+      const asked = last.replies.join(' ');
+      if (pattern.test(asked)) return asked;
+      last = /send|screenshot|photo of/i.test(asked) ? send(undefined, true) : send('yes');
+    }
+    throw new Error(`never reached ${pattern}`);
+  }
+
+  test('the first "not sure" gets the playbook hint and the question again', () => {
+    upTo(/Activation Lock/i);
+    const reply = send('not sure').replies.join('\n');
+
+    assert.match(reply, /here is how to check/i);
+    assert.match(reply, /Settings, your name at the top/, 'the hint from playbook section 6');
+    assert.match(reply, /Activation Lock/, 'and the question again, so they can answer it');
+    assert.match(reply, /check it for you when you bring the item in/i, 'and a way out');
+  });
+
+  test('the second "not sure" is carried, not asked a third time', () => {
+    upTo(/Activation Lock/i);
+    send('not sure');
+    const reply = send('not sure').replies.join('\n');
+
+    assert.doesNotMatch(reply, /how to check/i, 'the same hint twice helps nobody');
+    assert.doesNotMatch(reply, /Activation Lock/, 'the conversation has moved on');
+  });
+
+  test('a question with no hint is carried straight away', () => {
+    // No hint in the document means the question behaves exactly as it did
+    // before any of this existed. "no MDM/school-management profile" has no
+    // matching phrase in section 6's list — deliberately, since there is no
+    // short honest answer to where a customer looks for that.
+    const asked = upTo(/MDM/i);
+    assert.match(asked, /MDM/i);
+    assert.equal(
+      rules.playbook.howToCheck.filter((hint) => asked.toLowerCase().includes(hint.phrase)).length,
+      0,
+      'the fixture only works while this question really has no hint',
+    );
+    const reply = send('not sure').replies.join('\n');
+    assert.doesNotMatch(reply, /how to check/i);
+    assert.doesNotMatch(reply, /MDM/i, 'the conversation moves on');
+  });
+});

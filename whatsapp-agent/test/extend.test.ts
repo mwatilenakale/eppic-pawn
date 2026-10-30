@@ -1,8 +1,8 @@
 /**
- * Another month — playbook section 8 step 3, the 70% line.
+ * Another month — playbook section 8 step 3, the 75% line.
  *
  * Lukas's rule, 21 October 2026: add the next month's interest to everything
- * owed and compare against the item's *current* market value. At or below 70%
+ * owed and compare against the item's *current* market value. At or below 75%
  * the extension may be granted; above it, the item goes to market.
  *
  * The arithmetic is checked here independently of the implementation, because
@@ -84,9 +84,11 @@ function pawn(startDate = '2026-09-10'): Loan {
 const say = (from: string, text: string) =>
   router.handle({ from, messageId: `m${++counter}`, type: 'text', text });
 
-describe('the 70% line', () => {
+describe('the 75% line', () => {
   test('the threshold comes from the playbook', () => {
-    assert.equal(rules.playbook.collections.extensionCeilingPct, 70);
+    // Corrected from 70 by Lukas on 30 October 2026. 75% of market value is
+    // also the assessed value, since section 3 assesses at market x 0.75.
+    assert.equal(rules.playbook.collections.extensionCeilingPct, 75);
   });
 
   test('the arithmetic, checked independently', () => {
@@ -100,7 +102,7 @@ describe('the 70% line', () => {
     assert.equal(result.owedCents, 483_750);
     assert.equal(result.nextInterestCents, 108_750);
     assert.equal(result.wouldOweCents, 592_500);
-    assert.equal(result.ceilingCents, 700_000, '70% of a million');
+    assert.equal(result.ceilingCents, 750_000, '75% of a million');
     assert.equal(result.allowed, true, '59% is inside the line');
   });
 
@@ -108,18 +110,21 @@ describe('the 70% line', () => {
     const loan = pawn();
     const line = book.lineFor(store.loan(loan.id)!);
 
-    // The same N$592,500 against an item now worth N$800,000 is 74%.
-    const result = extensionTest(rules, line, 800_000);
+    // The same N$5,925 owed against an item now worth N$7,500 is 79%. Under
+    // the old 70% line an N$8,000 item already failed; at 75% it does not,
+    // which is the whole point of the correction.
+    assert.equal(extensionTest(rules, line, 800_000).allowed, true, '74% is now inside');
+    const result = extensionTest(rules, line, 750_000);
     assert.equal(result.allowed, false);
-    assert.equal(result.ceilingCents, 560_000);
+    assert.equal(result.ceilingCents, 562_500);
   });
 
   test('exactly on the line is allowed — "at or below"', () => {
     const loan = pawn();
     const line = book.lineFor(store.loan(loan.id)!);
 
-    // 592,500 is exactly 70% of 846,428.57; round up so the ceiling matches.
-    const result = extensionTest(rules, line, 846_429);
+    // 592,500 is exactly 75% of 790,000 — no rounding needed this time.
+    const result = extensionTest(rules, line, 790_000);
     assert.equal(result.ceilingCents, 592_500);
     assert.equal(result.allowed, true, 'the document says "at or below"');
   });
@@ -129,10 +134,13 @@ describe('the 70% line', () => {
     // playbook's own figures, the third one is where it stops.
     const loan = pawn();
     const owedAfter = (months: number) => 375_000 + 108_750 * months;
-    const ceiling = 700_000;
+    const ceiling = 750_000;
 
     assert.ok(owedAfter(2) <= ceiling, 'two months fits');
-    assert.ok(owedAfter(3) > ceiling, 'three does not');
+    // At 70% the third month failed by N$12.50 — 701,250 against 700,000.
+    // That is what the correction to 75% bought: one more month.
+    assert.ok(owedAfter(3) <= ceiling, 'and so does three, since the correction');
+    assert.ok(owedAfter(4) > ceiling, 'the fourth is where it stops');
   });
 
   test('no market value means the test cannot run, and says so', () => {
@@ -198,7 +206,7 @@ describe('EXTEND', () => {
     await say(OWNER, `EXTEND ${referenceFor(loan.id)}`);
 
     const sent = transport.to(OWNER).at(-1)!;
-    assert.match(sent, /70% line/);
+    assert.match(sent, /75% line/);
     assert.match(sent, /estimate made just now, not a sale price/i);
   });
 
@@ -215,7 +223,22 @@ describe('EXTEND', () => {
 
     assert.equal(store.loan(loan.id)!.due_date, day('2026-09-10', 30), 'nothing moved');
     assert.equal(store.ledger(loan.id).length, 2, 'and no interest was added');
-    assert.deepEqual(transport.to(CUSTOMER), [], 'the customer was promised nothing');
+
+    // Lukas, 30 October 2026: "If we can't extend, we tell them we can't
+    // extend and that we have to sell the item to recover our money."
+    // Previously only he was told, so a customer who asked for another month
+    // heard nothing at all.
+    const told = transport.to(CUSTOMER).at(-1)!;
+    assert.match(told, /can't extend/i);
+    assert.match(told, /sold for the shop to recover/i);
+    assert.match(told, /collect it at any time before it is sold/i, 'redemption stays open, and it is the useful part');
+    assert.match(told, /manager/i);
+    assert.doesNotMatch(told, /Lukas/, 'customers are told "the manager"');
+
+    // Promises nothing he has not decided: sending an item to market is still
+    // *SELL <ref>*, so no date and no claim that it has happened.
+    assert.doesNotMatch(told, /\d{4}-\d{2}-\d{2}/, 'no sale date is invented');
+    assert.doesNotMatch(told, /has been sold|is being sold|will be sold on/i);
   });
 
   test('and says so when it cannot tell', async () => {

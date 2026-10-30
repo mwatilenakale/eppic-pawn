@@ -165,6 +165,15 @@ export interface Playbook {
    * photo question happened to be pending.
    */
   detailPhotos: Map<string, DetailPhoto[]>;
+  /**
+   * How to find out, for a customer who answered "not sure" (section 6,
+   * "How to check"). Keyed by the phrase to look for in the question.
+   *
+   * Ordered, because the first matching phrase wins and some are substrings
+   * of others. Empty when the document says nothing, which is the behaviour
+   * before any of this existed: no hint, and the question still gets asked.
+   */
+  howToCheck: { phrase: string; advice: string }[];
 }
 
 /** A picture the customer is asked for by name (section 6). */
@@ -208,6 +217,7 @@ export function loadPlaybook(path: string): Playbook {
     ...readRequirements(path, need(SECTIONS.requirements, 'requirements')),
     screening,
     detailPhotos: readDetailPhotos(path, need(SECTIONS.screening, 'item screening checklists')),
+    howToCheck: readHowToCheck(path, need(SECTIONS.screening, 'item screening checklists')),
   };
 }
 
@@ -291,6 +301,42 @@ function readProofThreshold(path: string, block: string): number {
     throw new PlaybookError(path, `section ${SECTIONS.requirements} does not say above what value proof of purchase is required`);
   }
   return Math.round(Number(match[1]!.replace(/,/g, '')) * 100);
+}
+
+/**
+ * The "How to check" hints out of section 6.
+ *
+ * Lukas, 30 October 2026: a customer who is not sure should be told where to
+ * look before the shop treats the question as unanswerable. Each bullet is
+ * `phrase: what to tell them`, and the phrase is matched against the question
+ * text so rewording a question keeps its hint.
+ *
+ * Absent means no hints, not an error: a missing hint leaves the question
+ * exactly as it was asked before, whereas a missing *rule* would be a gap the
+ * shop cannot operate with. A malformed bullet inside the subsection does
+ * throw, because that is a typo rather than a decision.
+ */
+function readHowToCheck(path: string, block: string): { phrase: string; advice: string }[] {
+  const heading = /^####\s+How to check.*$/im.exec(block);
+  if (!heading) return [];
+
+  const after = block.slice(heading.index + heading[0].length);
+  const next = /^#{1,4}\s/m.exec(after);
+  const body = next ? after.slice(0, next.index) : after;
+
+  const hints: { phrase: string; advice: string }[] = [];
+  for (const bullet of bullets(body)) {
+    const text = plain(bullet);
+    const match = /^([^:]{2,60}?)\s*:\s*(.+)$/is.exec(text);
+    if (!match) {
+      throw new PlaybookError(
+        path,
+        `section ${SECTIONS.screening} "How to check" line "${text.slice(0, 50)}" is not written as "phrase: what to tell them"`,
+      );
+    }
+    hints.push({ phrase: match[1]!.toLowerCase().trim(), advice: match[2]!.replace(/\s+/g, ' ').trim() });
+  }
+  return hints;
 }
 
 export class PlaybookError extends Error {

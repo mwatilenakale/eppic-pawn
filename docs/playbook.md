@@ -357,6 +357,68 @@ a customer to manage on a cheap Android) are inferred from section 2.3 and
 need his confirmation or his cuts. Nothing below the shop actually needs
 should stay in the list: every extra ask is a customer who gives up partway.
 
+### "Not sure" is not a no
+
+Lukas, 30 October 2026: *"If they are not sure, most of this can be verified,
+or they can be guided how to check. If they still can't, then we can just give
+an estimated value, and then we'll say we'll give a solid amount when you come,
+after we've checked that particular thing."*
+
+So three steps, in order, and the first two are the point:
+
+1. **Tell them how to check.** Most of these questions have an answer the
+   customer can find in a minute if someone says where to look. The hints
+   below are what the agent and the website say.
+2. **If they find it, that is the answer.** A customer who checks and reports
+   back is better evidence than one who guessed yes to get through the form.
+3. **If they still cannot tell, carry on anyway.** The item is not refused and
+   the application is not held. They get the estimate, the unanswered point
+   goes on the list the shop checks when the item arrives, and they are told
+   plainly that the firm amount comes after that check.
+
+**A "no" is different from a "not sure".** Someone who says the handset *is*
+still on finance has told the shop something that matters, and that is a real
+obstacle to work through. Someone who does not know has told the shop nothing
+yet. The two must not be treated the same, and before this they were.
+
+#### How to check
+
+Each line is `phrase: what to tell them`. The phrase is matched against the
+question, so a question that changes wording keeps its hint as long as the
+phrase still appears. Add to this list freely — anything not covered here
+simply gets no hint, which is the behaviour before this existed.
+
+- find my: On an iPhone, Settings, your name at the top, then Find My. On
+  Android it is Find My Device in Settings under Security.
+- activation lock: Settings, your name at the top. If it asks for an Apple ID
+  password you are still signed in, and signing out clears the lock.
+- apple id: Settings, your name at the top, scroll down to Sign Out.
+- signed out: Open Settings and look for your account at the top. If a name
+  or an email is showing, it is still signed in.
+- factory reset protection: Settings, Accounts. If a Google account is listed,
+  remove it before the reset, or the phone locks to it afterwards.
+- google/samsung account: Settings, Accounts and backup, Manage accounts.
+- device administrator: Settings, Security, then Device admin apps.
+- knox guard: On a Samsung, Settings, About phone. A managed phone usually
+  shows a notice there or on the lock screen.
+- managed by your organisation: It shows as a notice in Settings, usually at
+  the very top or under About phone. A work or school phone often has one.
+- under finance: Check whether you are still paying it off on an account or a
+  contract — a shop account, a network contract, or a bank plan. Your last
+  statement or the shop you bought it from will say.
+- paid off: Check whether anything is still owed on it to a shop, a bank or a
+  network.
+- bios: Restart the laptop and press F2, F10 or Delete as it starts. If it
+  asks for a password you cannot enter, it is BIOS-locked.
+- passwords/accounts removed: Sign out of the Microsoft or Google account and
+  remove any user passwords before bringing it in.
+- smart tv: If it can open YouTube or Netflix on its own, without a box
+  plugged in, it is a Smart TV.
+- account/login removed: Open the TV's settings and sign out of any account
+  and any app you are logged into.
+- registered in the borrower: Check the registration papers show your own
+  name, not a previous owner's.
+
 ## 7. Intake process (moving toward remote pre-screening)
 
 Goal: as much of the checklist above happens *before* the customer walks
@@ -393,25 +455,40 @@ in, so in-person time is minimal.
      everything there is to tell. Who gets a phone call after that is Lukas's
      decision about that person, and a machine repeating itself is how a
      customer who would have paid decides not to come back.
-3. **Extension test (the 70% line).** A customer who has not settled within
+3. **Extension test (the 75% line).** A customer who has not settled within
    the repayment period and asks for another month: add the next month's
    interest to what is already owed — the principal plus every month of
    interest so far — and compare that total against the item's **current
    market value**.
-   - **Total at or below 70% of current market value → the extension may be
+   - **Total at or below 75% of current market value → the extension may be
      granted.**
-   - **Above 70% → no extension. The item goes to market instead.**
+   - **Above 75% → no extension.** The customer is told plainly that the
+     shop cannot extend and that the item has to be sold to recover the
+     money owed.
    - The point of the line is that the shop must still be able to recover
      everything owed from a quick sale, priced to move rather than for the
-     best price (step 5 below). At 70% there is room for that; past it, each
+     best price (step 5 below). At 75% there is room for that; past it, each
      further month makes the position worse, not better.
    - Granting it is still Lukas's decision. Passing the test permits an
      extension; it does not grant one.
 
-   *Worked through, on the example below: a N$10,000 item, N$3,750 loan,
-   N$1,087.50 interest a month. After two months N$5,925 is owed, and 70% of
-   N$10,000 is N$7,000 — inside the line, so another month may be granted.
-   After four months it is N$8,100, past the line, and it goes to market.*
+   *Corrected from 70% to 75% by Lukas on 30 October 2026.* It is not a small
+   difference. On the example below — a N$10,000 item, N$3,750 loan, N$1,087.50
+   interest a month — the third month owes N$7,012.50, which is N$12.50 over
+   the old 70% line of N$7,000 and comfortably inside the 75% line of N$7,500.
+   The old figure refused a third month over twelve rand fifty.
+
+   *Worked through: after two months N$5,925 is owed against a N$7,500
+   ceiling — inside. After three months N$7,012.50 — still inside. After four
+   months N$8,100 — past it, and the item goes to market.*
+
+   **75% of market value is the assessed value.** The valuation in section 3
+   multiplies the market estimate by 0.75 to get the assessed value, so this
+   test is the same sentence said twice: *what would be owed must not exceed
+   what the item would be assessed at today.* That is the version to say to a
+   customer. The arithmetic still runs on current market value, because the
+   item has depreciated since it was first assessed and the original figure is
+   no longer the right one to measure against.
 
 4. **Margin check before selling:** original assessed value + interest
    now owed (defaulted month + another month if extended) vs. current
@@ -430,15 +507,19 @@ in, so in-person time is minimal.
 ### Two tests, and which one governs
 
 **[decide]** Steps 3 and 4 are both tests of the same moment and they do not
-always agree. Step 3 measures what is owed against **70% of current market
-value**; step 4 measures it against the **assessed value** with a 10% margin
-left over. On the worked example they agree. They part company in the middle:
-owed N$7,000 on a N$10,000 item assessed at N$7,500 passes step 3 exactly and
-fails step 4.
+always agree. Step 3 measures what is owed against **75% of current market
+value**, which is the same as the assessed value recomputed today; step 4
+measures it against the **original assessed value** with a 10% margin left
+over. On the worked example they agree. They part company once the item has
+lost value since intake, because step 3 follows the item down and step 4 does
+not: owed N$7,000 against an original assessed N$7,500 passes step 4's margin
+only just, while step 3 on a market value that has since fallen to N$9,000
+gives a N$6,750 ceiling and refuses.
 
 Until Lukas says otherwise, the code treats **step 3 as the extension test**,
-because it is the one he stated in those terms and it is the stricter of the
-two — it stops lending against an item roughly a month earlier. Step 4 stays
+because it is the one he stated in those terms, he restated it on 30 October,
+and it is the one that tracks what the item is worth now rather than what it
+was worth at intake. Step 4 stays
 as written and is shown alongside, so a disagreement is visible rather than
 silently resolved. Neither grants anything: both are checks on a decision that
 remains his.
