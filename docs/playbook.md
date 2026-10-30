@@ -174,6 +174,12 @@ from scratch again. His correction is better information than the
 estimate was. After 14 days it expires — second-hand prices move, and a
 stale correction is worse than a fresh estimate.
 
+AI estimates are also reused for the same **14 days**, separately from owner
+corrections. Match the item's specifications and condition, not just its model.
+Owner corrections take precedence; neither kind of remembered price approves a
+deal. A major market change or a new product release permits revaluation: record
+the reason and invalidate the old price before generating a replacement.
+
 ## 4. Interest rates & terms
 
 | Scenario | Rate | Term | Split |

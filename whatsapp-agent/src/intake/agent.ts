@@ -17,7 +17,7 @@ import { buildQuestionPlan, liveQuestions, readConfirmation, type Question, type
 
 export interface Incoming {
   text?: string;
-  media?: { content: Buffer; extension?: string };
+  media?: { content: Buffer; extension?: string; mimeType?: string };
   providerMessageId?: string | null;
   /** Meta's own send time, where the webhook gave us one. */
   at?: string | null;
@@ -290,6 +290,15 @@ export class IntakeAgent {
     if (recorded === null) return { replies: [] };
 
     const state = JSON.parse(conversation.state) as IntakeState;
+    // Defence in depth for internal callers as well as the public router.
+    // Existing legacy internal photo callers omit MIME; explicit audio/video
+    // can never satisfy a photo/document question.
+    if (incoming.media && ((incoming.media.mimeType &&
+        !incoming.media.mimeType.startsWith('image/') && incoming.media.mimeType !== 'application/pdf') ||
+        /^(ogg|oga|opus|mp3|m4a|wav|webm|mp4)$/i.test(incoming.media.extension ?? '') ||
+        incoming.media.content.subarray(0, 4).toString('ascii') === 'OggS')) {
+      return { replies: ['Please send those details as text, or send a clear photo. I have not counted this attachment as a document.'] };
+    }
     const outcome = this.#advance(customer, conversation.id, state, incoming);
 
     // Is it getting anywhere?
@@ -569,6 +578,9 @@ export class IntakeAgent {
 
     if (question.kind === 'photo') {
       if (incoming.media) {
+        if (incoming.media.mimeType === 'application/pdf' && !['id', 'ownership', 'police-declaration'].includes(question.photoKind ?? 'item')) {
+          return { replies: [`I need a photo for this check, not a PDF. ${question.ask}`] };
+        }
         this.#storePhoto(customer, conversationId, state, question, incoming.media);
         this.#record(state, question, '[photo received]', true);
         return { replies: [copy.photoReceived, ...this.#nextPrompt(customer, conversationId, state)] };

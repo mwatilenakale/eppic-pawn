@@ -1,13 +1,13 @@
 /**
- * Extending a loan by a month — playbook section 8 step 3, the 70% line.
+ * Extending a loan by a month — playbook section 8 step 3, the 75% line.
  *
  * A customer who has not settled and asks for another month. The test Lukas
  * stated: add the next month's interest to everything already owed, and
  * compare that total against the item's **current market value**. At or below
- * 70% the extension may be granted; above it, the item goes to market instead.
+ * 75% the extension may be granted; above it, the item goes to market instead.
  *
  * The reasoning behind the line is step 5 of the same section — a forfeited
- * item is priced to sell in a day or two, not for the best price. At 70% there
+ * item is priced to sell in a day or two, not for the best price. At 75% there
  * is room to recover what is owed from a quick sale. Past it, every further
  * month makes the position worse rather than better, which is the opposite of
  * what an extension is for.
@@ -56,7 +56,7 @@ export interface ExtensionTest {
   wouldOweCents: number;
   /** Current market value, as estimated now. Null when nobody could say. */
   marketValueCents: number | null;
-  /** 70% of it, from the playbook. */
+  /** 75% of it, from the playbook. */
   ceilingCents: number | null;
   ceilingPct: number;
   /** True when the extension is allowed at all. Null when unknown. */

@@ -19,6 +19,7 @@ import { AgentRouter } from '../src/router.ts';
 import { MemoryTransport } from '../src/whatsapp/transport.ts';
 import { DashboardQuery } from '../src/dashboard/index.ts';
 import { outstandingFor } from '../src/requirements.ts';
+import { png } from './support/png-fixture.ts';
 import { InspectionQueue } from '../src/inspection/queue.ts';
 import { referenceFor } from '../src/reference.ts';
 
@@ -47,8 +48,10 @@ beforeEach(() => {
 
 afterEach(() => store.close());
 
-const say = (from: string, text?: string, mediaId?: string) =>
-  router.handle({ from, messageId: `m${++counter}`, type: mediaId ? 'image' : 'text', text, mediaId });
+const say = (from: string, text?: string, mediaId?: string) => {
+  if (mediaId) transport.media.set(mediaId, { content: png({ width: 2, height: 2 }), mimeType: 'image/png', extension: 'png' });
+  return router.handle({ from, messageId: `m${++counter}`, type: mediaId ? 'image' : 'text', text, mediaId });
+};
 
 /** A full intake where the police declaration never arrives. */
 async function intakeWithoutTheDeclaration(): Promise<void> {

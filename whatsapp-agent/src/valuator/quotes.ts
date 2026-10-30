@@ -7,6 +7,7 @@ import { suggestValuation, type Valuation } from '../valuation.ts';
 import { formatAmount, percentOf, round } from '../money.ts';
 import { PriceMemory } from './memory.ts';
 import type { EstimateInput } from './prompt.ts';
+import { recallEstimate } from './estimate-memory.ts';
 
 export interface ItemQuote extends PrecheckQuote { valuation: Valuation }
 
@@ -37,6 +38,7 @@ export class QuoteService {
   readonly #rules: Rules;
   readonly #valuator: Valuator | null;
   readonly #memory: PriceMemory;
+  readonly #pending = new Map<string, Promise<ItemQuote | null>>();
 
   constructor(store: Store, rules: Rules, valuator: Valuator | null, memory = new PriceMemory(store, rules)) {
     this.#store = store;
@@ -47,6 +49,16 @@ export class QuoteService {
 
   async quote(input: EstimateInput): Promise<ItemQuote | null> {
     input = { ...input, description: describeItem(input.description) };
+    const key = JSON.stringify([input.categorySlug, input.variant, input.description]);
+    const pending = this.#pending.get(key);
+    if (pending) return pending;
+    const task = this.#quote(input);
+    this.#pending.set(key, task);
+    try { return await task; }
+    finally { if (this.#pending.get(key) === task) this.#pending.delete(key); }
+  }
+
+  async #quote(input: EstimateInput): Promise<ItemQuote | null> {
     if (!input.description.trim() || missingPhoneDetails(input.description).length) return null;
     const { divisor, discountFactor, buyNowMarkupPct, minimumLoanCents, formula } = this.#rules.playbook.loanSizing;
     const remembered = this.#memory.recall(input);
@@ -64,14 +76,16 @@ export class QuoteService {
           `${formatAmount(remembered.loanCents)} suggested loan — still needs approval`],
       };
     } else {
-      if (!this.#valuator) return null;
       // Stored model output is dated evidence, never an owner correction. Do
       // not copy it into price_adjustments or let repeated guesses gain authority.
       const history = this.#store.recentMarketObservations(input.categorySlug, input.variant);
-      const estimates = await this.#valuator.estimate({ ...input, history });
+      const cached = recallEstimate(this.#store, this.#rules, input);
+      if (!cached && !this.#valuator) return null;
+      const estimates = cached ?? await this.#valuator!.estimate({ ...input, history });
       if (estimates.length === 0) return null;
       valuation = suggestValuation(estimates, this.#rules);
-      this.#store.recordMarketObservation(input, estimates);
+      // Reusing an observation never renews its expiry.
+      if (!cached) this.#store.recordMarketObservation(input, estimates);
     }
     return {
       marketValueCents: valuation.basis.amountCents, assessedValueCents: valuation.assessedValueCents,

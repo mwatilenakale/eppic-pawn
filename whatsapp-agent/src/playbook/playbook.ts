@@ -516,7 +516,7 @@ function readCollections(path: string, block: string): Playbook['collections'] {
   if (marginThresholdPct === null) {
     throw new PlaybookError(path, `section ${SECTIONS.collections} does not state the margin threshold`);
   }
-  // Section 8 step 3, the 70% line. Deliberately a separate read from the
+  // Section 8 step 3, the 75% line. Deliberately a separate read from the
   // margin threshold: the two tests measure against different bases and can
   // disagree, and the document says so.
   const ceilingLine = block
@@ -527,7 +527,7 @@ function readCollections(path: string, block: string): Playbook['collections'] {
   if (extensionCeilingPct === null) {
     throw new PlaybookError(
       path,
-      `section ${SECTIONS.collections} does not state the extension ceiling (expected a line like "at or below 70% of current market value")`,
+      `section ${SECTIONS.collections} does not state the extension ceiling (expected a line like "at or below 75% of current market value")`,
     );
   }
 

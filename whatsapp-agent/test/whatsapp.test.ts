@@ -18,6 +18,7 @@ import {
 } from '../src/whatsapp/webhook.ts';
 import { buildServer } from '../src/server.ts';
 import { loadConfig, ConfigError } from '../src/config.ts';
+import { png } from './support/png-fixture.ts';
 
 const rules = loadRules();
 // Lukas's own phone. Deliberately not the shop's number in the playbook:
@@ -220,6 +221,8 @@ describe('routing', () => {
   });
 
   test('an image is downloaded and stored encrypted against the item', async () => {
+    const image = png({ width: 2, height: 2, paint: () => ({ r: 30, g: 30, b: 30, a: 255 }) });
+    transport.media.set('media-9', { content: image, mimeType: 'image/png', extension: 'png' });
     await router.handle(event(CUSTOMER, 'hi', 'm1'));
     await router.handle(event(CUSTOMER, 'Test Customer', 'm-name'));
     await router.handle(event(CUSTOMER, 'phone', 'm2'));
@@ -230,7 +233,7 @@ describe('routing', () => {
     const item = store.db.prepare('SELECT id FROM items LIMIT 1').get() as { id: string };
     const photos = store.photos(item.id);
     assert.equal(photos.length, 1);
-    assert.equal(store.media!.get(photos[0]!.media_path).toString(), 'fake-media:media-9');
+    assert.deepEqual(store.media!.get(photos[0]!.media_path), image);
   });
 
   test('a redelivered webhook produces no second reply', async () => {

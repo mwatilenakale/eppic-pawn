@@ -40,6 +40,7 @@ import { WindowAwareTransport, type WhatsAppTransport, type OutboundMessage } fr
 import { Collections } from './book/collections.ts';
 import { QuoteService } from './valuator/quotes.ts';
 import type { EstimateInput } from './valuator/prompt.ts';
+import { validateDownloadedEvidence, VOICE_FALLBACK, MEDIA_FALLBACK } from './whatsapp/media.ts';
 
 /**
  * Supplies market estimates for the valuation engine. Optional: with none
@@ -179,7 +180,6 @@ export class AgentRouter {
     // Do this before handover or any async research. A replay must not escalate
     // or advance a different question after its first delivery has completed.
     if (this.#store.db.prepare('SELECT id FROM messages WHERE provider_message_id = ?').get(event.messageId)) return;
-    const media = event.mediaId ? await this.#transport.downloadMedia(event.mediaId) : undefined;
 
     // Before anything else: is this one of ours to answer at all?
     //
@@ -190,11 +190,25 @@ export class AgentRouter {
     // guessing at those costs far more than waiting does.
     if (await this.#handedToAPerson(event)) return;
 
+    // Until transcription is configured, voice is explicitly unsupported—not
+    // silently stored as the photograph currently being asked for. This does
+    // not advance intake, satisfy a document, or create an approval.
+    if (event.type === 'audio') return this.#mediaFallback(event, VOICE_FALLBACK);
+    if (event.type === 'video' || event.type === 'unsupported') return this.#mediaFallback(event, MEDIA_FALLBACK);
+    let media;
+    if (event.mediaId) {
+      const downloaded = await this.#transport.downloadMedia(event.mediaId);
+      try { media = validateDownloadedEvidence(event, downloaded); }
+      catch { return this.#mediaFallback(event, MEDIA_FALLBACK); }
+    } else if (event.type === 'image' || event.type === 'document') {
+      return this.#mediaFallback(event, MEDIA_FALLBACK);
+    }
+
     const outcome = this.#intake.handle(event.from, {
       text: event.text,
       providerMessageId: event.messageId,
       at: metaTimestampToIso(event.timestamp),
-      media: media ? { content: media.content, extension: media.extension } : undefined,
+      media: media ? { content: media.content, extension: media.extension, mimeType: media.mimeType } : undefined,
     });
 
     // A profile nickname must not overwrite a customer's stated or signed name.
@@ -211,6 +225,21 @@ export class AgentRouter {
     if (outcome.stuck) await this.#escalateStuck(event.from);
 
     if (outcome.submission) await this.#requestApproval(outcome.submission);
+  }
+
+  /** Keep the unsupported message/fallback in the transcript for the human
+   * operator, without asking the intake machine to interpret attachment bytes.
+   */
+  async #mediaFallback(event: InboundEvent, body: string): Promise<void> {
+    const customer = this.#store.upsertCustomer(event.from);
+    const conversation = this.#store.activeConversation(customer.id) ??
+      this.#store.openConversation(customer.id, initialState(customer.name));
+    const recorded = this.#store.recordInbound({ conversationId: conversation.id,
+      providerMessageId: event.messageId, body: `[${event.type} attachment]${event.text ? ` ${event.text}` : ''}`,
+      at: metaTimestampToIso(event.timestamp) });
+    if (recorded === null) return;
+    await this.#transport.sendText({ to: event.from, body });
+    this.#store.recordOutbound({ conversationId: conversation.id, body });
   }
 
   async #requestApproval(submission: IntakeSubmission): Promise<void> {

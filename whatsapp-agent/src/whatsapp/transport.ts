@@ -172,9 +172,11 @@ export class MemoryTransport implements WhatsAppTransport {
   async downloadMedia(mediaId: string): Promise<DownloadedMedia> {
     return (
       this.media.get(mediaId) ?? {
-        content: Buffer.from(`fake-media:${mediaId}`),
-        mimeType: 'image/jpeg',
-        extension: 'jpg',
+        // A real tiny PNG fixture, not arbitrary text advertised as a JPEG.
+        // Tests for malformed media must explicitly supply malformed bytes.
+        content: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=', 'base64'),
+        mimeType: 'image/png',
+        extension: 'png',
       }
     );
   }

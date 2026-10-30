@@ -143,6 +143,15 @@ describe('the 75% line', () => {
     assert.ok(owedAfter(4) > ceiling, 'the fourth is where it stops');
   });
 
+  test('one cent above the inclusive ceiling is refused', () => {
+    const loan = pawn();
+    const line = book.lineFor(store.loan(loan.id)!);
+    const result = extensionTest(rules, { ...line, owedCents: line.owedCents + 1 }, 790_000);
+    assert.equal(result.ceilingCents, 592_500);
+    assert.equal(result.wouldOweCents, 592_501);
+    assert.equal(result.allowed, false);
+  });
+
   test('no market value means the test cannot run, and says so', () => {
     const loan = pawn();
     const result = extensionTest(rules, book.lineFor(store.loan(loan.id)!), null);

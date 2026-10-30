@@ -16,6 +16,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Store } from '../store/index.ts';
 import type { Rules } from '../playbook/index.ts';
+import { priceCutoffs } from './refresh.ts';
 
 export interface AdjustmentKey {
   categorySlug: string;
@@ -89,7 +90,9 @@ export class PriceMemory {
     // Recompute from the saved description so corrections written before the
     // stricter key still work, without editing or promoting their old records.
     const wanted = fingerprint(key);
-    const row = rows.find((entry) => fingerprint({ categorySlug: String(entry['category_slug']),
+    const cutoff = priceCutoffs(this.#store, wanted).adjustments;
+    const row = rows.find((entry) => Number((this.#store.db.prepare('SELECT rowid AS n FROM price_adjustments WHERE id = ?').get(String(entry['id'])) as { n: number }).n) > cutoff &&
+      fingerprint({ categorySlug: String(entry['category_slug']),
       variant: entry['variant'] as string | null, description: String(entry['description']) }) === wanted);
 
     return row ? toRemembered(row) : null;
@@ -164,7 +167,10 @@ export class PriceMemory {
       this.#store.db
         .prepare('SELECT * FROM price_adjustments WHERE expires_at > ? ORDER BY created_at DESC')
         .all(this.#now().toISOString()) as Record<string, unknown>[]
-    ).map(toRemembered);
+    ).map(toRemembered).filter((entry) => this.recall({
+      categorySlug: entry.fingerprint.split('|')[0]!, variant: entry.fingerprint.split('|')[1] || null,
+      description: entry.description,
+    })?.id === entry.id);
   }
 }
 
