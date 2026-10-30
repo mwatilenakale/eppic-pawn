@@ -34,6 +34,38 @@ Rules for keeping it:
 
 Newest first. Each entry: what, who found it, what shape it was.
 
+### 2026-10-30 · Codex · a signed agreement with nothing drawn on it
+Website audit, finding B. The posted signature was checked for format only —
+data URL, under a megabyte, PNG magic number — so a fully transparent PNG
+created the loan and posted principal and interest. Reachable without any
+crafted request: the pad's resize handler assigns `canvas.width`, which clears
+the canvas, and left the signed flag true, so rotating a phone after signing
+submitted a blank image. The comment directly above that code said "nothing is
+submitted until something is actually drawn in the pad". I wrote the pad, the
+validator and that comment. *Shape: the declared-but-unreached family at its
+purest — the guarantee is written down one line above the code that does not
+provide it. Found by driving the real page in a browser, not by reasoning about
+it.*
+
+### 2026-10-30 · Claude · a finding whose severity was understated
+Same audit, finding E. Codex filed "a correction resets the eight screening
+answers" as medium/high **conversion**. The conversion half is real, but
+re-submitting *records* those reset answers, so the shop is told the customer
+was unsure about Activation Lock and MDM when they had answered yes to
+everything. That is wrong data in the precheck table, not a funnel problem.
+*Shape: correct observation, wrong category — and the category is what decides
+whether it gets fixed this week. Worth asking of any UX finding: does it also
+change what gets stored?*
+
+### 2026-10-30 · Codex · a limitation found before it became a promise
+Workflow proposal. Rather than design the staff group chat Lukas asked about,
+it checked Twilio's documentation and reported that the integration cannot join
+an ordinary WhatsApp group, with the two links. Then recommended the
+arrangement that is actually available. *Shape: verifying that a requested
+thing is possible before specifying it — the opposite failure to the one where
+an agent builds a confident implementation of something the provider does not
+support.*
+
 ### 2026-10-29 · Codex · three attack surfaces I was not thinking about
 Twilio adapter, which no spec of mine asked for. It refused to fetch the
 webhook's own `MediaUrl0` (the obvious implementation is an SSRF hole), fetched
