@@ -26,7 +26,7 @@ the playbook, the playbook is right and the disagreement is worth reporting.
 
 ## Who should do which job
 
-`../working-with-codex.md` records where Codex has been measurably stronger
+`../working-with-agents.md` records where each agent has been measurably stronger
 than Claude — auditing for rules that are parsed and never applied,
 adversarial input, scope discipline. Read it before writing a spec, and send
 that kind of work there deliberately rather than by whatever is next on the
@@ -72,12 +72,13 @@ What you must not change without asking, ever:
 
 | Task | Status |
 |---|---|
-| [001 — inspection worksheet page](001-inspection-worksheet.md) | CLAIMED — Codex |
-| [002 — the second approval gate](002-second-gate.md) | BLOCKED on 001 |
-| [003 — WhatsApp handover](003-whatsapp-handover.md) | DONE |
-| [004 — 24-hour message templates](004-message-templates.md) | OPEN |
-| [005 — extending a loan by a month](005-extend-a-loan.md) | DONE |
-| [006 — taking the money back](006-repayment.md) | DONE |
-| [007 — twenty scenarios, both channels](007-twenty-scenarios.md) | DONE — 20/20 |
-| [008 — the collections scheduler](008-collections-scheduler.md) | Claude's, after 004 |
-| [009 — audit the website, report only](009-website-audit.md) | OPEN — for Codex |
+| [001 — inspection worksheet page](001-inspection-worksheet.md) | DONE — Codex |
+| [002 — the second approval gate](002-second-gate.md) | DONE — Claude |
+| [003 — WhatsApp handover](003-whatsapp-handover.md) | DONE — Claude |
+| [004 — 24-hour message templates](004-message-templates.md) | DONE — Codex |
+| [005 — extending a loan by a month](005-extend-a-loan.md) | DONE — Claude |
+| [006 — taking the money back](006-repayment.md) | DONE — Claude |
+| [007 — twenty scenarios, both channels](007-twenty-scenarios.md) | DONE — Codex, 20/20 |
+| [008 — the collections scheduler](008-collections-scheduler.md) | OPEN — Claude's, needs a host |
+| [009 — audit the website, report only](009-website-audit.md) | DONE — Codex, 12 findings |
+| [010 — the website on a cheap phone in the sun](010-website-accessibility.md) | **OPEN — for Kimi Code** |

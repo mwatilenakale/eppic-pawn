@@ -50,7 +50,7 @@ describe('schema & migrations', () => {
   });
 
   test('only the two real roles exist', () => {
-    store.ensureUser({ name: 'Lukas', phone: '+264812823046', role: 'owner' });
+    store.ensureUser({ name: 'Lukas', phone: '+264815550100', role: 'owner' });
     store.ensureUser({ name: 'Inspector', phone: '+264810000002', role: 'inspector' });
     assert.equal(store.owner()?.name, 'Lukas');
     assert.throws(() =>
@@ -174,7 +174,7 @@ describe('ledger', () => {
 describe('approvals', () => {
   test('an approval starts pending and records who decided it', () => {
     const { item } = loanFixture();
-    const lukas = store.ensureUser({ name: 'Lukas', phone: '+264812823046', role: 'owner' });
+    const lukas = store.ensureUser({ name: 'Lukas', phone: '+264815550100', role: 'owner' });
     const approval = store.createApproval({ itemId: item.id, suggestedLoanCents: 375_000 });
     assert.equal(approval.status, 'pending');
     assert.equal(store.pendingApprovals().length, 1);
@@ -194,7 +194,7 @@ describe('approvals', () => {
 
   test('a decision cannot be made twice', () => {
     const { item } = loanFixture();
-    const lukas = store.ensureUser({ name: 'Lukas', phone: '+264812823046', role: 'owner' });
+    const lukas = store.ensureUser({ name: 'Lukas', phone: '+264815550100', role: 'owner' });
     const approval = store.createApproval({ itemId: item.id, suggestedLoanCents: 375_000 });
     store.decideApproval({ approvalId: approval.id, status: 'declined', decidedBy: lukas.id });
     assert.throws(

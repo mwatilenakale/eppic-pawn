@@ -1,8 +1,12 @@
 # AGENTS.md — read before writing any code here
 
-This file is for coding agents working on this repository (Codex and
-others). Claude Code reads `CLAUDE.md`, which says the same things in
-more detail; this is the short version that matters.
+This file is for every coding agent working on this repository — Codex,
+Kimi Code, and whatever comes next. Claude Code reads `CLAUDE.md`, which
+says the same things in more detail; this is the short version that
+matters, and it is the one shared contract between all of us.
+
+If your tool reads `AGENTS.md`, you have everything you need from here.
+Nothing in this repository is addressed to one agent in particular.
 
 Work is coordinated through git. Branch, commit, push, and say what you
 did — do not expect another agent to be watching your working tree.
@@ -116,7 +120,20 @@ Specs live in `docs/tasks/`. Read `docs/tasks/README.md` first — it says how
 to claim one so two agents do not start the same thing.
 
 Claude writes the specs and reviews what comes back. Build on a branch named
-`codex/<short-description>`, push it, and say what you did; do not merge.
+`<your-agent-name>/<short-description>` — `codex/...`, `kimi/...` — push it,
+and say what you did. **Do not merge, and do not push to `main` or to any
+`claude/...` branch.** One branch per task keeps three agents out of each
+other's way, and the branch name is how a reviewer knows who to ask.
+
+A task spec names the files you may change. That list is the scope: if the
+work seems to need a file outside it, stop and say so in the handoff rather
+than widening it yourself. This has paid for itself repeatedly — twice the
+question revealed a mistake in the spec rather than a gap in the task.
+
+Some tasks are **report only**, and say so at the top. On those, write what
+you found with evidence and change no source at all. It is not a lack of
+trust: a fix arriving with a finding means the reviewer reads a diff instead
+of reading the problem, and the finding is usually worth more.
 
 ## Before you build any of it
 

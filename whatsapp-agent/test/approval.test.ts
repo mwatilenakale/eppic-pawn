@@ -28,7 +28,7 @@ beforeEach(() => {
   });
   agent = new IntakeAgent(store, rules);
   approvals = new ApprovalWorkflow(store, rules);
-  lukas = store.ensureUser({ name: 'Lukas', phone: '+264812823046', role: 'owner' });
+  lukas = store.ensureUser({ name: 'Lukas', phone: '+264815550100', role: 'owner' });
 });
 
 afterEach(() => store.close());

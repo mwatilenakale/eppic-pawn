@@ -45,10 +45,10 @@ const textPayload = (from: string, body: string, id = 'wamid.1') => ({
 describe('phone numbers', () => {
   test('normalises the forms Meta and Namibians use', () => {
     assert.equal(normalizePhone('264811234567'), '+264811234567');
-    assert.equal(normalizePhone('081 282 3046'), '+264812823046');
-    assert.equal(normalizePhone('+264 81 282 3046'), '+264812823046');
-    assert.equal(normalizePhone('00264812823046'), '+264812823046');
-    assert.ok(samePhone('081 282 3046', '264812823046'));
+    assert.equal(normalizePhone('081 555 0100'), '+264815550100');
+    assert.equal(normalizePhone('+264 81 555 0100'), '+264815550100');
+    assert.equal(normalizePhone('00264815550100'), '+264815550100');
+    assert.ok(samePhone('081 555 0100', '264815550100'));
   });
 });
 

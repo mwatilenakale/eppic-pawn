@@ -105,7 +105,7 @@ let lukas: string;
 beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), 'eppic-import-'));
   store = new Store(':memory:', { mediaDirectory: join(directory, 'media'), mediaKey: Buffer.from(generateMediaKey(), 'hex') });
-  lukas = store.ensureUser({ name: 'Lukas', phone: '+264812823046', role: 'owner' }).id;
+  lukas = store.ensureUser({ name: 'Lukas', phone: '+264815550100', role: 'owner' }).id;
 });
 
 afterEach(() => {

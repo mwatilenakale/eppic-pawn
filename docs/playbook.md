@@ -14,7 +14,7 @@ Change the words here and every customer-facing message changes with them.
 
 The number above is the shop's — the one registered with Meta, printed on the
 flyer and the contract, and the one customers message. Lukas's own phone
-(081-282-3046) is separate: approvals arrive there and he replies from it. A
+(081-555-0100) is separate: approvals arrive there and he replies from it. A
 number registered on the WhatsApp Cloud API cannot also run the normal
 WhatsApp app, so these can never be the same number.
 

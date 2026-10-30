@@ -87,7 +87,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       appSecret: metaRequired('WHATSAPP_APP_SECRET', 'Meta app secret — used to verify that webhooks really come from Meta.'),
       verifyToken: metaRequired('WHATSAPP_VERIFY_TOKEN', 'Any string you choose; paste the same one into the Meta webhook setup.'),
     },
-    ownerPhone: normalizePhone(required('OWNER_PHONE', "Lukas's WhatsApp number, e.g. 081 282 3046.")),
+    ownerPhone: normalizePhone(required('OWNER_PHONE', "Lukas's WhatsApp number, e.g. 081 555 0100.")),
     ownerName: env['OWNER_NAME'] ?? 'Lukas',
     publicBaseUrl,
     dbPath: resolve(env['EPPIC_DB_PATH'] ?? 'data/eppic.db'),

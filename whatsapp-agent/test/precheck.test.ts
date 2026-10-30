@@ -69,9 +69,9 @@ describe('a clean pre-check', () => {
 
     assert.match(outcome.whatsappText, /Dell XPS 13/);
     // wa.me only accepts a full international number, so the playbook's local
-    // form has to be normalised — 0812823046 would open a chat with nobody.
-    assert.match(whatsappLink('081-282-3046', outcome.whatsappText), /^https:\/\/wa\.me\/264812823046\?text=/);
-    assert.equal(whatsappLink('+264 81 282 3046', 'hi'), whatsappLink('081-282-3046', 'hi'));
+    // form has to be normalised — 0815550100 would open a chat with nobody.
+    assert.match(whatsappLink('081-555-0100', outcome.whatsappText), /^https:\/\/wa\.me\/264815550100\?text=/);
+    assert.equal(whatsappLink('+264 81 555 0100', 'hi'), whatsappLink('081-555-0100', 'hi'));
   });
 });
 

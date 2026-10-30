@@ -24,7 +24,7 @@ export function normalizePhone(input: string, defaultCountryCode = '264'): strin
   const digits = input.replace(/[^\d+]/g, '');
   if (digits.startsWith('+')) return digits;
   if (digits.startsWith('00')) return `+${digits.slice(2)}`;
-  // Namibian local form: 081 282 3046 -> +264 81 282 3046
+  // Namibian local form: 081 555 0100 -> +264 81 555 0100
   if (digits.startsWith('0')) return `+${defaultCountryCode}${digits.slice(1)}`;
   return `+${digits}`;
 }

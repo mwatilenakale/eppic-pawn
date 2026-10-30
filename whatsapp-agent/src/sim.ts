@@ -23,7 +23,7 @@ import { CustomerDirectory } from './customers/directory.ts';
 import type { InboundEvent } from './whatsapp/webhook.ts';
 
 const CUSTOMER = '+264811234567';
-const OWNER = '+264812823046';
+const OWNER = '+264815550100';
 
 const HELP = `
 Commands:

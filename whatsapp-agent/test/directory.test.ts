@@ -20,7 +20,7 @@ beforeEach(() => {
     clock: () => new Date(Date.UTC(2026, 0, 15, 9, 0, tick++)),
   });
   directory = new CustomerDirectory(store);
-  lukas = store.ensureUser({ name: 'Lukas', phone: '+264812823046', role: 'owner' });
+  lukas = store.ensureUser({ name: 'Lukas', phone: '+264815550100', role: 'owner' });
 });
 
 afterEach(() => store.close());

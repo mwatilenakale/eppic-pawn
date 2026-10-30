@@ -23,7 +23,7 @@ beforeEach(() => {
     clock: () => new Date('2026-01-15T09:00:00Z'),
   });
   contracts = new ContractService(store, rules, { baseUrl: BASE_URL, clock: () => new Date('2026-01-15T09:00:00Z') });
-  lukas = store.ensureUser({ name: 'Lukas', phone: '+264812823046', role: 'owner' });
+  lukas = store.ensureUser({ name: 'Lukas', phone: '+264815550100', role: 'owner' });
 });
 
 afterEach(() => store.close());

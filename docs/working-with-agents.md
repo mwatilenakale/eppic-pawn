@@ -1,7 +1,9 @@
-# Working with Codex — what it is better at than me
+# Working with the other agents — what each is better at than me
 
 Kept by Claude, honestly, because Lukas asked whether I was tracking this and
-the answer was no. I had been assigning work by what was next on the list
+the answer was no. Renamed from `working-with-codex.md` on 30 October 2026,
+when Kimi Code was given access: the file is about *routing work between
+agents*, and that was never going to stay a two-party question. I had been assigning work by what was next on the list
 rather than by who is better at it, and the evidence had been sitting in the
 git history for four days.
 
@@ -10,7 +12,7 @@ happened, not an assessment of a tool.
 
 **This becomes a skill.** Lukas wants a reusable skill at the end of the
 project — "who's better at what in a collaborative coding effort between
-Claude Code and Codex" — so that the next project starts with this knowledge
+Claude Code and the others" — so that the next project starts with this knowledge
 instead of rediscovering it over four days. So this file is kept in a shape
 that converts mechanically: an evidence log that accretes, a pattern taxonomy
 drawn from it, and a routing table. The log is the part that matters; the
@@ -321,7 +323,7 @@ parsed fields and I have not checked them all.
 The skill should carry the routing table, the two pattern families, and the
 rules for keeping an evidence log — not this project's anecdotes. Draft shape:
 
-- **Name:** collaborative coding between Claude Code and Codex
+- **Name:** collaborative coding between Claude Code and other agents
 - **When it triggers:** two or more coding agents on one repository, or a
   question about which should do a piece of work
 - **What it asserts:** the routing table below, with the reasoning for each

@@ -16,7 +16,7 @@ being blunt about.
 | | Number | What it does |
 |---|---|---|
 | **The shop** | **081-813-1462** | Registered with Meta, runs on the Cloud API. Customers message it. Printed on the flyer, the website and the contract. |
-| **Lukas** | **081-282-3046** | Stays an ordinary WhatsApp account on his own phone. Approval requests arrive here; he replies `APPROVE`, `DECLINE`, `BOOK`, `DUE`. |
+| **Lukas** | **081-555-0100** | Stays an ordinary WhatsApp account on his own phone. Approval requests arrive here; he replies `APPROVE`, `DECLINE`, `BOOK`, `DUE`. |
 
 They cannot be the same number. A number registered on the WhatsApp Cloud API
 can no longer use the normal WhatsApp app, and the agent cannot send a message
@@ -42,7 +42,7 @@ risk, not a technical one.
 
 ### Telling existing customers
 
-Anyone who knows **081-282-3046** will keep messaging it, and it will no longer
+Anyone who knows **081-555-0100** will keep messaging it, and it will no longer
 be the number the agent answers on. Send a broadcast from that phone before
 switching over.
 
@@ -103,7 +103,7 @@ Business Settings → Users → **System Users** → Add (`eppic-agent`, Admin)
 Also set:
 
 ```
-OWNER_PHONE=081 282 3046
+OWNER_PHONE=081 555 0100
 EPPIC_MEDIA_KEY=<openssl rand -hex 32>
 ```
 

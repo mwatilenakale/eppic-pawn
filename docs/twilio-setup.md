@@ -167,7 +167,7 @@ TWILIO_ACCOUNT_SID=AC...                      from 1.1
 TWILIO_AUTH_TOKEN=...                         from 1.1
 TWILIO_WHATSAPP_FROM=whatsapp:+14155238886    the sandbox number, with the whatsapp: prefix
 PUBLIC_BASE_URL=https://....trycloudflare.com the tunnel address from 1.4, no trailing slash
-OWNER_PHONE=081 282 3046                      your own WhatsApp
+OWNER_PHONE=081 555 0100                      your own WhatsApp
 OWNER_NAME=Lukas
 EPPIC_MEDIA_KEY=                              see below
 ```

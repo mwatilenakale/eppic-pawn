@@ -239,10 +239,10 @@ function shorten(ask: string): string {
 }
 
 /**
- * `https://wa.me/264812823046?text=...`
+ * `https://wa.me/264815550100?text=...`
  *
  * wa.me only accepts a full international number. The playbook writes the local
- * Namibian form (081-282-3046), so it is normalised first — a link built from
+ * Namibian form (081-555-0100), so it is normalised first — a link built from
  * the local digits opens a chat with nobody.
  */
 export function whatsappLink(businessNumber: string, text: string): string {

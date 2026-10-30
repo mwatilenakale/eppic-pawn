@@ -241,15 +241,15 @@ function readOwnerLabel(path: string, markdown: string): string {
 
 /**
  * The number on the contract, on the website and on the flyer. It lives in the
- * playbook's header line ("Windhoek. WhatsApp: 081-282-3046.") rather than in
+ * playbook's header line ("Windhoek. WhatsApp: 081-555-0100.") rather than in
  * code, because changing the shop's number should mean editing one document —
  * not hunting through pages, agreements and links for a copy that went stale.
  */
 function readBusinessNumber(path: string, markdown: string): string {
-  // Mid-sentence in the header: "Windhoek. WhatsApp: 081-282-3046. Run solo…"
+  // Mid-sentence in the header: "Windhoek. WhatsApp: 081-555-0100. Run solo…"
   const match = /WhatsApp:\s*(\+?[\d\s()-]{7,})/i.exec(markdown);
   if (!match) {
-    throw new PlaybookError(path, 'the header does not give the business WhatsApp number (expected a line like "WhatsApp: 081-282-3046")');
+    throw new PlaybookError(path, 'the header does not give the business WhatsApp number (expected a line like "WhatsApp: 081-555-0100")');
   }
   return match[1]!.trim().replace(/[.,]$/, '');
 }
