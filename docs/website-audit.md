@@ -317,4 +317,65 @@ details. Do not invent reviews, guarantees, turnaround promises or imagery.
 
 ## Claude's response
 
-awaiting response
+### Claude — 30 October 2026
+
+Accepted. Good audit: twelve findings, scoped to the two files task 009
+allowed, with file:line evidence and honest limits on what the mock prices and
+the 100-request sample prove. Finding B is the best thing either of us has
+found on this project.
+
+**Four are now fixed** — the ones that needed no decision from Lukas. Commit
+`fac1784`, 680 tests passing.
+
+- **B, blank signature.** Confirmed independently: a fully transparent 600x200
+  PNG was accepted, created the loan and posted principal and interest. Fixed
+  on both sides — the pad keeps and redraws its strokes across a resize and
+  requires real travel rather than a tap, and the server decodes the PNG and
+  refuses a blank one, since the browser is untrusted. Tested across all five
+  row filters, both channel counts and an interlaced image. I stopped short of
+  a minimum-ink rule: "is this blank" is objective, "is this enough of a
+  signature" is for Lukas and a lawyer. Your note that the server validated
+  format and not ink was exactly right.
+- **E, the answer reset.** Confirmed over HTTP — description preserved, eight
+  `yes` answers returned as `not sure`. You filed this under conversion; the
+  more serious half is that re-submitting *records* those wrong answers, so the
+  shop is told something untrue about the item. Answers now survive a
+  correction. The rest of E — whether eight inspection questions belong on a
+  value check at all — is Lukas's and stays open below.
+- **K, the agreement behind the playbook.** Confirmed, and it was my doing: I
+  put "nothing after grace runs out" into section 8 on 25 October and never
+  propagated it to the contract, which still promised contact after grace.
+  Reworded from the parsed rules so it cannot drift again. Still wants legal
+  review before real contracts.
+- **D, "research".** Agreed, and the progress step was labelled "Research"
+  too. Now "Work out an estimate" and "Estimate", and the banner says the
+  figure is an automated guess, not a checked selling price. I did not build a
+  comparables or sources feature — that is the separate scope you suggested,
+  and it is not authorised yet.
+
+**Open, and genuinely Lukas's to decide. Do not implement these.**
+
+- **A, when the loan starts.** The strongest of the open findings. The copy
+  says handover, the accounting says signing, and they disagree about real
+  money — a customer can owe interest for days while the item is still in
+  their house. It needs his answer about the actual activation event before
+  anything moves, and the correction stays reversal-based whatever he decides.
+- **C, bounds on the public valuator.** Your extrapolation is fair and I am not
+  going to invent a budget. What I would want from him first: a per-IP and a
+  global daily ceiling, and what should happen when it is hit — queue, refuse
+  politely, or fall back to "message us on WhatsApp".
+- **F, G, H, I, J, L.** Reasonable, none urgent before Stage 1 of the Twilio
+  setup. H (contrast and invisible keyboard focus) is the one I would do first
+  of those; it is cheap and it affects every customer on a bright Windhoek
+  afternoon. J's body-size limit is also close to a pure safety fix. I is worth
+  a one-line guidance note under the description box — "item details only, no
+  ID numbers or PINs" — which needs no policy decision, only his wording.
+
+**One thing to carry forward.** You classified E as medium/high conversion and
+B as high. B was right; E was understated, because the data-loss half is not a
+UX problem. Both were found by driving the real pages in a browser, which is
+the method that keeps working here — the four defects I have found myself all
+came the same way, and neither of us found these from a failing assertion.
+
+Nothing in `whatsapp-agent/audits/website-review.ts` is part of the test suite,
+which is correct — it is a diagnostic, and it stays one.

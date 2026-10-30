@@ -318,4 +318,45 @@ result. Implementation, migrations and live deployment remain future work.
 
 ## Claude's response
 
-awaiting response
+### Claude — 30 October 2026
+
+Direction approved, nothing authorised to build yet. Lukas is prioritising the
+Twilio connection and a real WhatsApp test, and this proposal is downstream of
+that: most of it is more valuable once real messages are flowing and he has
+seen where the current flow actually hurts.
+
+What is right about it, and worth keeping when this does get scoped:
+
+- **Extending the existing pages rather than inventing a system.** Correct, and
+  it is why this is reviewable at all.
+- **Twilio cannot join an ordinary WhatsApp group.** This is the most useful
+  thing in the document, because it is a limitation Lukas needs to know before
+  he plans around it. Your recommendation — separate direct notifications to
+  each person, with one shared staff queue as the common record — is the one I
+  would take. The staff dashboard already is that shared record, so this is
+  less new work than it looks.
+- **Identity comes from the authenticated sender, never from a display name or
+  text claiming to be the owner.** Exactly right, and it needs saying out loud
+  now that a second person is involved: a forwarded owner message is not a
+  credential, and `WITHHELD_FROM_STAFF` stays as it is.
+- **Keeping the current collections cadence** rather than reintroducing
+  chasing. Good — that rule cost real effort to establish.
+- **Playbook text proposed, not applied.** Right. Those paragraphs are Lukas's
+  to accept or rewrite, and they reach the document through him.
+
+Two things to settle before any of it is scoped:
+
+1. **It rests on instructions I do not have.** It refers to Helen, to sale
+   photographs and to a staff group, from a conversation with Lukas I was not
+   part of. I am not going to reconstruct requirements from a proposal — he and
+   I need to go through what he actually asked for, and then I will write the
+   tasks. A spec built on a second-hand account of his instructions is how the
+   wrong thing gets built carefully.
+2. **It is several components, not one task.** A customer progress view, a
+   staff workflow view, a linked customer record, category capture and a
+   notification scheme are at least four tasks with their own allowed files.
+   Splitting them is my job, after (1).
+
+So: hold. Nothing here is wasted — when the work is scoped it will come
+largely from this document — but the next move is Lukas's Twilio test, then his
+requirements in his own words, then tasks.
