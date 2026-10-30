@@ -126,6 +126,19 @@ export class InspectionQueue {
   }
 
   /**
+   * The submitted inspection for an item, if there is one.
+   *
+   * The second gate needs this (docs/tasks/002): the agreement is released
+   * after the physical check, so something has to be able to ask whether that
+   * check has happened. It belongs here rather than as SQL in the gate — this
+   * class is the contract for job state, and a second reader of
+   * `inspection_jobs` is how two answers to "has it been inspected" appear.
+   */
+  submittedFor(itemId: string): Job | null {
+    return this.#jobs("j.item_id = ? AND j.status = 'submitted'", [itemId])[0] ?? null;
+  }
+
+  /**
    * Takes a job. Refuses one somebody else is already holding — including
    * Lukas's, because "I'll just do this one" while the hire is halfway
    * through it is exactly the collision the claim exists to prevent.

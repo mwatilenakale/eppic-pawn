@@ -19,6 +19,8 @@ import { AgentRouter } from '../src/router.ts';
 import { MemoryTransport } from '../src/whatsapp/transport.ts';
 import { DashboardQuery } from '../src/dashboard/index.ts';
 import { outstandingFor } from '../src/requirements.ts';
+import { InspectionQueue } from '../src/inspection/queue.ts';
+import { referenceFor } from '../src/reference.ts';
 
 const rules = loadRules();
 const OWNER = '+264811110000';
@@ -70,6 +72,40 @@ async function intakeWithoutTheDeclaration(): Promise<void> {
 
 const itemId = () => (store.db.prepare('SELECT id FROM items LIMIT 1').get() as { id: string }).id;
 
+/**
+ * Approved, item in, inspected — the state the second gate decides from.
+ *
+ * These tests used to stop at `APPROVE`, because approval was the last gate
+ * and waiving happened there. Lukas moved the agreement to the end of the
+ * process on 30 October: approving in principle now happens before the item
+ * is even in the shop, so a document still outstanding at that point is not
+ * something he has decided about, it is something that has not happened
+ * yet. A gap is only his call once the item has been seen — so that is
+ * where the waiver is recorded, and where these tests now look.
+ */
+async function readyForTheGate(): Promise<string> {
+  await intakeWithoutTheDeclaration();
+  await say(OWNER, 'APPROVE');
+
+  const approval = store.db
+    .prepare("SELECT id FROM approvals WHERE status = 'approved' ORDER BY decided_at DESC LIMIT 1")
+    .get() as { id: string };
+  const reference = referenceFor(approval.id);
+
+  await say(OWNER, `RECEIVED ${reference}`);
+  const hire = store.ensureUser({ name: 'Petrus Haufiku', phone: '+264811112222', role: 'inspector' });
+  const queue = new InspectionQueue(store, rules);
+  const job = queue.waiting()[0]!;
+  queue.claim(job.id, hire);
+  queue.submit({
+    jobId: job.id,
+    user: hire,
+    results: queue.worksheet(job.id).map((line) => ({ checkId: line.checkId, text: line.text, answer: 'pass' as const, note: '' })),
+    findings: 'Checked, all good.',
+  });
+  return reference;
+}
+
 describe('the customer end never moves', () => {
   test('the document is still asked for, and said to be needed', async () => {
     await intakeWithoutTheDeclaration();
@@ -113,9 +149,9 @@ describe('his end', () => {
     );
   });
 
-  test('approving records what he approved around, with his name on it', async () => {
-    await intakeWithoutTheDeclaration();
-    await say(OWNER, 'APPROVE');
+  test('releasing records what he went ahead without, with his name on it', async () => {
+    const reference = await readyForTheGate();
+    await say(OWNER, `RELEASE ${reference}`);
 
     const waivers = store.waivers(itemId());
     assert.deepEqual(
@@ -128,13 +164,28 @@ describe('his end', () => {
   });
 
   test('and he is told plainly what he just did', async () => {
+    const reference = await readyForTheGate();
+    await say(OWNER, `RELEASE ${reference}`);
+
+    const confirmation = transport.to(OWNER).join('\n');
+    assert.match(confirmation, /And without/i);
+    assert.match(confirmation, /police declaration/i);
+    assert.match(confirmation, /your call/i);
+  });
+
+  test('approving in principle claims no decision about what is outstanding', async () => {
+    // The old behaviour produced a sixteen-line "you approved this without"
+    // list at approval time, naming every photo and fraud check as something
+    // he had decided to go without — before the item was in the shop. A
+    // warning that long is one nobody reads, and it was not true.
     await intakeWithoutTheDeclaration();
     await say(OWNER, 'APPROVE');
 
+    assert.deepEqual(store.waivers(itemId()), [], 'nothing is waived at the first gate');
     const confirmation = transport.to(OWNER).at(-1)!;
-    assert.match(confirmation, /You approved this without/);
-    assert.match(confirmation, /police declaration/i);
-    assert.match(confirmation, /customer is still being asked/i);
+    assert.doesNotMatch(confirmation, /approved this without/i);
+    assert.match(confirmation, /still outstanding/i, 'counted, as the normal state of an application');
+    assert.match(confirmation, /before you release/i);
   });
 
   test('a complete file produces no waiver and no note', async () => {
@@ -173,13 +224,11 @@ describe('his end', () => {
 
 describe('the dashboard stops chasing it', () => {
   test('a waived document moves them to ready for the office', async () => {
-    await intakeWithoutTheDeclaration();
-
     const before = dash.read();
-    assert.equal(before.awaitingDecision.length, 1);
-    assert.deepEqual(before.awaitingDecision[0]!.missingDocuments.sort(), ['police declaration', 'proof of ownership']);
+    assert.equal(before.awaitingDecision.length, 0, 'nothing is pending before the intake runs');
 
-    await say(OWNER, 'APPROVE');
+    const reference = await readyForTheGate();
+    await say(OWNER, `RELEASE ${reference}`);
 
     const after = dash.read();
     assert.equal(after.missingDocuments.length, 0, 'he decided; it is not a chase any more');
@@ -187,8 +236,8 @@ describe('the dashboard stops chasing it', () => {
   });
 
   test('but it is shown, not hidden', async () => {
-    await intakeWithoutTheDeclaration();
-    await say(OWNER, 'APPROVE');
+    const reference = await readyForTheGate();
+    await say(OWNER, `RELEASE ${reference}`);
 
     const ready = dash.read().readyForTheOffice[0]!;
     assert.deepEqual(

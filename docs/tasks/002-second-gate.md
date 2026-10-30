@@ -1,13 +1,39 @@
 # 002 — The second approval gate
 
-**Status:** OPEN — unblocked 25 October 2026. Task 001 is merged, so the
-inspection it gates on now exists end to end: queue, worksheet, submitted
-report. `eppic_inspection_passed_v1` is also already defined in
-`src/whatsapp/templates.ts` from task 004 — use it only after the real
-inspection and owner checks pass, as that task's notes say.
+**Status:** DONE — Claude, 30 October 2026. Built after Lukas corrected the
+sequence twice in one day: first that nobody can sign before the item is
+received, then that the agreement itself belongs at the very end, after staff
+have checked the item.
 
-**Was blocked on:** the gate releases the contract after an inspection, so the
-inspection had to exist first.
+**What landed:** `APPROVE` tells the customer a figure and issues nothing.
+`RECEIVED <ref>` records the item as in the shop and opens the inspection —
+the spec put that at approval time, and receipt is the better trigger now that
+there is one, because a queue full of items that may never arrive is a queue
+nobody trusts. A submitted worksheet messages Lukas with the outcome, every
+failed check, and the inspector's findings. `RELEASE <ref>` issues the
+agreement and sends the link; `HOLD <ref> <reason>` tells the customer kindly.
+Staff can inspect and submit; they cannot release, and trying says so rather
+than printing the help text.
+
+**One thing the spec had wrong.** It said the agreement could be *drafted* at
+gate one so it was ready. Lukas's correction rules that out — "the customer
+cannot have access to the agreement" — and drafting early would have meant the
+document carried dates fixed before anyone saw the item. Nothing is drafted
+until release.
+
+**A change this forced elsewhere.** Approving used to record every outstanding
+requirement as *waived*, which made sense while `APPROVE` was the last gate.
+As the first gate it was wrong and it looked it: one approval produced a
+sixteen-line "you approved this without" list naming every photo and fraud
+check, before the item was in the shop. Those are not waived, they have not
+happened. The waiver moved to the release gate, where a gap really is him
+deciding to go ahead without something.
+
+**Still open, and not this task's:** the loan's dates are fixed when the
+contract is issued rather than when it is signed. Release now happens with the
+customer at the counter, so the gap is minutes rather than days — but it is
+not zero, and it is why no message claims the month starts at signing. See
+`docs/website-audit.md`, finding A.
 
 ## Why this exists
 

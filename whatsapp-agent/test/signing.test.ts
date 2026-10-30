@@ -10,6 +10,8 @@ import { blankDataUrl, pngDataUrl, signatureDataUrl } from './support/png-fixtur
 import { MemoryTransport } from '../src/whatsapp/transport.ts';
 import { buildServer } from '../src/server.ts';
 import { AgentRouter } from '../src/router.ts';
+import { InspectionQueue } from '../src/inspection/queue.ts';
+import { referenceFor } from '../src/reference.ts';
 
 const rules = loadRules();
 // Lukas's own phone. Deliberately not the shop's number in the playbook:
@@ -279,26 +281,131 @@ describe('the signing page over HTTP', () => {
   });
 });
 
-describe('approval sends the signing link', () => {
-  test('Lukas approving over WhatsApp puts a contract link in the customer’s hands', async () => {
+/**
+ * The agreement comes last.
+ *
+ * Lukas, 30 October 2026: "The customer cannot have access to the agreement,
+ * because the agreement is at the end of their process. If things are
+ * outstanding in between, they can't sign. They only sign when the item has
+ * been approved — our staff have checked the item, approved, and then only
+ * then they sign."
+ *
+ * This replaces a test that asserted the opposite: that APPROVE put a signing
+ * link in the customer's hands. It did, before anybody had seen the item,
+ * which is what the whole "subject to the in-person check" sentence was
+ * supposed to prevent (docs/tasks/002).
+ */
+describe('the second gate releases the agreement', () => {
+  const start = async () => {
     const transport = new MemoryTransport();
     const router = new AgentRouter({ store, rules, transport, ownerPhone: OWNER, contracts });
-
     const customer = store.upsertCustomer(CUSTOMER, 'Test Customer');
-    const item = store.createItem({ customerId: customer.id, categorySlug: 'phones', description: 'iPhone 13 Pro' });
+    const item = store.createItem({ customerId: customer.id, categorySlug: 'phones', variant: 'iphone', description: 'iPhone 13 Pro' });
     const approval = store.createApproval({ itemId: item.id, suggestedLoanCents: 375_000 });
+    await router.handle({ from: OWNER, messageId: 'wamid.a', type: 'text', text: 'approve' });
+    return { transport, router, item, approval, reference: referenceFor(approval.id) };
+  };
 
-    await router.handle({ from: OWNER, messageId: 'wamid.1', type: 'text', text: 'approve' });
+  test('approving tells the customer a figure and no more', async () => {
+    const { transport, approval } = await start();
+    const toCustomer = transport.to(CUSTOMER).join('\n');
+
+    assert.match(toCustomer, /we can offer N\$3,750\.00/, 'the figure still goes out');
+    assert.match(toCustomer, /subject to the in-person check/i);
+    assert.doesNotMatch(toCustomer, /https:\/\/eppic\.example\/c\//, 'but no signing link');
+    assert.equal(store.contractsForApproval(approval.id).length, 0, 'and no agreement exists yet');
+  });
+
+  test('release is refused before the item is here, and before it is inspected', async () => {
+    const { transport, router, item, approval, reference } = await start();
+
+    await router.handle({ from: OWNER, messageId: 'wamid.b', type: 'text', text: `RELEASE ${reference}` });
+    assert.match(transport.to(OWNER).at(-1)!, /not recorded as being here yet/i);
+
+    await router.handle({ from: OWNER, messageId: 'wamid.c', type: 'text', text: `RECEIVED ${reference}` });
+    await router.handle({ from: OWNER, messageId: 'wamid.d', type: 'text', text: `RELEASE ${reference}` });
+    assert.match(transport.to(OWNER).at(-1)!, /has not been inspected yet/i);
+
+    assert.equal(store.contractsForApproval(approval.id).length, 0, 'still nothing to sign');
+    assert.doesNotMatch(transport.to(CUSTOMER).join('\n'), /\/c\//);
+    assert.ok(item);
+  });
+
+  test('once inspected, release issues the agreement and sends the link', async () => {
+    const { transport, router, approval, reference } = await start();
+    await router.handle({ from: OWNER, messageId: 'wamid.e', type: 'text', text: `RECEIVED ${reference}` });
+
+    // The hire inspects it and submits the report.
+    const hire = store.ensureUser({ name: 'Petrus Haufiku', phone: '+264811112222', role: 'inspector' });
+    const queue = new InspectionQueue(store, rules);
+    const job = queue.waiting()[0]!;
+    queue.claim(job.id, hire);
+    queue.submit({
+      jobId: job.id,
+      user: hire,
+      results: queue.worksheet(job.id).map((line) => ({ checkId: line.checkId, text: line.text, answer: 'pass' as const, note: '' })),
+      findings: 'Everything checks out.',
+    });
+
+    await router.handle({ from: OWNER, messageId: 'wamid.f', type: 'text', text: `RELEASE ${reference}` });
 
     const toCustomer = transport.to(CUSTOMER).join('\n');
-    assert.match(toCustomer, /https:\/\/eppic\.example\/c\//, 'the signing link went out');
-    assert.match(toCustomer, /Police declaration/i, 'and what to bring');
-    assert.match(transport.to(OWNER).join('\n'), /Contract EPP-\d{4}-\d{4} is ready/);
-
+    assert.match(toCustomer, /https:\/\/eppic\.example\/c\//, 'now the link goes out');
     const [contract] = store.contractsForApproval(approval.id);
     assert.equal(contract?.status, 'pending');
     assert.equal(contract?.principal_cents, 375_000);
     assert.ok(toCustomer.includes(contracts.signingUrl(contract!.token)));
+  });
+
+  test('a failed check still reaches him, and he is told he released around it', async () => {
+    const { transport, router, reference } = await start();
+    await router.handle({ from: OWNER, messageId: 'wamid.g', type: 'text', text: `RECEIVED ${reference}` });
+
+    const hire = store.ensureUser({ name: 'Petrus Haufiku', phone: '+264811112222', role: 'inspector' });
+    const queue = new InspectionQueue(store, rules);
+    const job = queue.waiting()[0]!;
+    queue.claim(job.id, hire);
+    const lines = queue.worksheet(job.id);
+    queue.submit({
+      jobId: job.id,
+      user: hire,
+      results: lines.map((line, index) => ({ checkId: line.checkId, text: line.text, answer: index === 0 ? ('fail' as const) : ('pass' as const), note: '' })),
+      findings: 'One check failed.',
+    });
+
+    await router.handle({ from: OWNER, messageId: 'wamid.h', type: 'text', text: `RELEASE ${reference}` });
+    const told = transport.to(OWNER).join('\n');
+    // A failed check does not auto-decline; the point is that he cannot not
+    // be told (docs/tasks/002).
+    assert.match(told, /released this with 1 failed check/i);
+    assert.match(told, new RegExp(lines[0]!.text.slice(0, 20).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+  });
+
+  test('hold tells the customer and leaves no agreement behind', async () => {
+    const { transport, router, approval, reference } = await start();
+    await router.handle({ from: OWNER, messageId: 'wamid.i', type: 'text', text: `RECEIVED ${reference}` });
+
+    await router.handle({ from: OWNER, messageId: 'wamid.j', type: 'text', text: `HOLD ${reference} the back glass is cracked` });
+
+    assert.match(transport.to(OWNER).at(-1)!, /Held [A-Z0-9]{4}/);
+    const toCustomer = transport.to(CUSTOMER).join('\n');
+    assert.match(toCustomer, /not able to go ahead/i);
+    assert.match(toCustomer, /back glass is cracked/);
+    assert.doesNotMatch(toCustomer, /\/c\//, 'no link');
+    assert.equal(store.contractsForApproval(approval.id).length, 0);
+  });
+
+  test('the hire cannot release', async () => {
+    const { router, approval, reference } = await start();
+    const transport2 = new MemoryTransport();
+    const hireRouter = new AgentRouter({ store, rules, transport: transport2, ownerPhone: OWNER, contracts });
+    store.ensureUser({ name: 'Petrus Haufiku', phone: '+264811112222', role: 'inspector' });
+    await router.handle({ from: OWNER, messageId: 'wamid.k', type: 'text', text: `RECEIVED ${reference}` });
+
+    await hireRouter.handle({ from: '+264811112222', messageId: 'wamid.l', type: 'text', text: `RELEASE ${reference}` });
+
+    assert.match(transport2.to('+264811112222').at(-1)!, /not something this number can do/i);
+    assert.equal(store.contractsForApproval(approval.id).length, 0, 'no agreement was issued');
   });
 
   test('a declined application produces no contract at all', async () => {

@@ -142,7 +142,8 @@ export class ContractService {
       customerMessage: this.#customerMessage(document, signingUrl),
       ownerMessage:
         `Contract ${number} is ready for ${customer.name ?? customer.phone} — ${formatAmount(document.terms.principalCents)} at ${document.terms.ratePct}% over ${document.terms.termDays} days.\n` +
-        `They have been sent the signing link. The loan starts when they sign and hand the item over, not before.`,
+        'They have been sent the signing link. The item is already with you and the check is done, so the loan ' +
+        'starts the moment they sign.',
     };
   }
 
@@ -281,11 +282,18 @@ export class ContractService {
       `To repay: ${formatAmount(document.terms.totalDueCents)} by ${document.schedule.dueDate} (${document.terms.ratePct}% over ${document.terms.termDays} days)`,
       `Grace period: ${document.terms.graceDays} days, until ${document.schedule.graceEndsDate}`,
       '',
-      'Read and sign it here before you come in:',
+      // Not "before you come in" any more. The agreement is released after
+      // the physical check (playbook section 7), so by the time this arrives
+      // the customer is at the counter with the item already handed over.
+      'Read it and sign here:',
       signingUrl,
       '',
-      'Bring with you:',
-      ...document.requirements.map((requirement) => `• ${requirement}`),
+      // Deliberately not "your month starts when you sign". It should, and
+      // it nearly does now that release happens with the customer at the
+      // counter — but the dates are still fixed when the contract is issued,
+      // so on the rare release-tonight-sign-tomorrow it would be false.
+      // Reported in docs/website-audit.md, finding A, and not ours to decide.
+      'The dates and the amount to repay are on the agreement above.',
     ].join('\n');
   }
 }

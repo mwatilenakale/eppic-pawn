@@ -196,31 +196,38 @@ export class ApprovalWorkflow {
     });
     this.#store.updateItem(approval.item_id, { status: 'approved' });
 
-    // Playbook section 5, "Waiving a document". Approving with a document
-    // still outstanding is allowed — where he knows the person he may take a
-    // declaration on trust — and it is recorded as his decision on this item.
-    // Without this the dashboard chased him forever for a gap he had already
-    // decided about, and nothing said who had decided it.
-    const gaps = outstandingIds(this.#store, this.#rules, approval.item_id);
-    const waived = describeRequirements(this.#store, this.#rules, approval.item_id, gaps);
-    this.#store.waive({
-      itemId: approval.item_id,
-      approvalId: approval.id,
-      requirements: waived,
-      waivedBy: owner.id,
-    });
+    // No waiver here any more.
+    //
+    // This used to record every outstanding requirement as waived, on the
+    // reasoning that approving around a gap is his to do (playbook section 5)
+    // and the dashboard should stop chasing him for it. That was right while
+    // `APPROVE` was the last gate. It is wrong now that it is the first:
+    // approving in principle happens before the item is even in the shop, so
+    // of course the photos, the documents and the in-person checks are
+    // outstanding — they have not happened yet, and he has not decided
+    // anything about them.
+    //
+    // Driving the real flow showed what that looked like: one `approve`
+    // produced a sixteen-line "you approved this without" list, including the
+    // photo of the item and every fraud check. A warning that long is one
+    // nobody reads, and it claimed a decision he had not made.
+    //
+    // The waiver belongs at the second gate, where the item has been seen and
+    // a gap really is him deciding to go ahead without something. It is
+    // recorded there — see `ReleaseGate.run` (docs/tasks/002).
 
     const item = this.#store.item(approval.item_id)!;
     const customer = this.#store.db
       .prepare('SELECT phone FROM customers WHERE id = ?')
       .get(item.customer_id) as { phone: string };
 
-    // Said back to him plainly. Approving around a document is his to do, but
-    // it should never be something he did without noticing.
+    // What is still to come, counted rather than listed: at this gate it is
+    // the normal state of an application, not a warning.
+    const stillToCome = outstandingIds(this.#store, this.#rules, approval.item_id).length;
     const waivedNote =
-      waived.length > 0
-        ? `\n\n*You approved this without:*\n${waived.map((entry) => `  • ${entry.label}`).join('\n')}\n` +
-          'Recorded against the item as your call. The customer is still being asked for all of it.'
+      stillToCome > 0
+        ? `\n\n${stillToCome} thing${stillToCome === 1 ? '' : 's'} still outstanding — photos, documents and the ` +
+          'in-person checks. You see the full list at the inspection, before you release the agreement.'
         : '';
 
     return {
@@ -228,7 +235,8 @@ export class ApprovalWorkflow {
       ownerMessage:
         `Approved ${referenceFor(approval.id)} at ${formatAmount(amountCents)}.\n` +
         `Terms from the playbook: ${terms.ratePct}% over ${terms.termDays} days — ${formatAmount(terms.totalDueCents)} due, ${terms.graceDays}-day grace.\n` +
-        'The customer has been told. The loan itself starts at handover, once the in-person checks pass.' +
+        'The customer has been told, and told it is subject to the check. Nothing has been sent to sign: ' +
+        'they bring the item in, it gets checked, you *RELEASE* it, and then they sign.' +
         waivedNote,
       customerPhone: customer.phone,
       customerMessage:

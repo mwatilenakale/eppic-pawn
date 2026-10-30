@@ -67,7 +67,15 @@ export function recordReceipt(
   store: Store,
   command: ReceivedCommand,
   actor: User,
-  options: { signingUrlFor: (approvalId: string) => string | null; ownerLabel: string },
+  options: {
+    signingUrlFor: (approvalId: string) => string | null;
+    ownerLabel: string;
+    /**
+     * Called once, after the item is recorded as here. The inspection becomes
+     * real work at this moment and not before, so the queue opens from here.
+     */
+    onReceived?: (itemId: string, approvalId: string) => void;
+  },
 ): ReceivedResult {
   if (!can(actor, 'inspections.work')) {
     return { reply: 'Taking an item in is not something this number can record.' };
@@ -101,20 +109,24 @@ export function recordReceipt(
   }
 
   store.markItemReceived(approval.item_id, actor.id);
+  options.onReceived?.(approval.item_id, approval.id);
   const customer = store.customer(before.customer_id);
-  const link = options.signingUrlFor(approval.id);
 
   return {
     reply:
       `Recorded: ${command.reference} — ${before.description || 'the item'} is in the shop, taken in by ${actor.name}.\n\n` +
-      (link
-        ? 'The customer can sign now. Until this moment the agreement could not be signed, which is what keeps the loan from starting before the item arrived.'
-        : 'No agreement has been issued for it yet, so there is nothing to sign.'),
-    customerPhone: link ? customer?.phone : undefined,
-    customerMessage: link
+      'It is on the inspection list now. Once the check is in, reply *RELEASE ' +
+      `${command.reference}* and the agreement goes to the customer to sign.`,
+    customerPhone: customer?.phone,
+    customerMessage: customer
       ? `Thank you — we have your ${before.description || 'item'} here with us.\n\n` +
-        `You can read and sign your agreement now: ${link}\n\n` +
-        `Your dates and the amount to repay are on the agreement, and ${options.ownerLabel} will go through it with you before you sign.`
+        `We will check it over now. ${capitalise(options.ownerLabel)} will come back to you once that is done, and ` +
+        'your agreement to sign comes after that.'
       : undefined,
   };
+}
+
+/** "the manager" → "The manager", for the start of a sentence. */
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }

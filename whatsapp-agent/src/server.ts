@@ -134,7 +134,11 @@ async function handleRequest(
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
   const rules = getRules();
 
-  if (await inspectionRequest(request, response, url, store, rules, readBody, respondHtml)) return;
+  if (await inspectionRequest(request, response, url, store, rules, readBody, respondHtml, (jobId) => {
+    // Fire and forget: the inspector's page must not wait on WhatsApp, and a
+    // send that fails is logged by the router's own error path.
+    void router.inspectionSubmitted(jobId);
+  })) return;
 
   if (request.method === 'GET' && url.pathname === '/health') {
     return respond(response, 200, 'ok');

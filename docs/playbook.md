@@ -357,16 +357,28 @@ a customer to manage on a cheap Android) are inferred from section 2.3 and
 need his confirmation or his cuts. Nothing below the shop actually needs
 should stay in the list: every extra ask is a customer who gives up partway.
 
-### The item has to be here first
+### The agreement comes last
 
 Lukas, 30 October 2026: *"They can't sign until the item has been received, so
 when they sign, it is assumed that the item has been received by our staff and
-is in the possession of the pawn shop."*
+is in the possession of the pawn shop."* And, correcting it further the same
+day: *"The customer cannot have access to the agreement, because the agreement
+is at the end of their process. If things are outstanding in between, they
+can't sign. They only sign when the item has been approved — that means our
+staff have checked the item, approved, and then only then they sign."*
 
-So the order is fixed: **approved → item brought in and received → signed →
-loan starts.** Signing happens at the shop, with the item already in the
-shop's hands, and it is the moment the month begins and interest starts
-running.
+So the order is fixed, and there are two decisions in it, both his:
+
+1. **Approved in principle.** The customer is told a figure and that it is
+   subject to the check. No agreement exists and nothing can be signed.
+2. **The item is brought in and received.** Whoever is at the counter records
+   it. The inspection becomes real work at this moment.
+3. **Staff check the item.** The worksheet, in person, with the thing in hand.
+4. **Released.** He reads the report — the outcome, every failed check, what
+   they found, and anything still outstanding — and releases the agreement, or
+   holds it. Only now does an agreement exist and a signing link go out.
+5. **Signed**, at the shop, which is when the month begins and interest starts
+   running.
 
 This is the rule the rest of the arithmetic depends on. Signing is what creates
 the loan, posts the principal and the first month's interest, and starts the
@@ -380,10 +392,17 @@ interest on an item still in their own house.
 - **Recording receipt is not an approval.** Whoever is at the counter does it,
   Lukas or the hire. It moves no money and decides nothing; it records where
   an object is. What it unlocks is only the customer's ability to sign.
-- **The signing link is safe to send early.** It is sent with the approval, as
-  before. Opened before the item arrives, it says the agreement is ready and
-  can be signed at the shop — it does not let anyone sign, and it does not
-  look broken.
+- **No link is sent early, because no agreement exists early.** The first
+  approval sends a figure and nothing else. If a link from an earlier release
+  is opened before the item is recorded as here, it says so plainly rather
+  than letting anyone sign or looking broken.
+- **A gap is only his decision once the item has been seen.** Outstanding
+  photos and documents at the first gate are not waived — they have not
+  happened yet. At the release gate they are listed, and going ahead anyway is
+  recorded against the item as his call (section 5).
+- **A failed check does not refuse anything by itself.** It is put in front of
+  him and he decides. What the system guarantees is that he cannot not be
+  told.
 - **Nobody can start a loan by accident.** A customer cannot bring the clock
   forward, and neither can the shop.
 

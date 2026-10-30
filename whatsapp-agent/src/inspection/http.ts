@@ -8,6 +8,13 @@ import { inspectionQueuePage, inspectionWorksheetPage } from '../web/inspections
 /** Keep HTTP parsing separate from the queue contract; no direct job SQL. */
 export async function inspectionRequest(request: IncomingMessage, response: ServerResponse, url: URL, store: Store, rules: Rules,
   readBody: (request: IncomingMessage) => Promise<Buffer>, html: (response: ServerResponse, status: number, body: string) => void,
+  /**
+   * Called after a report is submitted. The second gate cannot work without
+   * it: Lukas has to be told a check is in, or nothing ever prompts him to
+   * release the agreement and the customer waits on a message that is never
+   * sent (docs/tasks/002).
+   */
+  onSubmitted?: (jobId: string) => void,
 ): Promise<boolean> {
   const match = /^\/staff\/([A-Za-z0-9_-]{20,64})\/inspections(?:\/(claim)|\/job\/([A-Za-z0-9-]+))?\/?$/.exec(url.pathname);
   if (!match) return false;
@@ -60,7 +67,10 @@ export async function inspectionRequest(request: IncomingMessage, response: Serv
         }
         draftLines = lines.map((line) => ({ ...line, answer: results.find((result) => result.checkId === line.checkId)?.answer ?? null, note: form.get(`note:${line.checkId}`) ?? '' }));
         draftFindings = form.get('findings') ?? '';
-        if (action === 'submit') queue.submit({ jobId: job.id, user, results, findings: draftFindings });
+        if (action === 'submit') {
+          queue.submit({ jobId: job.id, user, results, findings: draftFindings });
+          onSubmitted?.(job.id);
+        }
         else queue.record(job.id, user, results, draftFindings);
       }
       response.writeHead(303, { location: action === 'release' ? root : `${root}/job/${job.id}`, 'cache-control': 'no-store' }); response.end();

@@ -129,8 +129,17 @@ describe('issuing', () => {
     assert.match(issued.customerMessage, /contract EPP-2026-0001/);
     assert.match(issued.customerMessage, /N\$3,750\.00/);
     assert.match(issued.customerMessage, new RegExp(issued.signingUrl.replace(/[/.]/g, '\\$&')));
-    assert.match(issued.customerMessage, /Police declaration/i);
-    assert.match(issued.ownerMessage, /starts when they sign/i);
+
+    // No "bring with you" list and no "before you come in" any more. The
+    // agreement is released after the physical check (playbook section 7), so
+    // this message reaches somebody standing at the counter who has already
+    // handed the item over — telling them what to bring is nonsense by then.
+    // The documents are asked for during intake and again in the approval
+    // message, which is where the customer can still act on them.
+    assert.doesNotMatch(issued.customerMessage, /bring with you/i);
+    assert.doesNotMatch(issued.customerMessage, /before you come in/i);
+    assert.match(issued.customerMessage, /Read it and sign here/i);
+    assert.match(issued.ownerMessage, /item is already with you and the check is done/i);
   });
 
   test('numbers run in sequence within the year', () => {

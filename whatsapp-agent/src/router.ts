@@ -33,6 +33,9 @@ import {
 import { metaTimestampToIso, samePhone, type InboundEvent } from './whatsapp/webhook.ts';
 import { can } from './staff/access.ts';
 import { parseReceivedCommand, recordReceipt } from './intake/received.ts';
+import { InspectionQueue } from './inspection/queue.ts';
+import { referenceFor } from './reference.ts';
+import { ReleaseGate, parseReleaseCommand } from './approval/release.ts';
 import { WindowAwareTransport, type WhatsAppTransport, type OutboundMessage } from './whatsapp/transport.ts';
 import { Collections } from './book/collections.ts';
 import { QuoteService } from './valuator/quotes.ts';
@@ -84,6 +87,9 @@ export class AgentRouter {
   readonly #desk: HandoverDesk;
   /** What customers call whoever decides — "the manager", from the playbook. */
   readonly #ownerLabel: string;
+  /** The inspection queue and the second gate (docs/tasks/002). */
+  readonly #inspections: InspectionQueue;
+  readonly #release: ReleaseGate;
   readonly #forfeiture: Forfeiture;
   readonly #extensions: Extensions;
   readonly #repayments: Repayments;
@@ -125,6 +131,8 @@ export class AgentRouter {
     this.#gate = new CategoryGate(options.store, options.rules);
     this.#desk = new HandoverDesk(options.store);
     this.#ownerLabel = options.rules.playbook.ownerLabel;
+    this.#inspections = new InspectionQueue(options.store, options.rules);
+    this.#release = new ReleaseGate(options.store, options.rules);
     this.#forfeiture = new Forfeiture(options.store, options.rules, this.#book);
     this.#extensions = new Extensions(options.store, options.rules, this.#book, this.#valuator);
     this.#repayments = new Repayments(options.store, options.rules, this.#book);
@@ -236,6 +244,15 @@ export class AgentRouter {
   async #handleStaff(event: InboundEvent, staff: User): Promise<void> {
     // The hire is usually the one who takes the item in, so this comes first.
     if (await this.#runReceived(event, staff)) return;
+
+    // RELEASE / HOLD is Lukas's. Answered here rather than left to fall
+    // through to the help text, so somebody who tries it is told why not and
+    // what to do instead — a list of other commands is not an answer.
+    const attemptedRelease = parseReleaseCommand(event.text ?? '');
+    if (attemptedRelease) {
+      await this.#transport.sendText({ to: event.from, body: this.#release.run(attemptedRelease, staff).ownerMessage });
+      return;
+    }
 
     const query = parseBookCommand(event.text ?? '');
     if (query) {
@@ -394,6 +411,25 @@ export class AgentRouter {
     // happens at the counter first, and it moves no money.
     if (await this.#runReceived(event, this.#owner)) return;
 
+    // RELEASE / HOLD — the second gate. The agreement is issued here, after
+    // the physical check, and nowhere else (docs/tasks/002).
+    const release = parseReleaseCommand(event.text ?? '');
+    if (release) {
+      const outcome = this.#release.run(release, this.#owner);
+      await this.#transport.sendText({ to: this.#ownerPhone, body: outcome.ownerMessage });
+
+      if (outcome.releaseApprovalId && this.#contracts) {
+        const item = this.#store.item(
+          (this.#store.db.prepare('SELECT item_id FROM approvals WHERE id = ?').get(outcome.releaseApprovalId) as { item_id: string }).item_id,
+        );
+        const customer = item ? this.#store.customer(item.customer_id) : null;
+        if (customer) await this.#sendContract(outcome.releaseApprovalId, customer.phone, item?.conversation_id);
+      } else if (outcome.customerMessage && outcome.customerPhone) {
+        await this.#safeSend(outcome.customerPhone, outcome.customerMessage);
+      }
+      return;
+    }
+
     // PAID records money coming back. First of the book commands, because it
     // is the one that happens most and the one he will be typing at a counter
     // with somebody waiting.
@@ -472,9 +508,18 @@ export class AgentRouter {
         this.#store.recordOutbound({ conversationId, body: result.customerMessage });
       }
 
-      if (result.approval?.status === 'approved' && this.#contracts) {
-        await this.#sendContract(result.approval.id, result.customerPhone, conversationId);
-      }
+      // Deliberately no contract here any more.
+      //
+      // Lukas, 30 October 2026: "The customer cannot have access to the
+      // agreement, because the agreement is at the end of their process...
+      // They only sign when the item has been approved — our staff have
+      // checked the item, approved, and then only then they sign."
+      //
+      // This one reply used to do two jobs: tell the customer a figure, and
+      // put a signable agreement on their phone before anyone had seen the
+      // item. The figure is still sent, and the message already says it is
+      // subject to the in-person check. The agreement waits for *RELEASE*
+      // (docs/tasks/002).
 
       // The application is decided, so the next customer message starts a new one.
       if (conversationId) this.#store.closeConversation(conversationId);
@@ -566,6 +611,39 @@ export class AgentRouter {
   }
 
   /**
+   * An inspection has been submitted — tell Lukas, with the report.
+   *
+   * The second gate is a decision he makes, so he has to be handed what he
+   * needs to make it: who checked it, the outcome, every failure spelled out,
+   * and their findings in their own words. Without this nothing prompts him
+   * and the customer waits on a message that never comes.
+   */
+  async inspectionSubmitted(jobId: string): Promise<void> {
+    const job = this.#inspections.job(jobId);
+    if (!job) return;
+
+    const failed = this.#inspections.worksheet(jobId).filter((line) => line.answer === 'fail');
+    const approval = this.#store.db
+      .prepare("SELECT id FROM approvals WHERE item_id = ? AND status = 'approved' ORDER BY decided_at DESC LIMIT 1")
+      .get(job.itemId) as { id: string } | undefined;
+    const reference = approval ? referenceFor(approval.id) : null;
+
+    const body =
+      `*Inspection in* — ${job.description || 'item'}${job.customerName ? `, ${job.customerName}` : ''}.\n` +
+      `Checked by ${job.claimedByName ?? 'staff'}. Outcome: *${job.outcome ?? 'unknown'}*.\n\n` +
+      (failed.length > 0
+        ? `*Failed:*\n${failed.map((line) => `  • ${line.text}${line.note ? ` — ${line.note}` : ''}`).join('\n')}\n\n`
+        : 'Every check passed.\n\n') +
+      `*What they found:*\n${job.findings || '(nothing written)'}\n\n` +
+      (reference
+        ? `Reply *RELEASE ${reference}* to send the agreement, or *HOLD ${reference} <reason>*. ` +
+          'Nothing goes to the customer until you do.'
+        : 'No approved application is attached to this item, so there is nothing to release.');
+
+    await this.#safeSend(this.#ownerPhone, body);
+  }
+
+  /**
    * *RECEIVED <ref>* — the item is in the shop.
    *
    * Reachable from both the owner path and the staff path, because either of
@@ -578,6 +656,17 @@ export class AgentRouter {
     if (!command) return false;
 
     const result = recordReceipt(this.#store, command, actor, {
+      onReceived: (itemId, approvalId) => {
+        // The inspection becomes real work the moment the item is here.
+        // docs/tasks/002 put this at approval time; receipt is the better
+        // trigger now that there is one, because a queue full of items that
+        // may never arrive is a queue nobody trusts.
+        try {
+          this.#inspections.open({ itemId, approvalId, actor: actor.id });
+        } catch (error) {
+          this.#onError(error, event);
+        }
+      },
       signingUrlFor: (approvalId) => {
         const contract = this.#store.db
           .prepare("SELECT token FROM contracts WHERE approval_id = ? AND status <> 'void' ORDER BY created_at DESC LIMIT 1")
