@@ -190,7 +190,33 @@ Leave `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` empty for now. Without them the
 agent still works end to end — it asks you for the amount instead of suggesting
 one. Add a key later if you want the suggested figure.
 
-### 1.6 Start it
+### 1.6 Make yourself a dashboard link
+
+```bash
+npm run link
+```
+
+It prints a link for you, reading your number from `.env`. Copy it — the
+token is shown once and only its hash is stored, so it cannot be read back.
+Anyone holding that link *is* you as far as the system is concerned, so treat
+it like a password.
+
+You need this for the inspection step, and without it the test dead-ends:
+nothing can be inspected, so *RELEASE* always answers "has not been inspected
+yet" and the agreement never goes out.
+
+When you take someone on:
+
+```bash
+npm run link -- --inspector "Petrus Haufiku" "081 555 0101"
+```
+
+That creates their account as an inspector and prints their own link. They can
+inspect items and read the book; they cannot approve money or release an
+agreement. `npm run link -- --list` shows what has been issued, and
+`npm run link -- --revoke <id>` kills one immediately.
+
+### 1.7 Start it
 
 ```bash
 npm start
@@ -200,7 +226,7 @@ You should see it listening on `:8080` and print which playbook it loaded. If
 it refuses to start, it will say exactly which setting is wrong — it will not
 start with a rule missing, by design.
 
-### 1.7 Point Twilio at it
+### 1.8 Point Twilio at it
 
 Back in the sandbox settings page, in **"When a message comes in"**, enter:
 
@@ -223,7 +249,7 @@ Do **not** set a delivery-status callback to this same URL.
 Also leave the old `/webhook` path alone — in Twilio mode it deliberately
 returns "not found".
 
-### 1.8 Test it
+### 1.9 Test it
 
 From your **test customer** phone, message the sandbox number:
 
@@ -244,7 +270,7 @@ pretend item.
 
 ### What to watch for
 
-- **Nothing arrives at all** → the URL in 1.7 does not match `PUBLIC_BASE_URL`.
+- **Nothing arrives at all** → the URL in 1.8 does not match `PUBLIC_BASE_URL`.
   Check for a trailing slash. The server log will show 401s.
 - **It worked yesterday, not today** → the sandbox join expired (3 days), or
   the tunnel restarted and changed address.

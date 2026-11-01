@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Eppic Pawn Shop — WhatsApp intake & approval agent (architecture.md step 1)",
+  "description": "Eppic Pawn Shop \u2014 WhatsApp intake & approval agent (architecture.md step 1)",
   "engines": {
     "node": ">=22.9"
   },
@@ -12,7 +12,8 @@
     "sim": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/sim.ts",
     "import": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/migrate/cli.ts",
     "test": "node --disable-warning=ExperimentalWarning --test 'test/**/*.test.ts'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "link": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/staff/cli.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

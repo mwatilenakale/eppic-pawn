@@ -44,7 +44,14 @@ let counter = 0;
 const clock = () => new Date(`${TODAY}T09:00:00Z`);
 
 beforeEach(() => {
-  store = new Store(':memory:');
+  // The Store needs the same clock as the Book, not just the router.
+  //
+  // Without it the ledger entry is stamped with the real date while
+  // `interestThisMonthCents` is computed from TODAY, so "collected this
+  // month" found nothing the moment the real month moved past October. It
+  // passed for eleven days and failed on 1 November — a fixed-date test that
+  // quietly depended on the real date being in the same month.
+  store = new Store(':memory:', { clock });
   transport = new MemoryTransport();
   router = new AgentRouter({ store, rules, transport, ownerPhone: OWNER, clock });
   book = new Book(store, { clock });

@@ -33,7 +33,9 @@ let counter = 0;
 const clock = () => new Date(`${TODAY}T09:00:00Z`);
 
 beforeEach(() => {
-  store = new Store(':memory:');
+  // Same clock as the Book, so a ledger entry is stamped inside TODAY's
+  // month. See test/repay.test.ts for what a clockless Store costs.
+  store = new Store(':memory:', { clock });
   transport = new MemoryTransport();
   router = new AgentRouter({ store, rules, transport, ownerPhone: OWNER, clock });
   book = new Book(store, { clock });
