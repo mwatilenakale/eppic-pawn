@@ -13,6 +13,7 @@ import {
   RATE_REFERRAL,
   RATE_STANDARD,
 } from '../src/playbook/index.ts';
+import { buildQuestionPlan } from '../src/intake/questions.ts';
 
 const rules = loadRules();
 
@@ -184,5 +185,67 @@ describe('failure behaviour', () => {
       () => loadRules({ playbook: brokenPlaybook, architecture: join(dir, 'architecture.md') }),
       PlaybookError,
     );
+  });
+});
+
+/**
+ * Lukas editing the playbook in a Markdown app.
+ *
+ * He asked on 2 November 2026 about keeping `docs/` in Obsidian, which is a
+ * reasonable thing to want: the playbook is his document and that is a better
+ * place to write it than a code editor. So the question is what such an app
+ * does to the file, and the answer was mostly "nothing" and once "something
+ * bad and silent".
+ *
+ * A wrong heading level stops the server with a message naming the section —
+ * loud, and the loader is built to throw rather than default. A wiki-link
+ * parsed perfectly: every rate and threshold came out right, and the brackets
+ * went to the customer, who was asked "Can you confirm: Must be a
+ * [[Smart TV]]?".
+ */
+describe('the playbook survives being edited in a Markdown app', () => {
+  const rulesFrom = (markdown: string) => {
+    const path = join(mkdtempSync(join(tmpdir(), 'eppic-pb-')), 'playbook.md');
+    writeFileSync(path, markdown);
+    return loadRules({ playbook: path, architecture: defaultRulesPaths().architecture });
+  };
+  const real = () => readFileSync(defaultRulesPaths().playbook, 'utf8');
+
+  test('properties at the top of the file change nothing', () => {
+    const rules = rulesFrom(`---\ntags:\n  - business\nupdated: 2026-11-02\n---\n\n${real()}`);
+    assert.equal(rules.playbook.collections.extensionCeilingPct, 75);
+    assert.equal(rules.categories.length, 5);
+  });
+
+  test('a reformatted table changes nothing', () => {
+    // Markdown linters love to re-pad table cells.
+    const padded = real().replace(
+      '| Standard (your capital) | 29% | 30 days | 100% you |',
+      '|  Standard (your capital)  |  29%  |  30 days  |  100% you  |',
+    );
+    assert.equal(rulesFrom(padded).playbook.rates[0]!.ratePct, 29);
+  });
+
+  test('a wiki-link does not reach the customer', () => {
+    const linked = real().replace(
+      '- Must be a Smart TV; account/login removed',
+      '- Must be a [[Smart TV]]; account/login removed',
+    );
+    const asked = buildQuestionPlan(rulesFrom(linked), 'tvs').questions.map((question) => question.ask).join('\n');
+    assert.match(asked, /Must be a Smart TV/);
+    assert.doesNotMatch(asked, /\[\[|\]\]/, 'the brackets used to go out as written');
+  });
+
+  test('a piped wiki-link keeps the words he meant to show', () => {
+    const linked = real().replace('- Must be a Smart TV', '- Must be a [[smart-tv-note|Smart TV]]');
+    const asked = buildQuestionPlan(rulesFrom(linked), 'tvs').questions.map((question) => question.ask).join('\n');
+    assert.match(asked, /Must be a Smart TV/);
+    assert.doesNotMatch(asked, /smart-tv-note/, 'the link target is not for the customer to read');
+  });
+
+  test('a wrong heading level is refused loudly, naming the section', () => {
+    // The right failure: no rate is defaulted and the server will not start.
+    const demoted = real().replace('## 4. Interest rates', '### 4. Interest rates');
+    assert.throws(() => rulesFrom(demoted), /section 4 \(interest rates/i);
   });
 });

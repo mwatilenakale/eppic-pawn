@@ -112,7 +112,21 @@ export function tableRows(block: string): string[][] {
 
 /** Strips markdown emphasis so values can be matched regardless of bolding. */
 export function plain(text: string): string {
-  return text.replace(/\*\*/g, '').replace(/`/g, '').trim();
+  return text
+    .replace(/\*\*/g, '')
+    .replace(/`/g, '')
+    // Obsidian-style links, which Lukas may well end up writing: `[[Smart TV]]`
+    // becomes `Smart TV`, and `[[section-8|the grace rule]]` becomes `the
+    // grace rule`. The brackets parsed perfectly well without this — the
+    // numbers all came out right — and went straight to the customer, who was
+    // asked "Can you confirm: Must be a [[Smart TV]]?". A wrong heading level
+    // stops the server with a message naming the section; this failed
+    // silently, which is the worse of the two.
+    .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2')
+    .replace(/\[\[([^\]]+)\]\]/g, '$1')
+    // And ordinary Markdown links, for the same reason.
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .trim();
 }
 
 /** First `N$1,234.50`-style amount in a string, in cents. */
