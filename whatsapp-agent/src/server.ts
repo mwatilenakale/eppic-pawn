@@ -17,11 +17,11 @@ import { createValuator } from './valuator/index.ts';
 import { ContractError } from './store/index.ts';
 import { BUSINESS, ContractService, contractErrorPage, signedPage, signingPage } from './contract/index.ts';
 import { CustomerDirectory } from './customers/directory.ts';
-import { chooseCategoryPage, landingPage, outcomePage, questionsPage } from './web/pages.ts';
+import { chooseCategoryPage, landingPage, leadThanksPage, outcomePage, questionsPage, signUpPage } from './web/pages.ts';
 import { dashboardPage } from './web/dashboard.ts';
 import { DashboardQuery } from './dashboard/index.ts';
 import { can } from './staff/access.ts';
-import { evaluatePrecheck, precheckQuestions, type PrecheckQuote } from './web/precheck.ts';
+import { evaluatePrecheck, precheckQuestions, whatsappLink, type PrecheckQuote } from './web/precheck.ts';
 import { PriceMemory } from './valuator/memory.ts';
 import { QuoteService, missingPhoneDetails } from './valuator/quotes.ts';
 import { inspectionRequest } from './inspection/http.ts';
@@ -244,17 +244,79 @@ async function handleRequest(
       quote,
     });
 
-    if (category) {
-      store.recordPrecheck({
-        categorySlug: category.slug,
-        variant: form.get('variant'),
-        description,
-        answers: outcome.answers,
-        status: outcome.status,
-      });
+    const precheckId = category
+      ? store.recordPrecheck({
+          categorySlug: category.slug,
+          variant: form.get('variant'),
+          description,
+          answers: outcome.answers,
+          status: outcome.status,
+          loanCents: outcome.quote?.loanCents ?? null,
+          buyNowCents: outcome.quote?.buyNowCents ?? null,
+        })
+      : undefined;
+
+    return respondHtml(response, 200, outcomePage(outcome, rules.playbook.whatsapp, rules.playbook.ownerLabel, precheckId));
+  }
+
+  // --- choosing a figure, and only then signing up ------------------------
+  //
+  // Lukas, 24 November 2026: "Somebody must only sign up after they choose
+  // the amounts. After the evaluator runs and gives numbers, after they
+  // choose the number, then they must sign up to continue."
+  //
+  // Two posts land here. The first carries a choice and gets the form; the
+  // second carries the details and records the lead. Nothing is asked of
+  // anybody who only wanted to know what their phone is worth.
+  if (request.method === 'POST' && url.pathname === '/continue') {
+    const form = new URLSearchParams((await readBody(request)).toString('utf8'));
+    const precheckId = form.get('precheck') ?? '';
+    const option = form.get('option') === 'sell' ? 'sell' : 'pawn';
+
+    const precheck = store.precheck(precheckId);
+    // An unknown id is a stale tab or a hand-made request, not an error worth
+    // explaining. Back to the start, where a real estimate can be made.
+    if (!precheck) return respondHtml(response, 404, chooseCategoryPage(rules, 'That estimate has expired. Here are the five we price.'));
+
+    const category = rules.category(precheck.category_slug);
+    const itemLabel = precheck.description.trim() || (category?.label ?? 'item').replace(/\s*\(.*\)$/, '');
+
+    // Read back from the server's own record, never from the form: a hidden
+    // field is whatever the browser says it is, and a forged post would file a
+    // lead at an invented figure.
+    const amountCents = (option === 'sell' ? precheck.quote_buy_now_cents : precheck.quote_loan_cents) ?? 0;
+
+    // No figure stored means the estimate never produced one, so there was
+    // nothing to choose. Treat it as the stale-tab case rather than inventing
+    // a zero-rand deal.
+    if (amountCents <= 0) {
+      return respondHtml(response, 404, chooseCategoryPage(rules, 'That estimate has expired. Here are the five we price.'));
     }
 
-    return respondHtml(response, 200, outcomePage(outcome, rules.playbook.whatsapp, rules.playbook.ownerLabel));
+    if (form.get('step') !== 'details') {
+      return respondHtml(response, 200, signUpPage(itemLabel, precheckId, option, amountCents, rules.playbook.whatsapp));
+    }
+
+    const name = (form.get('name') ?? '').trim();
+    const phone = (form.get('phone') ?? '').trim();
+    const problem = !name
+      ? 'Please tell us your name.'
+      : !/^[\d\s+()-]{7,24}$/.test(phone)
+        ? 'That does not look like a phone number. Local format is fine — 081 123 4567.'
+        : null;
+    if (problem) {
+      return respondHtml(response, 200, signUpPage(itemLabel, precheckId, option, amountCents, rules.playbook.whatsapp, problem));
+    }
+
+    store.claimPrecheck(precheckId, { option, amountCents, name, phone });
+
+    const handoff = `Hello, I am ${name}. I filled in the pre-check on your website and I would like to ` +
+      `${option === 'pawn' ? 'pawn' : 'sell'} my ${itemLabel}.`;
+    return respondHtml(
+      response,
+      200,
+      leadThanksPage(name, option, amountCents, whatsappLink(rules.playbook.whatsapp, handoff), rules.playbook.whatsapp, rules.playbook.ownerLabel),
+    );
   }
 
   if (request.method === 'GET' && url.pathname === '/webhook') {

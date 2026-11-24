@@ -234,7 +234,12 @@ export function questionsPage(
     rules.playbook.whatsapp, 2);
 }
 
-export function outcomePage(outcome: PrecheckOutcome, whatsapp: string, ownerLabel: string): string {
+export function outcomePage(
+  outcome: PrecheckOutcome,
+  whatsapp: string,
+  ownerLabel: string,
+  precheckId?: string,
+): string {
   const link = whatsappLink(whatsapp, outcome.whatsappText);
 
   if (outcome.status === 'not-accepted') {
@@ -254,6 +259,15 @@ export function outcomePage(outcome: PrecheckOutcome, whatsapp: string, ownerLab
     ${outcome.quote?.belowMinimum ? tooSmallCard(outcome.quote) : outcome.quote ? quoteCard(outcome.quote) : noQuoteCard(ownerLabel)}
 
     ${outcome.quote?.belowMinimum ? '' : verificationBanner(ownerLabel)}
+
+    ${/*
+       * The choice sits directly under the figures, not at the foot of the
+       * page. Everything below it — what to bring, what they were unsure
+       * about, what gets checked in person — is useful and none of it should
+       * stand between seeing a number and acting on it. Codex's website
+       * audit, finding F: "the quote is too long before the next action."
+       */ ''}
+    ${chooseOrMessage(outcome, link, whatsapp, precheckId)}
 
     ${
       outcome.notes.length
@@ -294,8 +308,144 @@ export function outcomePage(outcome: PrecheckOutcome, whatsapp: string, ownerLab
         : ''
     }
 
-    <a class="btn btn-primary" href="${escapeHtml(link)}">Continue on WhatsApp</a>
-    <p class="muted" style="text-align:center;margin-top:var(--space-3)">or message ${escapeHtml(whatsapp)}</p>`,
+    ${/*
+       * Somebody who read to the bottom needs an action there too, but not a
+       * second copy of the same card — two identical "Which would you like?"
+       * headings on one page read as a bug. A link back to the real one.
+       */ ''}
+    ${
+      outcome.quote && !outcome.quote.belowMinimum && precheckId
+        ? `<p class="muted" style="text-align:center"><a href="#choose">Choose an option above &uarr;</a></p>`
+        : ''
+    }`,
+    whatsapp, 4);
+}
+
+/**
+ * The choice, and why it is here rather than earlier.
+ *
+ * Lukas, 24 November 2026: *"Somebody must only sign up after they choose the
+ * amounts. After the evaluator runs and gives numbers, after they choose the
+ * number, then they must sign up to continue."*
+ *
+ * So nothing is asked of a visitor until they have seen both figures and
+ * decided they want one. Until then the page takes nothing and gives
+ * everything, which is the whole point of a lead-generation page.
+ *
+ * With no figure to choose between — below the minimum, or no estimate at all
+ * — there is nothing to decide, so it stays a plain WhatsApp link rather than
+ * asking somebody to "choose" between one option and none.
+ */
+function chooseOrMessage(
+  outcome: PrecheckOutcome,
+  link: string,
+  whatsapp: string,
+  precheckId?: string,
+): string {
+  const quote = outcome.quote;
+  if (!quote || quote.belowMinimum || !precheckId) {
+    return `<a class="btn btn-primary" href="${escapeHtml(link)}">Continue on WhatsApp</a>
+    <p class="muted" style="text-align:center;margin-top:var(--space-3)">or message ${escapeHtml(whatsapp)}</p>`;
+  }
+
+  const option = (value: string, label: string, note: string, amountCents: number, style: string) =>
+    `<form method="post" action="/continue" style="margin:0">
+      <input type="hidden" name="precheck" value="${escapeHtml(precheckId)}">
+      <input type="hidden" name="option" value="${value}">
+      <button class="btn ${style}" type="submit">${label} &mdash; ${escapeHtml(formatAmount(amountCents))}</button>
+      <p class="muted" style="text-align:center;margin:var(--space-2) 0 var(--space-4)">${note}</p>
+    </form>`;
+
+  return `<div class="card" id="choose">
+      <h2>Which would you like?</h2>
+      <p class="muted" style="margin-bottom:var(--space-4)">Pick one to carry on. We will ask for your name and
+      number on the next screen — nothing before that.</p>
+      ${option('pawn', 'Pawn it, keep it', 'A loan against the item. Pay it back with interest and the item is yours again.', quote.loanCents, 'btn-primary')}
+      ${option('sell', 'Sell it outright', 'More cash now, and the item becomes ours.', quote.buyNowCents, 'btn-success')}
+    </div>
+    <p class="muted" style="text-align:center">Not sure yet? <a href="${escapeHtml(link)}">Ask on WhatsApp</a>
+    or message ${escapeHtml(whatsapp)}.</p>`;
+}
+
+/**
+ * The sign-up, which exists only because somebody chose a figure.
+ *
+ * Two fields. Not Google: a Google account hands back an email address, and
+ * every single thing this shop does afterwards happens on WhatsApp — the
+ * approval, the questions, the photos, the reminders, the signing link. An
+ * email is the one identifier the business cannot use.
+ */
+export function signUpPage(
+  itemLabel: string,
+  precheckId: string,
+  option: 'pawn' | 'sell',
+  amountCents: number,
+  whatsapp: string,
+  error?: string,
+): string {
+  const what = option === 'pawn' ? 'a loan against' : 'to sell';
+  return page('Your details — Eppic Pawn Shop', `
+    <header>
+      <h1>Nearly there</h1>
+      <p class="lead">You chose ${what} your ${escapeHtml(itemLabel)} at about
+      ${escapeHtml(formatAmount(amountCents))}. We need two things to carry on.</p>
+    </header>
+
+    ${error ? `<div class="verification-banner" role="alert"><strong>${escapeHtml(error)}</strong></div>` : ''}
+
+    <form method="post" action="/continue" class="card">
+      <input type="hidden" name="precheck" value="${escapeHtml(precheckId)}">
+      <input type="hidden" name="option" value="${option}">
+      <input type="hidden" name="step" value="details">
+
+      <div class="input-group">
+        <label class="input-label" for="name">Your name</label>
+        <input class="input" type="text" id="name" name="name" required maxlength="120" autocomplete="name">
+      </div>
+
+      <div class="input-group">
+        <label class="input-label" for="phone">Your WhatsApp number</label>
+        <input class="input" type="tel" id="phone" name="phone" required maxlength="24" autocomplete="tel"
+               inputmode="tel" placeholder="081 123 4567">
+        <p class="muted">This is where ${escapeHtml(whatsapp)} will reply to you. We do not call and we do
+        not pass it on.</p>
+      </div>
+
+      <button class="btn btn-primary" type="submit">Continue &rarr;</button>
+    </form>
+
+    <p class="muted" style="text-align:center">No password, and no account to remember. Your number is how we
+    find you again.</p>`,
+    whatsapp, 4);
+}
+
+/** Chosen, details taken, and the last step is their own first message. */
+export function leadThanksPage(
+  name: string,
+  option: 'pawn' | 'sell',
+  amountCents: number,
+  link: string,
+  whatsapp: string,
+  ownerLabel: string,
+): string {
+  return page('Thank you — Eppic Pawn Shop', `
+    <header>
+      <h1>Thanks, ${escapeHtml(name.split(/\s+/)[0] ?? name)}</h1>
+      <p class="lead">We have your ${option === 'pawn' ? 'loan' : 'sale'} enquiry at about
+      ${escapeHtml(formatAmount(amountCents))}, and ${escapeHtml(ownerLabel)} will see it.</p>
+    </header>
+
+    <div class="card">
+      <h2>One more tap</h2>
+      <p>Send us the message below and we can start straight away — we will ask for a few photos and the
+      details of the item, then ${escapeHtml(ownerLabel)} confirms your figure.</p>
+      <p class="muted">The amount above is still an estimate. Nobody has seen your item yet, and the firm
+      figure comes after it has been checked at the shop.</p>
+    </div>
+
+    <a class="btn btn-primary" href="${escapeHtml(link)}">Open WhatsApp</a>
+    <p class="muted" style="text-align:center;margin-top:var(--space-3)">or message ${escapeHtml(whatsapp)}
+    yourself &mdash; we have your number either way.</p>`,
     whatsapp, 4);
 }
 

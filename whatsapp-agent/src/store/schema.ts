@@ -579,6 +579,42 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE items ADD COLUMN received_at TEXT;
   ALTER TABLE items ADD COLUMN received_by TEXT REFERENCES users(id);
   `,
+  // 18 — the lead: which figure they chose, and who they are.
+  //
+  // Lukas, 24 November 2026: "Somebody must only sign up after they choose
+  // the amounts. After the evaluator runs and gives numbers, after they
+  // choose the number, then they must sign up to continue."
+  //
+  // Until now the website recorded that a pre-check happened and nothing
+  // about the person. Every figure was shown at once and the only action was
+  // "Continue on WhatsApp", so the shop never learned which of the two deals
+  // a visitor actually wanted, and learned nothing at all about anyone who
+  // did not go on to send a message.
+  //
+  // Nullable throughout, deliberately: a visitor who looks at the figures and
+  // leaves is still a recorded pre-check, as before. These columns fill in
+  // only once they choose, which is the moment they stop being a visitor.
+  //
+  // The two figures shown are stored when the estimate is made, and the one
+  // chosen is copied across when they choose. Both, deliberately:
+  //
+  //   - The figure they were shown is the figure they decided on. Pricing the
+  //     item again at the choosing step could return a different number, and
+  //     moving the amount after somebody has picked it is how trust is lost —
+  //     quite apart from paying for the same estimate twice.
+  //   - It cannot come back through the form instead. A hidden field is
+  //     whatever the browser says it is, so a forged post would file a lead at
+  //     an invented figure. The server has to be able to look it up.
+  `
+  ALTER TABLE prechecks ADD COLUMN quote_loan_cents INTEGER;
+  ALTER TABLE prechecks ADD COLUMN quote_buy_now_cents INTEGER;
+  ALTER TABLE prechecks ADD COLUMN chosen_option TEXT;
+  ALTER TABLE prechecks ADD COLUMN chosen_amount_cents INTEGER;
+  ALTER TABLE prechecks ADD COLUMN lead_name TEXT;
+  ALTER TABLE prechecks ADD COLUMN lead_phone TEXT;
+  ALTER TABLE prechecks ADD COLUMN chosen_at TEXT;
+  CREATE INDEX prechecks_leads ON prechecks(chosen_at) WHERE chosen_at IS NOT NULL;
+  `,
 ];
 
 

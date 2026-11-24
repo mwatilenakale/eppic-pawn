@@ -205,8 +205,20 @@ describe('submitting the pre-check', () => {
     assert.ok(counts.some((row) => row.category_slug === 'consoles'));
 
     const row = store.db.prepare("SELECT * FROM prechecks WHERE category_slug = 'consoles'").get() as Record<string, unknown>;
-    assert.deepEqual(Object.keys(row).sort(), ['answers', 'category_slug', 'created_at', 'description', 'id', 'status', 'variant']);
-    assert.doesNotMatch(JSON.stringify(row), /\+264|@|phone|name/i, 'no personal data is stored');
+
+    // Migration 18 added lead columns, because a visitor who chooses a figure
+    // and gives their number is a lead worth keeping. The guarantee this test
+    // protects is unchanged and now stated as what it always meant: a visitor
+    // who only looked is still stored anonymously. Asserting the columns are
+    // empty is stronger than asserting they do not exist — a column that is
+    // never allowed to be filled is a column that cannot leak.
+    for (const column of ['lead_name', 'lead_phone', 'chosen_at', 'chosen_option', 'chosen_amount_cents']) {
+      assert.equal(row[column], null, `${column} must be empty until they choose and sign up`);
+    }
+    // Values only. The column *names* now contain "name" and "phone", which
+    // is not personal data — the first version of this assertion serialised
+    // the whole row and so caught its own headings.
+    assert.doesNotMatch(JSON.stringify(Object.values(row)), /\+264|@|\b\d{9,}\b/i, 'no personal data is stored');
   });
 
   test('a category the playbook does not take is handled on submit too', async () => {
@@ -304,5 +316,110 @@ describe('a corrected form keeps what the customer already said', () => {
     const page = await get('/apply?category=phones&variant=iphone');
     assert.doesNotMatch(page.html, /research/i);
     assert.match(page.html, /Work out an estimate/);
+  });
+});
+
+/**
+ * Choosing a figure, and only then being asked who you are.
+ *
+ * Lukas, 24 November 2026: *"Somebody must only sign up after they choose the
+ * amounts. After the evaluator runs and gives numbers, after they choose the
+ * number, then they must sign up to continue."*
+ *
+ * Before this the page showed every figure at once and offered a single
+ * "Continue on WhatsApp" link, so the shop never learned which of the two
+ * deals a visitor wanted, and learned nothing at all about anybody who did not
+ * go on to send a message.
+ */
+describe('choosing a figure, then signing up', () => {
+  // A remembered adjustment stands in for the valuator, which has no key in
+  // these tests — the same path a reused price takes in production.
+  const priced = async () => {
+    const { PriceMemory } = await import('../src/valuator/memory.ts');
+    const owner = store.ensureUser({ name: 'Lukas', phone: '+264811110000', role: 'owner' });
+    new PriceMemory(store, rules).remember({
+      key: { categorySlug: 'consoles', description: 'PS5 disc edition' },
+      loanCents: 180_000, buyNowCents: 207_000, marketValueCents: 500_000, assessedValueCents: 375_000,
+      note: 'fixture', adjustedBy: owner.id,
+    });
+    const { html } = await post('/apply', { category: 'consoles', description: 'PS5 disc edition' });
+    return { html, precheckId: /name="precheck" value="([^"]+)"/.exec(html)?.[1] };
+  };
+
+  test('both figures are offered as a choice, and nothing is asked before one is made', async () => {
+    const { html } = await priced();
+
+    assert.match(html, /Which would you like/i);
+    assert.match(html, /Pawn it, keep it/i);
+    assert.match(html, /Sell it outright/i);
+    assert.match(html, /N\$1,800\.00/, 'the loan figure is on its own button');
+    assert.match(html, /N\$2,070\.00/, 'and the buy-outright figure on the other');
+
+    // The promise the landing page makes, kept all the way to here.
+    assert.doesNotMatch(html, /name="phone"/, 'no phone field before they choose');
+    assert.doesNotMatch(html, /name="name"/, 'and no name field');
+  });
+
+  test('the choice comes before the long explanations, not after them', async () => {
+    const { html } = await priced();
+    assert.ok(html.indexOf('Which would you like') < html.indexOf('Bring with you'),
+      'a visitor should not have to read to the bottom to act (audit finding F)');
+  });
+
+  test('choosing asks for two things and no password', async () => {
+    const { precheckId } = await priced();
+    const { html } = await post('/continue', { precheck: precheckId!, option: 'sell' });
+
+    assert.match(html, /N\$2,070\.00/, 'it says what they chose');
+    assert.match(html, /name="name"/);
+    assert.match(html, /name="phone"/);
+    // The page says "no password" in words, so assert on the field, not the prose.
+    assert.doesNotMatch(html, /type="password"/i);
+    // Google hands back an email address, and every step after this happens on
+    // WhatsApp. An email is the one identifier the business cannot use.
+    assert.doesNotMatch(html, /accounts\.google|sign in with google/i);
+  });
+
+  test('a bad phone number is refused without losing the choice', async () => {
+    const { precheckId } = await priced();
+    const { html } = await post('/continue', { precheck: precheckId!, option: 'pawn', step: 'details', name: 'Maria', phone: 'nope' });
+
+    assert.match(html, /does not look like a phone number/i);
+    assert.match(html, /N\$1,800\.00/, 'still shows what they chose');
+    assert.equal(store.leads().length, 0, 'and records nothing');
+  });
+
+  test('a completed sign-up is a lead Lukas can see, with the figure they chose', async () => {
+    const { precheckId } = await priced();
+    const { html } = await post('/continue', { precheck: precheckId!, option: 'sell', step: 'details', name: 'Maria Shikongo', phone: '081 123 4567' });
+
+    assert.match(html, /Thanks, Maria/);
+    assert.match(html, /still an estimate/i, 'and it is still not an offer');
+
+    const [lead] = store.leads();
+    assert.equal(lead?.lead_name, 'Maria Shikongo');
+    assert.equal(lead?.lead_phone, '081 123 4567');
+    assert.equal(lead?.chosen_option, 'sell');
+    assert.equal(lead?.chosen_amount_cents, 207_000);
+  });
+
+  // The figure is read from the server's own record. A hidden field is
+  // whatever the browser says it is, and a forged post must not be able to
+  // file a lead at an invented number.
+  test('the amount cannot be forged through the form', async () => {
+    const { precheckId } = await priced();
+    await post('/continue', {
+      precheck: precheckId!, option: 'pawn', step: 'details', name: 'Forger', phone: '081 999 0000',
+      amount: '99999999', amountCents: '99999999', chosen_amount_cents: '99999999', loanCents: '99999999',
+    });
+
+    assert.equal(store.leads()[0]?.chosen_amount_cents, 180_000, 'the server decides what was offered');
+  });
+
+  test('a stale tab goes back to the start rather than breaking', async () => {
+    const { status, html } = await post('/continue', { precheck: 'not-a-real-id', option: 'pawn' });
+    assert.equal(status, 404);
+    assert.match(html, /expired/i);
+    assert.match(html, /What do you have/i);
   });
 });

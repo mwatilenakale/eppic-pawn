@@ -136,6 +136,24 @@ export interface LedgerEntry {
   reverses_entry_id: string | null;
   created_at: string;
 }
+/** A website pre-check, plus the lead's choice once they have made one. */
+export interface PrecheckRow {
+  id: string;
+  category_slug: string;
+  variant: string | null;
+  description: string;
+  answers: string;
+  status: string;
+  created_at: string;
+  quote_loan_cents: number | null;
+  quote_buy_now_cents: number | null;
+  chosen_option: string | null;
+  chosen_amount_cents: number | null;
+  lead_name: string | null;
+  lead_phone: string | null;
+  chosen_at: string | null;
+}
+
 export interface AuditRow {
   id: string;
   at: string;
@@ -1580,10 +1598,16 @@ export class Store {
     description?: string;
     answers: unknown;
     status: string;
+    /** The two figures shown, so the one they choose can be read back here. */
+    loanCents?: number | null;
+    buyNowCents?: number | null;
   }): string {
     const id = randomUUID();
     this.db
-      .prepare('INSERT INTO prechecks (id, category_slug, variant, description, answers, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .prepare(
+        'INSERT INTO prechecks (id, category_slug, variant, description, answers, status, created_at,' +
+          ' quote_loan_cents, quote_buy_now_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
       .run(
         id,
         precheck.categorySlug,
@@ -1592,8 +1616,55 @@ export class Store {
         JSON.stringify(precheck.answers),
         precheck.status,
         this.#now(),
+        precheck.loanCents ?? null,
+        precheck.buyNowCents ?? null,
       );
     return id;
+  }
+
+  /**
+   * A visitor chose one of the figures and gave their details — the moment
+   * they stop being a visitor and become a lead.
+   *
+   * The amount is stored with the choice because it is the figure they were
+   * shown and decided on. If the estimate moves later, what they saw does not.
+   *
+   * This writes no money, creates no item and approves nothing: it is a note
+   * that somebody wants a deal of this shape. Everything that follows still
+   * goes through intake and Lukas's reply.
+   */
+  claimPrecheck(
+    precheckId: string,
+    lead: { option: string; amountCents: number | null; name: string; phone: string },
+  ): void {
+    this.db
+      .prepare(
+        'UPDATE prechecks SET chosen_option = ?, chosen_amount_cents = ?, lead_name = ?, lead_phone = ?,' +
+          ' chosen_at = ? WHERE id = ?',
+      )
+      .run(lead.option, lead.amountCents, lead.name.slice(0, 120), lead.phone, this.#now(), precheckId);
+    this.audit({
+      actor: 'website',
+      action: 'precheck.chosen',
+      entity: 'precheck',
+      entityId: precheckId,
+      details: { option: lead.option, amountCents: lead.amountCents },
+    });
+  }
+
+  /** A pre-check by id, for the step that follows choosing. */
+  precheck(precheckId: string): PrecheckRow | null {
+    return (this.db.prepare('SELECT * FROM prechecks WHERE id = ?').get(precheckId) as PrecheckRow | undefined) ?? null;
+  }
+
+  /**
+   * Leads who chose a figure, newest first — including the ones who never
+   * went on to message, which is the whole reason this is recorded.
+   */
+  leads(limit = 50): PrecheckRow[] {
+    return this.db
+      .prepare('SELECT * FROM prechecks WHERE chosen_at IS NOT NULL ORDER BY chosen_at DESC LIMIT ?')
+      .all(limit) as unknown as PrecheckRow[];
   }
 
   /** How many pre-checks by category — what the website is actually bringing in. */
