@@ -56,7 +56,61 @@ wording. No test caught it; reading the page did.
 
 ## The design
 
-### Who the customer is — recommendation: no accounts, ever
+### Who the customer is — Lukas decided, 24 November 2026
+
+**He overruled the recommendation below, and he was right to.** His
+answer: *"somebody can maybe check like five times and then they have to
+be required to sign up with Google. If they exceed a certain amount then
+they can pay a certain amount — because our evaluator must be very
+robust, like must be the best."*
+
+That is better than "no accounts, ever", because it keeps the
+no-friction promise where it earns leads and puts the wall exactly where
+a visitor stops looking like a customer:
+
+| Checks | What happens |
+|---|---|
+| 1–5 | Anonymous. No name, no number, as now |
+| 6+ | Sign in with Google to continue |
+| Beyond a further ceiling | Pay per check |
+
+Nobody checks their own phone six times. A rival pricing their stock
+does, and now has to create accounts to do it — which is friction, and
+is traceable, and does not need the shop to guess anybody's motive.
+
+**Two honest costs to weigh before building it.**
+
+1. **Google sign-in is the website's first third-party dependency.**
+   The file header says it loads nothing from anywhere else — no fonts,
+   no scripts, no images — and a test enforces it. Google sign-in is an
+   external script and an OAuth round trip, so that test changes and the
+   page starts depending on someone else's uptime. Worth it for the
+   throttle; worth knowing it is not free.
+2. **The paid tier is a bigger job than everything else on this page put
+   together,** and I would not build it yet. A payment gateway means a
+   merchant account, a provider integration, refunds, receipts, and
+   probably VAT on a service — weeks, not days, and all of it before the
+   shop's actual business is running. Ask what it is *for*:
+   - *To recover cost?* The cost is cents per check. The free tier plus
+     a cap is cheaper than the gateway's monthly fee.
+   - *To stop rivals?* The Google wall already does that.
+   - *To sell valuations as a product?* That is a real business and a
+     good idea, but it is a separate project with its own decision, not
+     a setting on a lead-generation page.
+
+   **Recommendation: build tiers 1 and 2. Leave tier 3 as a "message us
+   for a bulk valuation" line** until somebody actually asks to pay. If
+   they do, that is the market research the paid tier needs.
+
+**"The evaluator must be the best"** is noted and already the standing
+position: `.env.example` says the valuation is the one place where a
+better model earns its cost. Nothing here should push toward a cheaper
+model to save on checks — the free-tier cap is the cost control, so the
+model does not have to be.
+
+---
+
+#### The recommendation he overruled, kept for the reasoning
 
 **No login. No Google. No password.** The identity is the phone number,
 and the credential is a link.
@@ -79,9 +133,9 @@ Reasoning, in order of weight:
    link. Both are unguessable tokens, both are revocable, neither has a
    password. The status page is the third of the same thing.
 
-So:
+The parts of it that survive his decision, and still hold:
 
-- **Anonymous value check** — no identity at all, as now.
+- **Anonymous value check** — no identity at all, for the first five.
 - **Handing off to WhatsApp** is where the person becomes a customer:
   their number arrives with the message, and the record is created from
   it. This already happens.
@@ -104,9 +158,14 @@ page that says "declined" is a conversation for WhatsApp, not a URL.
 Stages, which are the states the database already holds — this is a
 *view*, not new state, and that is the point:
 
-1. **Accepted — bring it in.** The figure is confirmed. What to bring,
-   from the playbook's requirements. What is still outstanding, by name,
-   from the same list the dashboard chases.
+1. **Accepted in principle — bring it in.** *Not* "the figure is
+   confirmed". Lukas, 24 November: *"this amount is not approved — even
+   if it's approved it's still subject to final product inspection, so
+   it's a ballpark amount."* The page carries the same verification
+   language the website estimate does, because until the item is on the
+   counter nothing about the figure is final. What to bring, from the
+   playbook's requirements, and what is still outstanding by name, from
+   the same list the dashboard chases.
 2. **Item received.** Who took it in, when.
 3. **Being checked.** An inspection is open. No findings, no figures,
    no inspector's notes — those are internal, and `inspectionText`
@@ -167,17 +226,39 @@ and total lookups per day.
 
 ---
 
-## What I need from him before building
+## Answered, 24 November 2026
 
-1. **Confirm no-accounts**, status link sent on WhatsApp. (Recommended.)
-2. **The two ceiling numbers.**
-3. **Does the status page show the amount?** It is approved by then, and
-   it is already on the agreement — but it puts a figure on a URL that
-   could be forwarded. I lean yes, because hiding it helps nobody and
-   the token is the same credential the contract uses.
+1. **Identity** — five anonymous checks, then Google, then (deferred) a
+   paid tier. Decided by him. See above.
+2. **The amount on the status page** — shown, but **never as approved**.
+   His words settled it: it is a ballpark until the item has been
+   physically inspected. Same verification banner as the estimate.
+3. **What the figure being a ballpark implies elsewhere** — it turned
+   out to be a defect, not a wording question, and it is fixed. See
+   below.
 
-Items 2 and 3 are his. Item 1 he asked me to decide, and the answer is
-above.
+## What his answer changed in the code already
+
+`RELEASE` took no figure. So the only amount a contract could carry was
+the one he gave before the item existed in front of him, and after the
+inspection his choices were the original ballpark or `HOLD` — kill the
+deal. He could not say "the screen is cracked, I'll do N$2,500 not
+N$3,500", which is precisely what "subject to final product inspection"
+means.
+
+`RELEASE <ref> <amount> <reason>` now re-prices at the gate where the
+decision happens. The customer is told the new figure and why **before**
+the agreement arrives, and told they can decline and collect the item —
+a signature is only consent if they were told first. A figure under the
+playbook's minimum is refused rather than rounded, and a trailing per
+cent is not read as money. Committed 24 November, 732 tests.
+
+## Still open
+
+- **The two tier thresholds** are set: 5 then Google. The *further*
+  ceiling before the paid tier is moot while tier 3 is deferred.
+- **Google sign-in** needs an OAuth client ID, which is a console task,
+  not a coding one.
 
 ## What does not move
 
