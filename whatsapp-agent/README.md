@@ -27,7 +27,7 @@ runs in memory, so nothing touches real records.
 `/sign` signs the contract the way a customer would on their phone.
 
 ```bash
-npm test          # 191 tests, no network
+npm test          # no network, no accounts
 npm run typecheck
 ```
 

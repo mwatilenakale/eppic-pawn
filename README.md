@@ -11,9 +11,11 @@ eppic-pawn/
 ├── CLAUDE.md              ← standing instructions for Claude Code
 ├── AGENTS.md              ← the same constraints, for any other coding agent
 ├── docs/
+│   ├── developer-onboarding.md  ← START HERE if you are new to this code
 │   ├── playbook.md        ← every business rule: rates, terms, screening,
 │   │                         collections logic. The source of truth.
 │   ├── architecture.md    ← full system design and build order
+│   ├── changing-the-rules.md    ← what the owner changes without a developer
 │   └── whatsapp-setup.md  ← getting the shop onto Meta's Cloud API
 └── whatsapp-agent/        ← Step 1, built. See its README to run it.
 ```

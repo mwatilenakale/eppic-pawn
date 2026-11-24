@@ -20,7 +20,10 @@ it once with the owner watching, and closing a specific list of known
 findings. If you quote this as "build me a pawn shop system" you have
 misread it and your number will be wrong in both directions.
 
-**Before you start anything**, read, in this order:
+**Before you start anything**, read
+**`docs/developer-onboarding.md`** — the tour of the codebase, the
+conventions that are load-bearing, and the traps that have cost people
+a day each. Then, in this order:
 
 1. `CLAUDE.md` (repo root) — the rules that do not move.
 2. `docs/playbook.md` — the business. Every rate and term lives here.
