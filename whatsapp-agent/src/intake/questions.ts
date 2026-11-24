@@ -141,6 +141,38 @@ const DOCUMENT_REQUESTS: { pattern: RegExp; photoKind: string; ask: string; unle
   },
 ];
 
+/**
+ * A document the playbook names that nothing above knows by name.
+ *
+ * This used to `continue` — a requirement with no hand-written entry in
+ * `DOCUMENT_REQUESTS` was skipped. The effect was the worst kind of quiet:
+ * Lukas adds "Proof of address" to playbook section 5, it appears on the
+ * agreement under "what the customer provides", the dashboard does not chase
+ * it because no question exists to be outstanding, and the agent never asks.
+ * A term the shop promises and never collects.
+ *
+ * Found on 24 November 2026 when he asked how he would add a document, which
+ * is a question a non-programmer should be able to answer by editing his own
+ * document. Now he can: a new line in section 5 is asked for, stored under
+ * its own photo kind, chased on the dashboard, and listed at the release gate
+ * like any other.
+ *
+ * The named entries above still win, because they carry wording this cannot
+ * derive — the police declaration's "say so and I will ask instead", and the
+ * fact that it is skipped once proof of ownership is in.
+ */
+function askFor(requirement: string): { photoKind: string; ask: string; unlessPhoto?: string } {
+  // "Proof of address — a utility bill, under three months old" keys on
+  // "proof-of-address", so the kind stays stable if he reworders the
+  // explanation after the dash. Photos already stored keep matching.
+  const [name = requirement] = requirement.split(/\s[—–]\s/);
+  const spoken = requirement.charAt(0).toLowerCase() + requirement.slice(1);
+  return {
+    photoKind: slug(name) || 'document',
+    ask: `Please send a photo of your ${spoken.replace(/[.\s]+$/, '')}.`,
+  };
+}
+
 /** Collected at handover, not during chat — the contract is generated later. */
 const NOT_COLLECTED_REMOTELY = /signed agreement/i;
 
@@ -300,8 +332,7 @@ export function buildQuestionPlan(
   for (const requirement of rules.playbook.requirements) {
     if (NOT_COLLECTED_REMOTELY.test(requirement)) continue;
 
-    const request = DOCUMENT_REQUESTS.find((entry) => entry.pattern.test(requirement));
-    if (!request) continue;
+    const request = DOCUMENT_REQUESTS.find((entry) => entry.pattern.test(requirement)) ?? askFor(requirement);
     if (questions.some((question) => question.photoKind === request.photoKind)) continue;
 
     questions.push({

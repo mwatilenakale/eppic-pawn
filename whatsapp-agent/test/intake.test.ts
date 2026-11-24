@@ -1,9 +1,9 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadRules } from '../src/playbook/index.ts';
+import { defaultRulesPaths, loadRules } from '../src/playbook/index.ts';
 import { Store, generateMediaKey } from '../src/store/index.ts';
 import { IntakeAgent, type IntakeSubmission } from '../src/intake/agent.ts';
 import { buildQuestionPlan, readConfirmation, OTHER } from '../src/intake/questions.ts';
@@ -989,5 +989,84 @@ describe('a customer who does not know', () => {
     const reply = send('not sure').replies.join('\n');
     assert.doesNotMatch(reply, /how to check/i);
     assert.doesNotMatch(reply, /MDM/i, 'the conversation moves on');
+  });
+});
+
+/**
+ * Lukas changing the terms himself.
+ *
+ * He asked on 24 November 2026 how he would make the system require a new
+ * document. That is a question a non-programmer should be able to answer by
+ * editing his own document, and for confirmations he already could. For
+ * documents he could not, and the failure was silent in the worst way: a new
+ * line in section 5 reached the agreement under "what the customer provides",
+ * no question was generated, so the dashboard had nothing outstanding to
+ * chase and the agent never asked. A term the shop promised and never
+ * collected.
+ */
+describe('a document added to the playbook is actually asked for', () => {
+  const withRequirements = (extraDocument: string, extraConfirmation?: string) => {
+    const source = readFileSync(defaultRulesPaths().playbook, 'utf8');
+    let edited = source.replace(
+      '- Police declaration of ownership — only if there is no proof of ownership',
+      `- Police declaration of ownership — only if there is no proof of ownership\n- ${extraDocument}`,
+    );
+    if (extraConfirmation) {
+      edited = edited.replace(
+        '- Bought outright, not on an account or payment plan',
+        `- Bought outright, not on an account or payment plan\n- ${extraConfirmation}`,
+      );
+    }
+    const path = join(mkdtempSync(join(tmpdir(), 'eppic-terms-')), 'playbook.md');
+    writeFileSync(path, edited);
+    return loadRules({ playbook: path, architecture: defaultRulesPaths().architecture });
+  };
+
+  test('a new document gets its own photo request and its own kind', () => {
+    const edited = withRequirements('Proof of address — a utility bill or a bank statement, under three months old');
+    const photos = buildQuestionPlan(edited, 'phones', 'iphone').questions.filter((q) => q.kind === 'photo');
+
+    const asked = photos.find((question) => question.photoKind === 'proof-of-address');
+    assert.ok(asked, `no request was generated: ${photos.map((p) => p.photoKind).join(', ')}`);
+    assert.match(asked.ask, /Please send a photo of your proof of address/);
+    assert.match(asked.ask, /utility bill/, 'his own explanation reaches the customer');
+    assert.equal(asked.optional, false, 'a document he listed is required, like the others');
+  });
+
+  test('the kind survives him rewording the explanation after the dash', () => {
+    // Otherwise photos already stored under the old kind would be orphaned.
+    const first = withRequirements('Proof of address — a utility bill, under three months old');
+    const second = withRequirements('Proof of address — a bank statement or a municipal bill, recent');
+    const kindOf = (rules: ReturnType<typeof loadRules>) =>
+      buildQuestionPlan(rules, 'phones', 'iphone').questions.find((q) => /address/i.test(q.ask))?.photoKind;
+
+    assert.equal(kindOf(first), 'proof-of-address');
+    assert.equal(kindOf(second), 'proof-of-address');
+  });
+
+  test('the hand-written entries still win, because they say more', () => {
+    // The police declaration is skipped once proof of ownership is in, and
+    // says "say so and I will ask instead". A derived ask cannot know that.
+    const plan = buildQuestionPlan(rules, 'phones', 'iphone');
+    const declaration = plan.questions.find((q) => q.photoKind === 'police-declaration')!;
+    assert.equal(declaration.unlessPhoto, 'ownership');
+    assert.match(plan.questions.find((q) => q.photoKind === 'ownership')!.ask, /say so and I will ask/i);
+  });
+
+  test('a new confirmation is asked with no code change at all', () => {
+    const edited = withRequirements(
+      'Proof of address — a utility bill',
+      'The item has never been reported to an insurer as lost or stolen',
+    );
+    const asked = buildQuestionPlan(edited, 'phones', 'iphone').questions.map((q) => q.ask).join('\n');
+    assert.match(asked, /Can you confirm: The item has never been reported to an insurer/);
+  });
+
+  test('a new document is chased on the dashboard until it arrives', () => {
+    // The point of the fix: outstanding means outstanding, so the gap is
+    // visible rather than quietly absent.
+    const edited = withRequirements('Proof of address — a utility bill');
+    const ids = buildQuestionPlan(edited, 'phones', 'iphone').questions.map((q) => q.id);
+    assert.ok(ids.includes('document-proof-of-address'), ids.join(', '));
   });
 });
