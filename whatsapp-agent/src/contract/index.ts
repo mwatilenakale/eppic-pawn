@@ -265,7 +265,7 @@ export class ContractService {
       customerPhone,
       customerMessage:
         `Contract ${contract.number} is signed — thank you, ${name}.\n\n` +
-        `Bring the item and your documents in to collect ${formatAmount(contract.principal_cents)}. ` +
+        `Collect ${formatAmount(contract.principal_cents)} from the counter. ` +
         `${formatAmount(contract.total_due_cents)} is due by ${contract.due_date}, with a grace period to ${contract.grace_ends_date}.`,
       ownerMessage:
         `✍️ ${name} signed contract ${contract.number} (${formatAmount(contract.principal_cents)} on ${item.description || 'the item'}).\n` +

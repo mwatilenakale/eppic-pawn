@@ -542,3 +542,108 @@ describe('the item has to be here first', () => {
     assert.equal(again.received_at, first.received_at);
   });
 });
+
+/**
+ * Re-pricing at the second gate.
+ *
+ * Lukas, 24 November 2026: *"this amount is not approved — even if it's
+ * approved it's still subject to final product inspection, so it's a ballpark
+ * amount."*
+ *
+ * Before this, `RELEASE` took no figure, so the only number the agreement
+ * could carry was the one he gave before the item existed in front of him.
+ * A cracked screen left him choosing between overpaying and `HOLD` — killing
+ * a deal he would happily have done lower. Neither is what he described.
+ */
+describe('the check can change the figure before the agreement', () => {
+  const inspected = async () => {
+    const transport = new MemoryTransport();
+    const router = new AgentRouter({ store, rules, transport, ownerPhone: OWNER, contracts });
+    const customer = store.upsertCustomer(CUSTOMER, 'Test Customer');
+    const item = store.createItem({ customerId: customer.id, categorySlug: 'phones', variant: 'iphone', description: 'iPhone 13 Pro' });
+    const approval = store.createApproval({ itemId: item.id, suggestedLoanCents: 375_000 });
+    await router.handle({ from: OWNER, messageId: `wamid.r${approval.id}`, type: 'text', text: 'approve' });
+    const reference = referenceFor(approval.id);
+    await router.handle({ from: OWNER, messageId: `wamid.rr${approval.id}`, type: 'text', text: `RECEIVED ${reference}` });
+
+    const hire = store.ensureUser({ name: 'Petrus Haufiku', phone: '+264811112222', role: 'inspector' });
+    const queue = new InspectionQueue(store, rules);
+    const job = queue.waiting()[0]!;
+    queue.claim(job.id, hire);
+    queue.submit({
+      jobId: job.id,
+      user: hire,
+      results: queue.worksheet(job.id).map((line) => ({ checkId: line.checkId, text: line.text, answer: 'pass' as const, note: '' })),
+      findings: 'Screen has a crack across the corner.',
+    });
+    return { transport, router, approval, reference };
+  };
+
+  test('a lower figure reaches the contract, not the one approved blind', async () => {
+    const { transport, router, approval, reference } = await inspected();
+
+    await router.handle({ from: OWNER, messageId: 'wamid.rp1', type: 'text', text: `RELEASE ${reference} 2500 The screen is cracked across the corner.` });
+
+    const [contract] = store.contractsForApproval(approval.id);
+    assert.equal(contract?.principal_cents, 250_000, 'the agreement carries the re-priced figure');
+    // Not `.at(-1)`: the "contract is ready" message follows the release one.
+    assert.match(transport.to(OWNER).join('\n'), /Re-priced after the check/i);
+    assert.match(transport.to(OWNER).join('\n'), /N\$3,750\.00 → N\$2,500\.00/);
+  });
+
+  test('the customer is told the new figure, and why, before the agreement arrives', async () => {
+    const { transport, router, reference } = await inspected();
+    await router.handle({ from: OWNER, messageId: 'wamid.rp2', type: 'text', text: `RELEASE ${reference} 2500 The screen is cracked across the corner.` });
+
+    const messages = transport.to(CUSTOMER);
+    const notice = messages.findIndex((body) => /instead of the N\$3,750\.00/.test(body));
+    const link = messages.findIndex((body) => body.includes('/c/'));
+
+    assert.ok(notice >= 0, 'the customer must be told the amount changed');
+    assert.match(messages[notice]!, /N\$2,500\.00/);
+    assert.match(messages[notice]!, /screen is cracked/i, 'and told why');
+    assert.match(messages[notice]!, /rather not go ahead/i, 'and that they can decline');
+    assert.ok(link > notice, 'the agreement must not be what breaks the news');
+  });
+
+  test('a plain release still uses the approved figure and tells the customer nothing new', async () => {
+    const { transport, router, approval, reference } = await inspected();
+    await router.handle({ from: OWNER, messageId: 'wamid.rp3', type: 'text', text: `RELEASE ${reference}` });
+
+    const [contract] = store.contractsForApproval(approval.id);
+    assert.equal(contract?.principal_cents, 375_000);
+    assert.doesNotMatch(transport.to(CUSTOMER).join('\n'), /instead of the/i);
+    assert.doesNotMatch(transport.to(OWNER).join('\n'), /Re-priced/i);
+  });
+
+  test('a figure under the minimum is refused, and nothing is issued', async () => {
+    const { transport, router, approval, reference } = await inspected();
+
+    // He means N$2,500 and types N$250 — a slip that would otherwise reach a
+    // signed contract.
+    await router.handle({ from: OWNER, messageId: 'wamid.rp4', type: 'text', text: `RELEASE ${reference} 250 cracked` });
+
+    assert.equal(store.contractsForApproval(approval.id).length, 0, 'no agreement on a mistyped figure');
+    assert.match(transport.to(OWNER).at(-1)!, /under the/i);
+    assert.doesNotMatch(transport.to(CUSTOMER).join('\n'), /\/c\//);
+  });
+
+  test('a percentage in the reason is not read as money', async () => {
+    const { router, approval, reference } = await inspected();
+    await router.handle({ from: OWNER, messageId: 'wamid.rp5', type: 'text', text: `RELEASE ${reference} 71% battery health, still fine` });
+
+    const [contract] = store.contractsForApproval(approval.id);
+    assert.equal(contract?.principal_cents, 375_000, 'N$71 would have been a disaster');
+  });
+
+  test('the original figure stays recoverable', async () => {
+    const { router, approval, reference } = await inspected();
+    await router.handle({ from: OWNER, messageId: 'wamid.rp6', type: 'text', text: `RELEASE ${reference} 2500 cracked` });
+
+    const trail = store.auditTrail('approval', approval.id);
+    const revision = trail.find((row) => row.action === 'approval.revised');
+    assert.ok(revision, 'a re-price is his decision and is recorded as one');
+    assert.deepEqual(JSON.parse(String(revision!.details)).fromCents, 375_000);
+    assert.deepEqual(JSON.parse(String(revision!.details)).toCents, 250_000);
+  });
+});

@@ -755,6 +755,35 @@ export class Store {
     return this.item(itemId);
   }
 
+  /**
+   * Re-prices an approval after the physical check, before the agreement.
+   *
+   * Lukas, 24 November 2026: *"this amount is not approved — even if it's
+   * approved it's still subject to final product inspection, so it's a
+   * ballpark amount."* Until this existed, the figure he gave before anybody
+   * had seen the item was the only figure the contract could carry, so a
+   * cracked screen left him choosing between overpaying and killing a deal he
+   * would happily have done lower.
+   *
+   * The old figure is not lost: `suggested_loan_cents` still holds what was
+   * estimated, and the audit row holds what he first said. A revision is his
+   * decision like the original was, so it is recorded against him.
+   */
+  reviseApproval(approvalId: string, amountCents: number, actor: string, reason: string): void {
+    const before = this.db
+      .prepare('SELECT approved_loan_cents FROM approvals WHERE id = ?')
+      .get(approvalId) as { approved_loan_cents: number | null } | undefined;
+
+    this.db.prepare('UPDATE approvals SET approved_loan_cents = ? WHERE id = ?').run(amountCents, approvalId);
+    this.audit({
+      actor,
+      action: 'approval.revised',
+      entity: 'approval',
+      entityId: approvalId,
+      details: { fromCents: before?.approved_loan_cents ?? null, toCents: amountCents, reason },
+    });
+  }
+
   /** Stores a photo encrypted on disk and links it to the item. */
   addPhoto(photo: { itemId: string; kind: string; content: Buffer; extension?: string }): { id: string; path: string } {
     if (!this.media) throw new Error('Store was created without a media directory — cannot store photos');

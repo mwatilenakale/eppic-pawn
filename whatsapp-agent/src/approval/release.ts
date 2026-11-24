@@ -26,11 +26,17 @@ import { InspectionQueue } from '../inspection/queue.ts';
 import { describeRequirements, outstandingIds } from '../requirements.ts';
 import { referenceFor } from '../reference.ts';
 import { can } from '../staff/access.ts';
+import { formatAmount, parseAmount } from '../money.ts';
 
 export interface ReleaseCommand {
   action: 'release' | 'hold';
   reference: string | null;
   reason: string;
+  /**
+   * A revised figure, when the inspection changed what the item is worth.
+   * Null means release at the figure already approved.
+   */
+  amountCents: number | null;
 }
 
 const RELEASE = /^(release|releases|released|send the agreement|send agreement)\b/i;
@@ -44,10 +50,28 @@ export function parseReleaseCommand(text: string): ReleaseCommand | null {
 
   const rest = trimmed.replace(release ? RELEASE : HOLD, '').trim();
   const reference = /^([A-Z][A-Z0-9]{3})\b/.exec(rest.toUpperCase());
+  const afterReference = (reference ? rest.slice(reference[1]!.length) : rest).replace(/^[\s,:—-]+/, '');
+
+  // A figure at the front re-prices the deal: *RELEASE A1B2 2500 screen
+  // cracked*. Only at the front, and only on a release — a number inside a
+  // hold's reason ("hold A1B2 he wants 3000 for it") is prose, not a
+  // decision, and reading it as one would issue an agreement he did not ask
+  // for. Reference-shaped tokens are excluded so a second reference typed by
+  // mistake is never read as money.
+  // A trailing `%` is never money: *RELEASE A1B2 71% battery* is a reason, and
+  // reading it as N$71 would have issued an agreement for seventy-one dollars.
+  const figure = release ? /^(?:n\$|nad|r)?\s*(\d[\d\s.,]*)(?!\s*%)\b/i.exec(afterReference) : null;
+  const amountCents = figure && !/^[A-Z][A-Z0-9]{3}$/.test(figure[1]!.trim())
+    ? parseAmount(figure[1]!.trim())
+    : null;
+
   return {
     action: release ? 'release' : 'hold',
     reference: reference ? reference[1]! : null,
-    reason: (reference ? rest.slice(reference[1]!.length) : rest).replace(/^[\s,:—-]+/, '').trim(),
+    reason: (amountCents !== null && figure ? afterReference.slice(figure[0].length) : afterReference)
+      .replace(/^[\s,:—-]+/, '')
+      .trim(),
+    amountCents,
   };
 }
 
@@ -57,6 +81,13 @@ export interface ReleaseOutcome {
   releaseApprovalId?: string;
   customerPhone?: string;
   customerMessage?: string;
+  /**
+   * Sent to the customer *before* the agreement, when the inspection changed
+   * the figure. A customer told N$3,500 on the phone who then opens an
+   * agreement for N$2,500 has been ambushed; the signature is only consent if
+   * they were told first, and in their own words rather than in a document.
+   */
+  customerNotice?: string;
 }
 
 export class ReleaseGate {
@@ -109,7 +140,7 @@ export class ReleaseGate {
 
     const approvals = this.#store.db
       .prepare("SELECT * FROM approvals WHERE status = 'approved' ORDER BY decided_at DESC")
-      .all() as unknown as { id: string; item_id: string }[];
+      .all() as unknown as { id: string; item_id: string; approved_loan_cents: number | null }[];
     const approval = approvals.find((entry) => referenceFor(entry.id) === command.reference);
     if (!approval) {
       return { ownerMessage: `Nothing approved matches ${command.reference}.` };
@@ -179,11 +210,51 @@ export class ReleaseGate {
       });
     }
 
+    // The figure he gave before the item existed in front of him is a
+    // ballpark. If the check changed it, the agreement must carry the new
+    // number, not the old one — and the customer has to hear it from him
+    // before the document arrives.
+    const was = approval.approved_loan_cents;
+    const revised = command.amountCents !== null && command.amountCents !== was ? command.amountCents : null;
+
+    // A typed figure goes straight onto a signed contract, so a slip has to
+    // stop here rather than at the counter. The shop's own floor is the test:
+    // it does not write loans this small, so a number under it is a mistake,
+    // not a decision. Refused rather than rounded up — guessing what he meant
+    // is how the wrong amount gets lent.
+    if (revised !== null && revised < this.#rules.playbook.loanSizing.minimumLoanCents) {
+      return {
+        ownerMessage:
+          `${formatAmount(revised)} is under the ${formatAmount(this.#rules.playbook.loanSizing.minimumLoanCents)} minimum, ` +
+          'so nothing was released and no agreement was issued.\n\n' +
+          `If you meant that, reply *HOLD ${command.reference} <reason>* instead. If you mistyped, send ` +
+          `*RELEASE ${command.reference} <amount> <reason>* again.`,
+      };
+    }
+
+    if (revised !== null) {
+      this.#store.reviseApproval(approval.id, revised, actor.id, command.reason);
+    }
+
     const failures = inspection.failed;
     return {
       releaseApprovalId: approval.id,
+      customerPhone: revised !== null ? customer?.phone : undefined,
+      customerNotice:
+        revised !== null && customer
+          ? `We have now checked your ${item.description || 'item'} here at the shop.\n\n` +
+            `After looking at it, the amount we can lend you is ${formatAmount(revised)}` +
+            (was !== null ? `, instead of the ${formatAmount(was)} we talked about before.` : '.') +
+            (command.reason ? `\n\n${command.reason}` : '') +
+            '\n\nThe agreement below is for that amount. Please read it before you sign, and message here if ' +
+            'you would rather not go ahead — you can collect your item instead.'
+          : undefined,
       ownerMessage:
         `Releasing ${command.reference} — ${item.description || 'item'}.\n\n` +
+        (revised !== null
+          ? `*Re-priced after the check:* ${was !== null ? `${formatAmount(was)} → ` : ''}${formatAmount(revised)}.\n` +
+            'The customer has been told the new amount and why, before the agreement.\n\n'
+          : '') +
         `Inspected by ${inspection.inspector ?? 'staff'}, outcome *${inspection.outcome}*.\n` +
         (failures.length > 0
           ? `*You released this with ${failures.length} failed check${failures.length === 1 ? '' : 's'}:*\n${failures.map((text) => `  • ${text}`).join('\n')}\n\n`

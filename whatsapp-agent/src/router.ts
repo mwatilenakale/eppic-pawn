@@ -447,6 +447,12 @@ export class AgentRouter {
       const outcome = this.#release.run(release, this.#owner);
       await this.#transport.sendText({ to: this.#ownerPhone, body: outcome.ownerMessage });
 
+      // A re-priced release tells the customer the new figure first, so the
+      // agreement is never the thing that breaks the news.
+      if (outcome.customerNotice && outcome.customerPhone) {
+        await this.#safeSend(outcome.customerPhone, outcome.customerNotice);
+      }
+
       if (outcome.releaseApprovalId && this.#contracts) {
         const item = this.#store.item(
           (this.#store.db.prepare('SELECT item_id FROM approvals WHERE id = ?').get(outcome.releaseApprovalId) as { item_id: string }).item_id,
@@ -665,8 +671,10 @@ export class AgentRouter {
         : 'Every check passed.\n\n') +
       `*What they found:*\n${job.findings || '(nothing written)'}\n\n` +
       (reference
-        ? `Reply *RELEASE ${reference}* to send the agreement, or *HOLD ${reference} <reason>*. ` +
-          'Nothing goes to the customer until you do.'
+        ? `Reply *RELEASE ${reference}* to send the agreement, or *HOLD ${reference} <reason>*.\n` +
+          `If the check changed what it is worth, re-price it: *RELEASE ${reference} <amount> <reason>* — ` +
+          'the customer is told the new figure and why before the agreement reaches them.\n' +
+          'Nothing goes to the customer until you reply.'
         : 'No approved application is attached to this item, so there is nothing to release.');
 
     await this.#safeSend(this.#ownerPhone, body);
