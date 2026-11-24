@@ -57,7 +57,7 @@ function shell(body: string): string {
   // a phone. `robots` matches the dashboard — the link is already
   // token-gated and sent with no-store, but a staff page should say so too.
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Inspections — Eppic</title><meta name="robots" content="noindex, nofollow"><meta name="color-scheme" content="dark"><style>${THEME}
-  main{max-width:760px;margin:auto;padding:var(--space-6)} fieldset,.card{padding:var(--space-4);margin:var(--space-4) 0;border:1px solid var(--border-subtle);border-radius:var(--radius-md)} textarea{display:block;width:100%;min-height:72px} label{display:inline-block;margin:var(--space-2)} .error{color:var(--danger)}
+  main{max-width:760px;margin:auto;padding:var(--space-6)} fieldset,.card{padding:var(--space-4);margin:var(--space-4) 0;border:1px solid var(--border-subtle);border-radius:var(--radius-md)} textarea{display:block;width:100%;min-height:72px} label{display:inline-block;margin:var(--space-2)} .error{color:var(--danger)} .how{margin:0 0 var(--space-3);color:var(--text-muted,#9aa0a6)}
   </style></head><body><main>${body}</main></body></html>`;
 }
 
@@ -75,7 +75,8 @@ export function inspectionWorksheetPage(root: string, token: string, job: Job, l
   const submitted = job.status === 'submitted';
   return shell(`<a href="${root}">Inspection queue</a><h1>${safe(job.description)}</h1><p>${safe(job.customerName ?? '')} · ${safe(job.claimedByName ?? 'Unclaimed')}</p>${submitted ? `<p>Submitted ${safe(job.submittedAt ?? '')} · ${safe(job.outcome ?? '')}</p>` : ''}${error ? `<p role="alert" class="error">${safe(error)}</p>` : ''}
   ${editable ? `<form method="post" action="${root}/job/${job.id}">${hidden('csrf', token)}` : ''}
-  ${lines.map((line, index) => `<fieldset><legend>${index + 1}. ${safe(line.text)}${line.provisional ? ' (proposed rule)' : ''}</legend>${editable
+  ${lines.map((line, index) => `<fieldset><legend>${index + 1}. ${safe(line.text)}${line.provisional ? ' (proposed rule)' : ''}</legend>${
+    line.howToCheck ? `<p class="how">${safe(line.howToCheck)}</p>` : ''}${editable
     ? ['pass', 'fail', 'na'].map((answer) => `<label><input type="radio" name="answer:${line.checkId}" value="${answer}" ${line.answer === answer ? 'checked' : ''} required>${answer === 'na' ? 'N/A' : answer}</label>`).join('') + `<label>Note<textarea name="note:${line.checkId}">${theInspectorsOwnWords(line.note)}</textarea></label>`
     : `<p>${line.answer ?? 'Unanswered'} · ${ownWords(line.note)}</p>`}</fieldset>`).join('')}
   <h2>Findings</h2>${editable ? `<textarea name="findings" required>${theInspectorsOwnWords(job.findings)}</textarea><button name="action" value="save" formnovalidate>Save progress</button><button name="action" value="submit">Submit report to Lukas</button><button name="action" value="release" formnovalidate>Put job back</button></form>` : ownWords(job.findings, 'p')}

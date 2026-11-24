@@ -243,3 +243,34 @@ test('inspection pages escape customer markup and prevent caching, framing and r
   assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
   assert.equal(response.headers.get('x-frame-options'), 'DENY');
 });
+
+/**
+ * The person holding the item needs the "how to check" hint more than the
+ * customer did: a check nobody knows how to perform gets a confident "pass",
+ * and a wrong pass is how a stolen or dead item is accepted.
+ *
+ * The hints already existed — the agent sends them to a customer who answers
+ * "not sure", and the website lists them under "we will check". They were
+ * simply absent from the one screen where somebody is actually checking.
+ */
+test('the worksheet tells the inspector how to carry out each check', async () => {
+  queue.claim(jobId, staff);
+  const { html } = await get(`${root()}/job/${jobId}`);
+
+  const hinted = queue.worksheet(jobId).filter((line) => line.howToCheck);
+  assert.ok(hinted.length > 0, 'this category should have at least one hint in the playbook');
+  for (const line of hinted) {
+    assert.ok(html.includes(escapeHtml(line.howToCheck!)), `no instructions shown for: ${line.text}`);
+  }
+  blind(html);
+});
+
+test('the hint an inspector reads is the same text the customer is given', async () => {
+  // Two different sentences about where to look would be worse than one, so
+  // both sides resolve the hint the same way rather than keeping their own copy.
+  for (const line of queue.worksheet(jobId)) {
+    const asked = line.text.toLowerCase();
+    const fromPlaybook = rules.playbook.howToCheck.find((hint) => asked.includes(hint.phrase))?.advice ?? null;
+    assert.equal(line.howToCheck, fromPlaybook);
+  }
+});

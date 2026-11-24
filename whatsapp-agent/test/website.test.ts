@@ -87,6 +87,36 @@ describe('the landing page', () => {
     assert.doesNotMatch(html, /<script[^>]+src=/i);
     assert.doesNotMatch(html, /https?:\/\/(?!wa\.me)/i, 'no third-party assets');
   });
+
+  test('says it is a pawn shop, above the fold and not only in the footer', async () => {
+    const { html } = await get('/');
+    const header = html.slice(0, html.indexOf('How it works'));
+    assert.match(header, /pawn shop/i, 'a visitor must know what kind of business this is');
+  });
+
+  test('offers all three figures a visitor came for', async () => {
+    const { html } = await get('/');
+    const header = html.slice(0, html.indexOf('How it works'));
+    assert.match(header, /worth second-hand/i, 'what the item is worth');
+    assert.match(header, /lend you/i, 'what we would lend against it');
+    assert.match(header, /buy it outright/i, 'what we would pay for it');
+  });
+
+  // The signing gate is real and enforced in `sign()`: the agreement cannot be
+  // signed until the item is in the shop and has been checked. The page used to
+  // promise the opposite — "You sign on your phone, then bring the item in" —
+  // which sent customers to a link that correctly refused them.
+  test('does not promise signing before the item is in the shop', async () => {
+    const { html } = await get('/');
+    const steps = [...html.matchAll(/<li>([^<]*)<\/li>/g)].map((match) => match[1]!);
+    const bringsItIn = steps.findIndex((step) => /bring the item in/i.test(step));
+    const signs = steps.findIndex((step) => /\bsign\b/i.test(step));
+
+    assert.ok(bringsItIn >= 0, 'the page should say the item comes in');
+    assert.ok(signs >= 0, 'the page should say when signing happens');
+    assert.ok(signs > bringsItIn, 'signing must be described after the item arrives, not before');
+    assert.doesNotMatch(html, /sign[^.]*then bring the item in/i);
+  });
 });
 
 describe('the pre-check form', () => {

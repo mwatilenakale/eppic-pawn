@@ -90,9 +90,11 @@ export function landingPage(rules: Rules): string {
 
   return page(`${BUSINESS.tradingAs} — cash against your item, in Windhoek`, `
     <header>
-      <h1>Cash for your<br>stuff. Today.</h1>
-      <p class="lead">Get an instant estimate on what ${escapeHtml(BUSINESS.tradingAs)} would lend you —
-      or pay you outright — in ${escapeHtml(BUSINESS.place.split(',')[0]!)}. No name or number needed.</p>
+      <span class="label">${escapeHtml(BUSINESS.tradingAs)} &middot; ${escapeHtml(BUSINESS.place)}</span>
+      <h1>What is your<br>stuff worth?</h1>
+      <p class="lead">A free value check from a pawn shop in
+      ${escapeHtml(BUSINESS.place.split(',')[0]!)}. See what your item is worth second-hand, what we would
+      lend you against it, and what we would pay to buy it outright. No name or number needed.</p>
     </header>
 
     <div class="card">
@@ -106,7 +108,8 @@ export function landingPage(rules: Rules): string {
         <li>Tell us what the item is and answer a few questions.</li>
         <li>We work out an estimate from what the item is worth second-hand.</li>
         <li>${escapeHtml(capitalise(rules.playbook.ownerLabel))} checks it and confirms the final figure on WhatsApp.</li>
-        <li>You sign on your phone, then bring the item in.</li>
+        <li>You bring the item in and we check it over.</li>
+        <li>Once it is checked and accepted, you sign on your phone and take the cash.</li>
       </ul>
     </div>
 

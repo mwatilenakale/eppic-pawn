@@ -53,6 +53,14 @@ export interface WorksheetLine {
   provisional: boolean;
   answer: CheckAnswer | null;
   note: string;
+  /**
+   * How to carry this check out, from the playbook's "How to check" hints.
+   *
+   * The same text the agent sends a customer who answers "not sure", shown
+   * here because the person holding the item needs it more than the customer
+   * did: a check nobody knows how to perform gets a confident "pass".
+   */
+  howToCheck: string | null;
 }
 
 /**
@@ -194,7 +202,18 @@ export class InspectionQueue {
       provisional: check.provisional,
       answer: answered.get(check.id)?.answer ?? null,
       note: answered.get(check.id)?.note ?? '',
+      howToCheck: this.#howToCheck(check.text),
     }));
+  }
+
+  /**
+   * The playbook's hint for a check, matched the way the agent matches it, so
+   * the inspector and the customer are never told two different things about
+   * where to look.
+   */
+  #howToCheck(text: string): string | null {
+    const asked = text.toLowerCase();
+    return this.#rules.playbook.howToCheck.find((hint) => asked.includes(hint.phrase))?.advice ?? null;
   }
 
   /** Saves progress without finishing. A long inspection survives a dropped phone. */
