@@ -4,9 +4,10 @@
 
 You have been brought in to finish a system that is already built and
 tested — not to build one. 16,500 lines of source, 11,000 lines of
-tests, 739 of them passing. Your job is deployment, a live test, and a
+tests, more than 700 of them passing. Your job is deployment, a live
+test, and a
 short list of named findings. The job card
-(`docs/job-card-student.md`) is the scope. This file is the map.
+(`docs/job-card-developer.md`) is the scope. This file is the map.
 
 ---
 
@@ -86,7 +87,7 @@ product inspection."*
 ```bash
 cd whatsapp-agent
 npm ci          # not `npm install` — see §9
-npm test        # 739 tests, no network
+npm test        # no network, no accounts
 npm run typecheck
 npm run sim     # the whole flow in your terminal
 ```
@@ -206,7 +207,7 @@ at the output** — not by a failing test:
 - `RELEASE` taking no amount, so an item that came in worse than
   described could only be accepted at the original figure or killed.
 
-739 tests caught none of those. Clicking through did.
+The whole suite caught none of those. Clicking through did.
 
 **So: the standard here is not "the tests pass". It is "I drove it and
 watched it."** Every pull request should say what you ran and what you
@@ -242,7 +243,7 @@ did *not* check.
 |---|---|
 | `docs/playbook.md` | Always. Every business rule. **Never edit** |
 | `docs/architecture.md` | Before anything structural. **§0 is an unresolved legal question — do not resolve it yourself** |
-| `docs/job-card-student.md` | Your scope, your milestones, what not to touch |
+| `docs/job-card-developer.md` | Your scope, your milestones, what not to touch |
 | `docs/twilio-setup.md` | Stage 2 is your deployment task |
 | `docs/website-audit.md` | The twelve findings and which are yours |
 | `docs/tasks/` | One file per task. `README.md` explains the flow |

@@ -10,7 +10,7 @@
 ## Read this before you quote
 
 The system is **already built and tested**. It is not a greenfield job.
-There are 721 automated tests passing, the Twilio integration is written,
+There are more than 700 automated tests passing, the Twilio integration is written,
 the OpenAI valuation call is written, the agreement and signing flow are
 written, and the business rules are read out of a document at runtime.
 
@@ -33,9 +33,10 @@ a day each. Then, in this order:
 5. `docs/working-with-agents.md` — how work gets reviewed here.
 6. `AGENTS.md` — applies to you as much as to an AI agent.
 
-Then run `npm ci && npm test` in `whatsapp-agent/` and show the owner 721
-passing before you change a line. If that does not pass on your machine,
-that is the first thing to fix and it is almost always `npm ci`.
+Then run `npm ci && npm test` in `whatsapp-agent/` and show the owner a
+clean run — every test passing, nothing skipped — before you change a
+line. If it does not pass on your machine, that is the first thing to
+fix, and it is almost always `npm ci`.
 
 ---
 
@@ -244,22 +245,21 @@ domain, plus Twilio and OpenAI usage.
 
 **Why that figure.** A full-time junior developer in Windhoek is widely
 quoted at NAD 20,000–35,000 a month in 2026, though the sources disagree
-badly and the low ones look like small samples. A student is not a
-junior, and this is not a month of full-time work: for someone competent
-it is roughly ten to fifteen working days spread over four to six weeks
-part-time, on a codebase that is already written and tested. NAD 12,000
-works out near NAD 800–1,200 a day, which is fair for a capable student
-on a scoped contract and well under what an agency would charge you for
-the same deployment.
+badly and the low ones look like small samples. This is not a month of
+full-time work: for someone competent it is roughly ten to fifteen
+working days spread over four to six weeks part-time, on a codebase that
+is already written and tested. NAD 12,000 works out near NAD 800–1,200 a
+day, which is fair for a capable developer on a scoped contract and well
+under what an agency would charge for the same deployment.
 
-**Negotiating room.** NAD 10,000 is defensible if he is early in his
-studies and will need hand-holding. Go to NAD 15,000 if he has deployed
-a production Node service before and can show you one — that is the
-single skill that decides whether Milestone 1 takes three days or three
-weeks, and it is worth paying for.
+**Negotiating room.** NAD 10,000 is defensible for someone early in
+their career who will need hand-holding. Go to NAD 15,000 for someone
+who has deployed a production Node service before and can show you one —
+that is the single skill that decides whether Milestone 1 takes three
+days or three weeks, and it is worth paying for.
 
 **Do not pay hourly.** You cannot supervise hours, the codebase is new
-to him so his early hours are reading, and a fixed milestone price puts
+to them so the early hours are reading, and a fixed milestone price puts
 the risk of a slow start where it belongs. For the same reason, do not
 pay anything up front beyond at most NAD 1,000 as a good-faith start.
 

@@ -25,7 +25,7 @@ send the message below — the documents do the rest.
 >
 > 1. `docs/developer-onboarding.md` — a tour of the code, how to run it
 >    in ten minutes with no accounts needed, and the conventions.
-> 2. `docs/job-card-student.md` — the actual scope, in three
+> 2. `docs/job-card-developer.md` — the actual scope, in three
 >    milestones, and the things that are not yours to change.
 > 3. `docs/playbook.md` — all my business rules. The code reads this
 >    file at startup, so this is where the rates and terms live. Do not
