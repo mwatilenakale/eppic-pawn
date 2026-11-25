@@ -5,8 +5,7 @@
 You have been brought in to finish a system that is already built and
 tested — not to build one. 16,500 lines of source, 11,000 lines of
 tests, more than 700 of them passing. Your job is deployment, a live
-test, and a
-short list of named findings. The job card
+test, and a short list of named findings. The job card
 (`docs/job-card-developer.md`) is the scope. This file is the map.
 
 ---
