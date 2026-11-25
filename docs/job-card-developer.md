@@ -3,7 +3,7 @@
 **Project:** Eppic Pawn Shop WhatsApp agent and valuation website
 **Client:** Mwatile Eppic Investment CC, Windhoek
 **Reports to:** Lukas (owner). No one else assigns work on this.
-**Date issued:** 24 November 2026
+**Date issued:** 25 November 2026
 
 ---
 
@@ -42,8 +42,9 @@ fix, and it is almost always `npm ci`.
 
 ## Milestone 1 — Live on a real number (the only one that matters)
 
-**This is the whole point of the engagement.** Everything else below is
-optional extra if money and time allow.
+**This is the whole point of the engagement.** Milestones 2 and 3 matter,
+but nothing in them changes the shop's day until this one is done. If
+only one milestone gets finished, it is this one.
 
 Today the agent runs on a laptop behind a tunnel. It must run on a host
 that stays up, because a WhatsApp webhook that is not answered is a
@@ -186,9 +187,10 @@ the engagement, and in two cases it is how the shop loses money.
 
 ## Keys and access — how this is staged
 
-You do not get production credentials on day one, and this is not about
-trust; it is that a leaked `EPPIC_MEDIA_KEY` exposes customers' identity
-documents and cannot be undone.
+Access is staged, and it is worth saying why: `EPPIC_MEDIA_KEY` decrypts
+every customer ID photo and signature the shop holds. A leak of it
+cannot be undone, so it moves as late and as little as possible. The
+same staging would apply to anyone, including the owner's own staff.
 
 - **Day one:** the private repository, and `npm run sim`, which runs the
   entire flow in a terminal with no accounts at all. Stage 0 of the
@@ -196,9 +198,9 @@ documents and cannot be undone.
 - **Once Milestone 1 planning is agreed:** your own Twilio sandbox and
   your own OpenAI key, on the owner's account or reimbursed, with a
   spend cap set.
-- **Only at the live test:** the shop's real number and the real media
-  key, entered by the owner into the host's settings — ideally with you
-  on a call rather than you holding them.
+- **At the live test:** the shop's real number and the real media key.
+  The owner enters these into the host's settings himself, with you on a
+  call, so that the only copy of the media key stays with him.
 
 You will see real customer names, phone numbers, ID photos and item
 details. Treat all of it as confidential, do not copy it off the host,
@@ -226,53 +228,37 @@ Do not quietly code around it.
 
 ---
 
-## What to pay
+## Commercial terms
 
-**Recommendation: NAD 12,000 fixed price for the whole card, paid in
-three milestones. Not hourly.**
+**Fixed price for the whole card, in three payments — one per
+milestone. Not hourly.** The codebase is new to you, so your first
+hours are reading; a fixed milestone price means nobody has to account
+for that time.
 
-- **Milestone 1 — NAD 6,000.** Half the money on the only deliverable
-  that changes the shop's day. Pay it when the live test passes, not
-  when the host is provisioned.
-- **Milestone 2 — NAD 3,500.**
-- **Milestone 3 — NAD 2,500.**
+The figure is agreed between you and the owner before you start. Quote
+on the scope above, once you have read the onboarding document and run
+the test suite, rather than on this page alone.
 
-Hosting, the domain, Twilio and OpenAI are **yours to pay for directly**,
-on your own accounts. Do not route them through the developer, and do not
-reimburse receipts — put your own card on them so you keep control when
-the engagement ends. Budget roughly NAD 150–400 a month for the host and
-domain, plus Twilio and OpenAI usage.
+Each payment falls due when that milestone is **accepted**, against the
+acceptance criteria written above it. For Milestone 1 that means the
+live test has passed — a real loan, on real phones, start to finish.
+Not when the host is provisioned.
 
-**Why that figure.** A full-time junior developer in Windhoek is widely
-quoted at NAD 20,000–35,000 a month in 2026, though the sources disagree
-badly and the low ones look like small samples. This is not a month of
-full-time work: for someone competent it is roughly ten to fifteen
-working days spread over four to six weeks part-time, on a codebase that
-is already written and tested. NAD 12,000 works out near NAD 800–1,200 a
-day, which is fair for a capable developer on a scoped contract and well
-under what an agency would charge for the same deployment.
-
-**Negotiating room.** NAD 10,000 is defensible for someone early in
-their career who will need hand-holding. Go to NAD 15,000 for someone
-who has deployed a production Node service before and can show you one —
-that is the single skill that decides whether Milestone 1 takes three
-days or three weeks, and it is worth paying for.
-
-**Do not pay hourly.** You cannot supervise hours, the codebase is new
-to them so the early hours are reading, and a fixed milestone price puts
-the risk of a slow start where it belongs. For the same reason, do not
-pay anything up front beyond at most NAD 1,000 as a good-faith start.
-
-**One thing to be firm about:** Milestone 1 is not done when the host is
-running. It is done when a real customer could be taken through a real
-loan on real phones. People will try to close that milestone at
-"deployed". Do not let them.
+Hosting, the domain, Twilio and OpenAI are paid for by the shop, on the
+owner's own accounts and cards. Do not put them on yours and invoice:
+the shop needs to keep control of those accounts after the engagement
+ends, and you should not be carrying its running costs.
 
 ---
 
-## Who to ask
+## Questions
 
-The build history, every review verdict, and the reasoning behind each
-rule above is in `docs/` — it is unusually complete, and the answer to
-most "why is it like this" questions is already written down. Read
-before asking.
+Ask the owner. He is the only person who assigns or changes work on
+this.
+
+Before you do, though: the build history, every review verdict, and the
+reasoning behind each rule above is written down in `docs/`. It is
+unusually complete, and the answer to most "why is it like this"
+questions is already there. Read first — but when the answer is not
+there, ask rather than guess, particularly about anything touching
+money.
